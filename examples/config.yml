@@ -1,0 +1,112 @@
+# mox configuration example.
+#
+# Default location: $XDG_CONFIG_HOME/mox/config.yml (or ~/.config/...)
+#
+# Quoting note: any value containing a colon followed by a space must be
+# quoted (e.g. 'echo "host: x"'), or YAML will parse it as a mapping.
+
+# Optional: reusable layouts.
+layouts:
+  two-pane:
+    panes:
+      - split: root
+        commands:
+          - "# main pane"
+      - split: vertical
+        size: 30
+        commands:
+          - "# side pane (30%)"
+
+  three-pane-dev:
+    panes:
+      - split: root
+        commands:
+          - "# editor"
+      - split: horizontal
+        size: 30
+        commands:
+          - "# build/test output"
+      - split: vertical
+        size: 50
+        commands:
+          - "# logs"
+
+# Session definitions.
+sessions:
+  # Simple mode: one window, one pane per host. Each pane runs the connect
+  # template (default `ssh {{host}}`).
+  simple:
+    hosts: [api, web, worker]
+    root: ~/projects/myapp
+    commands:
+      - 'echo "host: $(hostname)"'
+
+  # Custom connect command — e.g. mosh on a non-default port.
+  prod:
+    connect: "mosh --port 60000 ops@{{host}}"
+    hosts: [bastion1, bastion2]
+
+  # Window-level hosts: each window has its own host group.
+  devenv:
+    root: ~/projects/myapp
+    windows:
+      - name: backend
+        hosts: [api1, api2, api3]
+        commands:
+          - cd ~/projects/myapp/api
+          - 'echo "backend: $(hostname)"'
+
+      - name: frontend
+        hosts: [web1, web2]
+        commands:
+          - cd ~/projects/myapp/web
+          - npm run dev
+
+      - name: workers
+        hosts: [worker1, worker2, worker3]
+        commands:
+          - cd ~/projects/myapp/workers
+          - 'echo "worker: $(hostname)"'
+
+  # Complex mode: explicit pane layouts.
+  monitoring:
+    root: ~/
+    windows:
+      - name: system
+        panes:
+          - split: root
+            commands:
+              - htop
+          - split: horizontal
+            size: 30
+            commands:
+              - watch -n 1 df -h
+          - split: vertical
+            size: 50
+            commands:
+              - watch -n 1 free -h
+
+      - name: logs
+        layout: two-pane
+
+  # Mix simple and complex windows in the same session.
+  fullstack:
+    root: ~/projects/app
+    windows:
+      - name: services
+        hosts: [api, cache, db]
+
+      - name: dev
+        panes:
+          - split: root
+            commands:
+              - nvim
+          - split: horizontal
+            size: 20
+            commands:
+              - npm run test:watch
+          - split: vertical
+            size: 50
+            commands:
+              - git status
+              - git log --oneline -10

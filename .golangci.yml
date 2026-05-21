@@ -1,0 +1,42 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - revive
+    - gocritic
+    - gosec
+    - misspell
+    - unconvert
+  settings:
+    gosec:
+      excludes:
+        # G204: Subprocess launched with variable. We deliberately exec tmux
+        # with user-provided arguments (this is the whole point of the tool).
+        - G204
+        # G304: File path provided as taint input. CLI users specify config
+        # paths intentionally.
+        - G304
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+    misspell:
+      locale: US
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

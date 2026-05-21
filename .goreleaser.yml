@@ -1,0 +1,50 @@
+version: 2
+
+project_name: mox
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mox
+    main: ./cmd/mox
+    binary: mox
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/bthall/mox/pkg/version.Version={{.Version}} -X github.com/bthall/mox/pkg/version.GitCommit={{.FullCommit}} -X github.com/bthall/mox/pkg/version.BuildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: '{{ incpatch .Version }}-next'
+
+changelog:
+  use: git
+  filters:
+    exclude:
+      - '^chore:'
+      - '^docs:'
+      - '^test:'
+
+# TODO: add a `brews:` block here once a Homebrew tap repo exists
+# (e.g. github.com/bthall/homebrew-tap). Example:
+# brews:
+#   - repository:
+#       owner: bthall
+#       name: homebrew-tap
+#     homepage: https://github.com/bthall/mox
+#     description: tmux session manager
+#     license: MIT
