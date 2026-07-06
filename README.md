@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/bthall/mox/actions/workflows/ci.yml"><img src="https://github.com/bthall/mox/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/bthall/mox/releases/latest"><img src="https://img.shields.io/github/v/release/bthall/mox" alt="Latest release"></a>
-  <a href="https://goreportcard.com/report/github.com/bthall/mox"><img src="https://goreportcard.com/badge/github.com/bthall/mox" alt="Go Report Card"></a>
+  <a href="https://pkg.go.dev/github.com/bthall/mox"><img src="https://pkg.go.dev/badge/github.com/bthall/mox.svg" alt="Go Reference"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/bthall/mox" alt="License"></a>
 </p>
 

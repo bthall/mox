@@ -98,7 +98,7 @@ func (ui *pickerUI) render(out io.Writer) {
 		b.WriteString("\x1b[K  (no match)\r\n")
 		lines++
 	}
-	b.WriteString(fmt.Sprintf("\x1b[K  %d/%d\r\n", len(ui.filtered), ui.total))
+	fmt.Fprintf(&b, "\x1b[K  %d/%d\r\n", len(ui.filtered), ui.total)
 	lines++
 
 	// Blank leftovers when the previous render was taller.
@@ -112,7 +112,7 @@ func (ui *pickerUI) render(out io.Writer) {
 
 	// Cursor is now at the line below everything drawn; hop back up to the
 	// prompt line and park after the query.
-	b.WriteString(fmt.Sprintf("\x1b[%dA\r\x1b[%dC", lines+1+extra, 2+len(ui.query)))
+	fmt.Fprintf(&b, "\x1b[%dA\r\x1b[%dC", lines+1+extra, 2+len(ui.query))
 
 	fmt.Fprint(out, b.String())
 	ui.drawn = lines + 1
