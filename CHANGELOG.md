@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `mox edit` — open the config in `$VISUAL`/`$EDITOR` and validate it when the
+  editor exits, reporting schema errors with line numbers.
 - Arch Linux packaging: a source-build PKGBUILD under `packaging/aur/`, and
   automated publishing of a `mox-tmux-bin` AUR package on release (activates
   once an `AUR_SSH_KEY` repository secret is configured; releases proceed
