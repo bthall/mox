@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `mox last` — attach to the session you used before this one (the session
+  equivalent of `cd -`); bindable inside tmux via `run-shell "mox last"`.
 - `-x/--exclude` on `mox new` — drop hosts (or whole `@clusters`) from the
   expanded host list: `mox new @webfarm -x web3`. Exclusions that match
   nothing are an error, catching typos.
