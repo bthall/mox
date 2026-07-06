@@ -51,7 +51,8 @@ func NewRootCommand() *cobra.Command {
 A session can be a simple host list (one pane per host, optionally with
 synchronized typing and tiled layout) or a fully-specified set of windows
 and panes.`,
-		Example: `  mox -a api-cluster                attach to a configured session
+		Example: `  mox                           pick a session from a list
+  mox -a api-cluster                attach to a configured session
   mox new                       quick local session
   mox new @api-cluster              cssh-style multi-host session
   mox new -u root host1 host2   ssh as a specific user
@@ -102,8 +103,10 @@ and panes.`,
 	rootCmd.AddCommand(newInitCommand())
 	rootCmd.AddCommand(newListCommand())
 	rootCmd.AddCommand(newRecentCommand())
+	rootCmd.AddCommand(newLastCommand())
 	rootCmd.AddCommand(newKillCommand())
 	rootCmd.AddCommand(newValidateCommand())
+	rootCmd.AddCommand(newEditCommand())
 	rootCmd.AddCommand(newConfigCommand())
 	rootCmd.AddCommand(newNewCommand())
 	rootCmd.AddCommand(newImportCommand())
@@ -116,6 +119,11 @@ func runSession(cmd *cobra.Command, args []string) error {
 	logger := loggerFromContext(cmd.Context())
 
 	if opts.attach == "" {
+		// On a terminal, bare `mox` offers a session picker; anywhere else
+		// (pipes, scripts) it prints help like any other CLI.
+		if isTerminal(os.Stdin) && isTerminal(os.Stdout) {
+			return runPicker(cmd)
+		}
 		return cmd.Help()
 	}
 
