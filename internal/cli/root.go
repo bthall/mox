@@ -118,6 +118,11 @@ func runSession(cmd *cobra.Command, args []string) error {
 	logger := loggerFromContext(cmd.Context())
 
 	if opts.attach == "" {
+		// On a terminal, bare `mox` offers a session picker; anywhere else
+		// (pipes, scripts) it prints help like any other CLI.
+		if isTerminal(os.Stdin) && isTerminal(os.Stdout) {
+			return runPicker(cmd)
+		}
 		return cmd.Help()
 	}
 
