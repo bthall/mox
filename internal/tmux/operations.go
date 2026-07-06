@@ -305,11 +305,12 @@ type PaneInfo struct {
 	ID             string // tmux pane id (%N)
 	CurrentPath    string // pane_current_path
 	CurrentCommand string // pane_current_command (best-effort label)
+	PID            int    // pane_pid: the pane's root process, for command recovery
 }
 
 // ListPanesForWindow returns the panes in the given window in display order.
 func (c *Client) ListPanesForWindow(windowID string) ([]PaneInfo, error) {
-	out, err := c.Run("list-panes", "-t", windowID, "-F", "#{pane_id}\t#{pane_current_path}\t#{pane_current_command}")
+	out, err := c.Run("list-panes", "-t", windowID, "-F", "#{pane_id}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}")
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +320,7 @@ func (c *Client) ListPanesForWindow(windowID string) ([]PaneInfo, error) {
 	}
 	var panes []PaneInfo
 	for _, line := range strings.Split(out, "\n") {
-		parts := strings.SplitN(line, "\t", 3)
+		parts := strings.SplitN(line, "\t", 4)
 		if len(parts) < 1 {
 			continue
 		}
@@ -329,6 +330,9 @@ func (c *Client) ListPanesForWindow(windowID string) ([]PaneInfo, error) {
 		}
 		if len(parts) >= 3 {
 			p.CurrentCommand = parts[2]
+		}
+		if len(parts) >= 4 {
+			p.PID, _ = strconv.Atoi(parts[3])
 		}
 		panes = append(panes, p)
 	}

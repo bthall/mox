@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `mox import` now recovers SSH connections from a running session instead of
+  discarding them. A window whose panes are all plain `ssh <host>` connections
+  is imported as a simple-mode `hosts:` list (matching how SSH fan-outs are
+  meant to be configured), and any other pane running `ssh` keeps its full
+  connection command. Previously these panes imported as anonymous `panes:`,
+  losing every host.
+
 ### Added
 
 - `mox recent` (alias `r`) — lists the sessions you most recently created or
