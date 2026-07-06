@@ -114,7 +114,7 @@ func (s *store) load() ([]Entry, error) {
 }
 
 func (s *store) write(entries []Entry) error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(entries, "", "  ")

@@ -69,7 +69,7 @@ func renderList(out io.Writer, infos []session.SessionInfo, recent []history.Ent
 	managed, unmanaged := splitByManaged(infos)
 	slices.SortFunc(managed, func(a, b session.SessionInfo) int { return strings.Compare(a.Name, b.Name) })
 	slices.SortFunc(unmanaged, func(a, b session.SessionInfo) int { return strings.Compare(a.Name, b.Name) })
-	ordered := append(managed, unmanaged...)
+	ordered := slices.Concat(managed, unmanaged)
 
 	if len(ordered) == 0 {
 		fmt.Fprintln(out, "No sessions configured or running.")

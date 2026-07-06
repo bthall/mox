@@ -82,7 +82,7 @@ func TestStore_CapsAtMaxEntries(t *testing.T) {
 
 func TestStore_CorruptFileTreatedAsEmpty(t *testing.T) {
 	s, _ := newTestStore(t)
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(s.path, []byte("not json{{"), 0o600); err != nil {
