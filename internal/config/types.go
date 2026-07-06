@@ -103,3 +103,27 @@ func (s *Session) IsSimple() bool { return len(s.Hosts) > 0 }
 
 // IsSimple reports whether the window is in simple mode.
 func (w *Window) IsSimple() bool { return len(w.Hosts) > 0 }
+
+// HostSummary returns the de-duplicated, order-stable list of hosts this
+// session connects to: its simple-mode hosts plus the hosts of any simple-mode
+// windows. Complex-mode panes carry no host, so they contribute nothing. The
+// result is used for at-a-glance display (e.g. `mox list`); it is empty for
+// purely complex sessions.
+func (s *Session) HostSummary() []string {
+	seen := make(map[string]bool)
+	var hosts []string
+	add := func(hs []string) {
+		for _, h := range hs {
+			if h == "" || seen[h] {
+				continue
+			}
+			seen[h] = true
+			hosts = append(hosts, h)
+		}
+	}
+	add(s.Hosts)
+	for _, w := range s.Windows {
+		add(w.Hosts)
+	}
+	return hosts
+}

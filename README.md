@@ -19,8 +19,9 @@ configuration files.
 - **Configurable connect** — defaults to `ssh {{host}}`; override per session/window; `ssh_user:` shortcut
 - **Reusable named layouts** — define once, reference from any window
 - **Shell completion** — bash, zsh, fish; completes sessions, clusters, layouts, and running tmux sessions
+- **Recent sessions** — `mox list` and `mox recent` remember what you created or attached to
 - **Strict validation** — typos in config keys error with line numbers
-- **Honest defaults** — single binary, no daemon, no state
+- **Honest defaults** — single binary, no daemon; the only state is a small recents history
 
 ## Install
 
@@ -56,6 +57,7 @@ attached to the GitHub Releases page along with `checksums.txt`.
 mox init                        # scaffold a default config at ~/.config/mox/config.yml
 mox -a example                  # build + attach to the "example" session
 mox list                        # configured + running tmux sessions
+mox recent                      # sessions you recently created or attached to
 mox kill example                # destroy a running session
 ```
 
@@ -278,6 +280,7 @@ Session lifecycle:
                         also attaches to any running tmux session by name
   mox new [hosts...]    ad-hoc session or window (alias: cssh)
   mox list | ls         list configured and running sessions
+  mox recent | r        sessions you recently created or attached to
   mox kill <session>    destroy a running session
   mox import <session>  capture a running tmux session into the config
 

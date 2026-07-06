@@ -2,13 +2,25 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/bthall/mox/internal/history"
 	"github.com/bthall/mox/internal/session"
 	"github.com/spf13/cobra"
 )
+
+// hostsColWidth caps the rendered width of the HOSTS column so each session
+// stays on a single row.
+const hostsColWidth = 40
+
+// recentFooterLimit is how many history entries the inline Recent: footer
+// shows under `mox list`.
+const recentFooterLimit = 5
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
@@ -16,9 +28,10 @@ func newListCommand() *cobra.Command {
 		Aliases: []string{"ls"},
 		GroupID: groupSession,
 		Short:   "List configured and running sessions",
-		Long: `List sessions in two sections: those defined in the mox config
-(with their state — running or stopped), and any tmux sessions running
-that are not in the config (unmanaged).`,
+		Long: `List all sessions in a single table: those defined in the mox config
+and any tmux sessions running that are not in the config (origin "tmux").
+Running sessions also show their window count, attached state, and last
+activity. A Recent: footer lists sessions you recently created or attached to.`,
 		RunE: runList,
 	}
 }
@@ -41,15 +54,44 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	managed, unmanaged := splitByManaged(sessions)
+	recent, err := history.Load()
+	if err != nil {
+		logger.Debug("load session history failed", "error", err)
+	}
+
+	renderList(os.Stdout, sessions, recent, time.Now())
+	return nil
+}
+
+// renderList writes the session table, the Recent: footer, and the summary
+// line to out. now anchors relative-time formatting (injected for tests).
+func renderList(out io.Writer, infos []session.SessionInfo, recent []history.Entry, now time.Time) {
+	managed, unmanaged := splitByManaged(infos)
 	slices.SortFunc(managed, func(a, b session.SessionInfo) int { return strings.Compare(a.Name, b.Name) })
 	slices.SortFunc(unmanaged, func(a, b session.SessionInfo) int { return strings.Compare(a.Name, b.Name) })
+	ordered := slices.Concat(managed, unmanaged)
 
-	out := os.Stdout
-	runningCount := renderManaged(out, managed)
-	renderUnmanaged(out, unmanaged)
-	renderTotals(out, managed, unmanaged, runningCount)
-	return nil
+	if len(ordered) == 0 {
+		fmt.Fprintln(out, "No sessions configured or running.")
+	} else {
+		rows := [][]string{{"NAME", "ORIGIN", "STATE", "WIN", "ACTIVITY", "HOSTS"}}
+		for _, s := range ordered {
+			rows = append(rows, []string{
+				nameCell(out, s),
+				originCell(s),
+				stateCell(out, s),
+				winCell(s),
+				relativeTime(now, s.LastActivity),
+				hostsCell(s),
+			})
+		}
+		renderTable(out, rows)
+	}
+
+	fmt.Fprintln(out)
+	renderRecentFooter(out, recent, now)
+	fmt.Fprintln(out)
+	renderSummary(out, managed, unmanaged)
 }
 
 func splitByManaged(infos []session.SessionInfo) (managed, unmanaged []session.SessionInfo) {
@@ -63,44 +105,81 @@ func splitByManaged(infos []session.SessionInfo) (managed, unmanaged []session.S
 	return managed, unmanaged
 }
 
-func renderManaged(out *os.File, items []session.SessionInfo) int {
-	fmt.Fprintln(out, colorize(out, ansiBold, "Configured:"))
-	if len(items) == 0 {
-		fmt.Fprintln(out, "  (none)")
-		fmt.Fprintln(out)
-		return 0
+// nameCell prefixes the session name with a colored status glyph when color is
+// enabled (● running, ○ stopped; yellow for unmanaged). Under NO_COLOR or a
+// non-TTY the glyph is omitted entirely — the STATE column carries the meaning.
+func nameCell(out io.Writer, s session.SessionInfo) string {
+	if !useColor(out) {
+		return s.Name
 	}
-	running := 0
-	for _, s := range items {
-		status := colorize(out, ansiDim, "stopped")
-		if s.Running {
-			status = colorize(out, ansiGreen, "running")
-			running++
+	glyph, code := "○", ansiDim
+	if s.Running {
+		glyph, code = "●", ansiGreen
+		if !s.Managed {
+			code = ansiYellow
 		}
-		fmt.Fprintf(out, "  %-22s %s\n", s.Name, status)
 	}
-	fmt.Fprintln(out)
-	return running
+	return colorize(out, code, glyph) + " " + s.Name
 }
 
-func renderUnmanaged(out *os.File, items []session.SessionInfo) {
-	if len(items) == 0 {
+func originCell(s session.SessionInfo) string {
+	if s.Managed {
+		return "mox"
+	}
+	return "tmux"
+}
+
+func stateCell(out io.Writer, s session.SessionInfo) string {
+	if !s.Running {
+		return colorize(out, ansiDim, "stopped")
+	}
+	state := colorize(out, ansiGreen, "running")
+	if s.Attached {
+		state += " " + colorize(out, ansiBold, "attached")
+	}
+	return state
+}
+
+func winCell(s session.SessionInfo) string {
+	if !s.Running {
+		return "-"
+	}
+	return strconv.Itoa(s.Windows)
+}
+
+func hostsCell(s session.SessionInfo) string {
+	if !s.Managed || len(s.Hosts) == 0 {
+		return "-"
+	}
+	return truncate(strings.Join(s.Hosts, ", "), hostsColWidth)
+}
+
+// renderRecentFooter prints the inline "Recent:" line summarizing the newest
+// history entries, or "(none)" when history is empty.
+func renderRecentFooter(out io.Writer, recent []history.Entry, now time.Time) {
+	label := colorize(out, ansiBold, "Recent:")
+	if len(recent) == 0 {
+		fmt.Fprintf(out, "%s (none)\n", label)
 		return
 	}
-	fmt.Fprintln(out, colorize(out, ansiBold, "Unmanaged (tmux only):"))
-	for _, s := range items {
-		// All unmanaged sessions are running by definition (they came from
-		// tmux's session list), so we render them in a single color.
-		fmt.Fprintf(out, "  %-22s %s\n", s.Name, colorize(out, ansiYellow, "running"))
+	limit := min(len(recent), recentFooterLimit)
+	parts := make([]string, 0, limit)
+	for _, e := range recent[:limit] {
+		parts = append(parts, fmt.Sprintf("%s (%s %s)", e.Name, e.Action, relativeShort(now, e.Time)))
 	}
-	fmt.Fprintln(out)
+	fmt.Fprintf(out, "%s %s\n", label, strings.Join(parts, " · "))
 }
 
-func renderTotals(out *os.File, managed, unmanaged []session.SessionInfo, running int) {
-	totalConfigured := len(managed)
-	fmt.Fprintf(out, "Total: %d configured (%d running)", totalConfigured, running)
+func renderSummary(out io.Writer, managed, unmanaged []session.SessionInfo) {
+	running := 0
+	for _, s := range managed {
+		if s.Running {
+			running++
+		}
+	}
+	fmt.Fprintf(out, "%d configured · %d running", len(managed), running)
 	if len(unmanaged) > 0 {
-		fmt.Fprintf(out, ", %d unmanaged", len(unmanaged))
+		fmt.Fprintf(out, " · %d unmanaged", len(unmanaged))
 	}
 	fmt.Fprintln(out)
 }
