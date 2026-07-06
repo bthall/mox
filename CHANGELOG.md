@@ -30,11 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Bare `mox` on a terminal now opens an interactive session picker: every
-  running, configured, and recent session in one list with live fuzzy
-  filtering — type to narrow (prefix, substring, and subsequence matches),
-  move with arrows or Ctrl-J/K/N/P, Enter to create-or-attach, Esc to
-  cancel. Terminals without raw-mode support get a numbered prompt instead,
-  and piped/scripted invocations still print help.
+  running, configured, and recent session in a styled, scrollable list with
+  type-to-filter fuzzy search. Enter attaches (building configured sessions
+  as needed), Esc backs out of the filter and then the picker. Terminals
+  that can't host it get a numbered prompt, and piped/scripted invocations
+  still print help.
 - `mox last` — attach to the session you used before this one (the session
   equivalent of `cd -`); bindable inside tmux via `run-shell "mox last"`.
 - `-x/--exclude` on `mox new` — drop hosts (or whole `@clusters`) from the

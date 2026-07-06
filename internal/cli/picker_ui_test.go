@@ -1,91 +1,158 @@
 package cli
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/bubbles/cursor"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-// runScripted feeds a keystroke script to the picker UI and returns the
-// chosen name. Output goes to a buffer (colors disabled), exercising the
-// full render/redraw path.
-func runScripted(t *testing.T, script string) string {
+func newTestModel(t *testing.T) pickerModel {
 	t.Helper()
-	var out bytes.Buffer
-	ui := newPickerUI(orderPickerCandidates(pickerFixtures(), nil), 80, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
-	return ui.run(strings.NewReader(script), &out)
+	m := newPickerModel(orderPickerCandidates(pickerFixtures(), nil), time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	// Simulate the size message Bubble Tea sends on startup.
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	return next.(pickerModel)
 }
 
-func TestPickerUI_EnterAcceptsTopCandidate(t *testing.T) {
+// send runs a sequence of key messages through the model, executing any
+// commands each update returns (as the Bubble Tea runtime would) so that
+// asynchronous behavior like filter application actually happens.
+func send(t *testing.T, m pickerModel, keys ...tea.KeyMsg) pickerModel {
+	t.Helper()
+	for _, k := range keys {
+		m = drain(t, m, k)
+	}
+	return m
+}
+
+func drain(t *testing.T, m pickerModel, msg tea.Msg) pickerModel {
+	t.Helper()
+	return drainDepth(t, m, msg, 0)
+}
+
+// drainDepth executes returned commands like the runtime would, but skips
+// cursor-blink messages (they schedule each other forever) and refuses to
+// recurse without bound.
+func drainDepth(t *testing.T, m pickerModel, msg tea.Msg, depth int) pickerModel {
+	t.Helper()
+	if depth > 16 {
+		return m
+	}
+	next, cmd := m.Update(msg)
+	m = next.(pickerModel)
+	if cmd == nil {
+		return m
+	}
+	out := cmd()
+	switch v := out.(type) {
+	case nil, tea.QuitMsg, cursor.BlinkMsg:
+		return m
+	case tea.BatchMsg:
+		for _, c := range v {
+			if c == nil {
+				continue
+			}
+			inner := c()
+			if inner == nil {
+				continue
+			}
+			switch inner.(type) {
+			case tea.QuitMsg, cursor.BlinkMsg:
+				continue
+			}
+			m = drainDepth(t, m, inner, depth+1)
+		}
+		return m
+	default:
+		return drainDepth(t, m, out, depth+1)
+	}
+}
+
+func runes(s string) []tea.KeyMsg {
+	msgs := make([]tea.KeyMsg, 0, len(s))
+	for _, r := range s {
+		msgs = append(msgs, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	return msgs
+}
+
+var (
+	keyEnter = tea.KeyMsg{Type: tea.KeyEnter}
+	keyEsc   = tea.KeyMsg{Type: tea.KeyEsc}
+	keyDown  = tea.KeyMsg{Type: tea.KeyDown}
+	keyCtrlC = tea.KeyMsg{Type: tea.KeyCtrlC}
+)
+
+func TestPickerModel_EnterAcceptsTopCandidate(t *testing.T) {
 	// Candidate order: dev, web, batch, old-thing (running by activity first).
-	if got := runScripted(t, "\r"); got != "dev" {
-		t.Errorf("bare Enter should pick the top candidate, got %q", got)
+	m := send(t, newTestModel(t), keyEnter)
+	if m.choice != "dev" {
+		t.Errorf("bare Enter should pick the top candidate, got %q", m.choice)
 	}
 }
 
-func TestPickerUI_TypeToFilterThenEnter(t *testing.T) {
-	if got := runScripted(t, "web\r"); got != "web" {
-		t.Errorf("typed filter should select web, got %q", got)
-	}
-	// Subsequence match: 'oth' -> old-thing.
-	if got := runScripted(t, "oth\r"); got != "old-thing" {
-		t.Errorf("subsequence filter should select old-thing, got %q", got)
+func TestPickerModel_TypeToFilterThenEnter(t *testing.T) {
+	// Typing opens the filter without needing "/" first.
+	m := send(t, newTestModel(t), append(runes("web"), keyEnter)...)
+	if m.choice != "web" {
+		t.Errorf("typed filter should select web, got %q", m.choice)
 	}
 }
 
-func TestPickerUI_ArrowsMoveSelection(t *testing.T) {
-	// Down arrow (ESC [ B) then Enter -> second candidate.
-	if got := runScripted(t, "\x1b[B\r"); got != "web" {
-		t.Errorf("down+enter should pick second candidate, got %q", got)
-	}
-	// Ctrl-N behaves like down.
-	if got := runScripted(t, "\x0e\r"); got != "web" {
-		t.Errorf("Ctrl-N+enter should pick second candidate, got %q", got)
-	}
-	// Wrap-around: up from the top lands on the last visible row.
-	if got := runScripted(t, "\x1b[A\r"); got != "old-thing" {
-		t.Errorf("up+enter should wrap to last candidate, got %q", got)
+func TestPickerModel_DownMovesSelection(t *testing.T) {
+	m := send(t, newTestModel(t), keyDown, keyEnter)
+	if m.choice != "web" {
+		t.Errorf("down+enter should pick the second candidate, got %q", m.choice)
 	}
 }
 
-func TestPickerUI_BackspaceRefilters(t *testing.T) {
-	// "webz" matches nothing; backspace restores "web".
-	if got := runScripted(t, "webz\x7f\r"); got != "web" {
-		t.Errorf("backspace should refilter, got %q", got)
+func TestPickerModel_EscOnUnfilteredCancels(t *testing.T) {
+	m := send(t, newTestModel(t), keyEsc)
+	if m.choice != "" {
+		t.Errorf("esc should cancel with empty choice, got %q", m.choice)
 	}
 }
 
-func TestPickerUI_EnterOnNoMatchKeepsRunning(t *testing.T) {
-	// Enter with zero matches is ignored; Ctrl-U clears, Enter accepts top.
-	if got := runScripted(t, "zzz\r\x15\r"); got != "dev" {
-		t.Errorf("enter-on-empty then ctrl-u should recover, got %q", got)
+func TestPickerModel_EscClearsFilterFirst(t *testing.T) {
+	// Esc while filtering backs out of the filter, not the picker; a second
+	// Enter then accepts the top of the full list again.
+	m := send(t, newTestModel(t), append(runes("web"), keyEsc, keyEnter)...)
+	if m.choice != "dev" {
+		t.Errorf("esc should only clear the filter; enter should then pick dev, got %q", m.choice)
 	}
 }
 
-func TestPickerUI_EscAndCtrlCCancel(t *testing.T) {
-	if got := runScripted(t, "\x1b"); got != "" {
-		t.Errorf("lone ESC should cancel, got %q", got)
-	}
-	if got := runScripted(t, "web\x03"); got != "" {
-		t.Errorf("Ctrl-C should cancel, got %q", got)
-	}
-	// EOF (script exhausted) cancels too.
-	if got := runScripted(t, "we"); got != "" {
-		t.Errorf("EOF should cancel, got %q", got)
+func TestPickerModel_CtrlCCancels(t *testing.T) {
+	m := send(t, newTestModel(t), append(runes("we"), keyCtrlC)...)
+	if m.choice != "" {
+		t.Errorf("ctrl-c should cancel, got %q", m.choice)
 	}
 }
 
-func TestPickerUI_RenderShowsPointerAndCounter(t *testing.T) {
-	var out bytes.Buffer
-	ui := newPickerUI(orderPickerCandidates(pickerFixtures(), nil), 80, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
-	ui.run(strings.NewReader("ba"), &out) // filter to batch, then EOF-cancel
-	s := out.String()
-
-	if !strings.Contains(s, "> ba") {
-		t.Errorf("output should show the typed query, got:\n%q", s)
+func TestPickerModel_ViewShowsSessions(t *testing.T) {
+	view := newTestModel(t).View()
+	for _, want := range []string{"dev", "web", "running", "Pick a session"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view missing %q:\n%s", want, view)
+		}
 	}
-	if !strings.Contains(s, "1/4") {
-		t.Errorf("output should show the match counter 1/4, got:\n%q", s)
+}
+
+func TestPickerItem_Description(t *testing.T) {
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	items := orderPickerCandidates(pickerFixtures(), nil)
+	top := pickerItem{info: items[0], now: now} // dev: running, 1m ago
+	desc := top.Description()
+	for _, want := range []string{"running", "1m ago"} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("description missing %q: %q", want, desc)
+		}
+	}
+	stopped := pickerItem{info: items[3], now: now} // batch: stopped, hosts unset
+	if got := stopped.Description(); got != "stopped" {
+		t.Errorf("stopped description = %q, want %q", got, "stopped")
 	}
 }

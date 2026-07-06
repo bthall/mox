@@ -14,7 +14,6 @@ import (
 	"github.com/bthall/mox/internal/history"
 	"github.com/bthall/mox/internal/session"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // runPicker is what bare `mox` does on a terminal: show every session you
@@ -49,10 +48,10 @@ func runPicker(cmd *cobra.Command) error {
 		return nil
 	}
 
-	// Interactive fuzzy picker when the terminal supports raw mode;
-	// numbered prompt as the fallback.
+	// Interactive fuzzy picker when the terminal supports it; numbered
+	// prompt as the fallback.
 	if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
-		if name, ran := runFuzzyPicker(stdin, out, candidates); ran {
+		if name, ran := runFuzzyPicker(candidates); ran {
 			if name == "" {
 				return nil // canceled
 			}
@@ -77,25 +76,6 @@ func runPicker(cmd *cobra.Command) error {
 		return err
 	}
 	return mgr.CreateOrAttach(cmd.Context(), name, false)
-}
-
-// runFuzzyPicker puts the terminal in raw mode and runs the interactive
-// picker: type to filter, arrows or Ctrl-J/K/N/P to move, Enter to accept,
-// Esc/Ctrl-C to cancel. ran is false when raw mode is unavailable and the
-// caller should fall back to the numbered prompt.
-func runFuzzyPicker(stdin *os.File, out io.Writer, candidates []session.SessionInfo) (name string, ran bool) {
-	oldState, err := term.MakeRaw(int(stdin.Fd()))
-	if err != nil {
-		return "", false
-	}
-	defer term.Restore(int(stdin.Fd()), oldState) //nolint:errcheck // best-effort terminal restore
-
-	width, _, err := term.GetSize(int(stdin.Fd()))
-	if err != nil {
-		width = 80
-	}
-	ui := newPickerUI(candidates, width, time.Now())
-	return ui.run(stdin, out), true
 }
 
 // orderPickerCandidates sorts sessions the way you reach for them: running
