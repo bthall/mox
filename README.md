@@ -4,6 +4,13 @@
 
 <h1 align="center">mox</h1>
 
+<p align="center">
+  <a href="https://github.com/bthall/mox/actions/workflows/ci.yml"><img src="https://github.com/bthall/mox/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/bthall/mox/releases/latest"><img src="https://img.shields.io/github/v/release/bthall/mox" alt="Latest release"></a>
+  <a href="https://goreportcard.com/report/github.com/bthall/mox"><img src="https://goreportcard.com/badge/github.com/bthall/mox" alt="Go Report Card"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bthall/mox" alt="License"></a>
+</p>
+
 A CLI tool for creating and managing tmux sessions declaratively from YAML
 configuration files.
 
@@ -13,7 +20,7 @@ configuration files.
 - **Cssh-style broadcast** — `sync: true` for synchronized typing across panes; tiled layouts
 - **Ad-hoc multi-host sessions** — `mox new @cluster` or `mox new host1 host2 host3` without editing config
 - **Cluster expansion** — `@name` resolves to a configured session's hosts or a clusterssh `clusters` file entry (with nested-cluster expansion)
-- **Import existing tmux sessions** — capture a running session's structure into the config (`mox import`)
+- **Import existing tmux sessions** — capture a running session's structure and SSH connections into the config (`mox import`)
 - **Local quick sessions** — `mox new` with no args opens a single-pane local session; `-t` makes it self-destruct on detach
 - **In-tmux mode** — `mox new -w @cluster` opens a window in your current session instead of a new session
 - **Configurable connect** — defaults to `ssh {{host}}`; override per session/window; `ssh_user:` shortcut
@@ -43,13 +50,24 @@ or fish). If you only want completion (e.g. after `go install`), run
 go install github.com/bthall/mox/cmd/mox@latest
 ```
 
-(`go install` requires that the module has a published tag — until the first
-release, build from source.)
-
 ### Pre-built binaries
 
-Once a release is cut, archives for linux/macOS × amd64/arm64 will be
-attached to the GitHub Releases page along with `checksums.txt`.
+Archives for linux/macOS × amd64/arm64 are attached to each
+[GitHub release](https://github.com/bthall/mox/releases) along with
+`checksums.txt`:
+
+```bash
+curl -LO https://github.com/bthall/mox/releases/latest/download/mox_0.1.0_linux_amd64.tar.gz
+tar xzf mox_0.1.0_linux_amd64.tar.gz && install -Dm755 mox ~/.local/bin/mox
+```
+
+### Arch Linux
+
+A source-build `PKGBUILD` is provided under [`packaging/aur/`](packaging/aur/):
+
+```bash
+cd packaging/aur && makepkg -si
+```
 
 ## Quick start
 
@@ -122,9 +140,12 @@ mox import work -p              # preview the YAML on stdout without saving
 mox import work -F              # overwrite an existing config entry
 ```
 
-Per-pane commands aren't recoverable from tmux's running state (send-keys
-is one-way) — the imported session is structure-only. Add `commands:`
-entries afterward to make it fully reproducible.
+SSH connections are recovered from the OS process table: a window whose
+panes are all plain `ssh host` connections imports as a simple `hosts:`
+list, and other ssh panes keep their connection as a `commands:` entry.
+Anything else (editors, REPLs, scripts you typed) isn't recoverable from
+tmux's running state — add `commands:` entries afterward to make those
+panes fully reproducible.
 
 ### Migrate from clusterssh
 
