@@ -63,3 +63,30 @@ func TestInferAdHocName_ClustersshOnlyFallsBack(t *testing.T) {
 		t.Errorf("inferAdHocName(@notinconfig) = %q, want tmp- prefix", got)
 	}
 }
+
+func TestExcludeHosts(t *testing.T) {
+	got, err := excludeHosts([]string{"a", "b", "c"}, []string{"b"})
+	if err != nil {
+		t.Fatalf("excludeHosts() error = %v", err)
+	}
+	if len(got) != 2 || got[0] != "a" || got[1] != "c" {
+		t.Errorf("got %v, want [a c]", got)
+	}
+}
+
+func TestExcludeHosts_UnmatchedIsError(t *testing.T) {
+	_, err := excludeHosts([]string{"a", "b"}, []string{"nope"})
+	if err == nil {
+		t.Fatal("want error for exclusion that matches nothing")
+	}
+}
+
+func TestExcludeHosts_DuplicateHostAllDropped(t *testing.T) {
+	got, err := excludeHosts([]string{"a", "b", "a"}, []string{"a"})
+	if err != nil {
+		t.Fatalf("excludeHosts() error = %v", err)
+	}
+	if len(got) != 1 || got[0] != "b" {
+		t.Errorf("got %v, want [b]", got)
+	}
+}
