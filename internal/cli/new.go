@@ -106,7 +106,7 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 
 	name := o.name
 	if name == "" {
-		name = defaultAdHocName()
+		name = inferAdHocName(args, gopts.configPath)
 	}
 
 	expanded, err := expandPositional(args, gopts.configPath)
@@ -250,6 +250,22 @@ func readFileOrStdin(path string) ([]byte, error) {
 
 func defaultAdHocName() string {
 	return "tmp-" + strings.ReplaceAll(time.Now().Format("20060102-150405"), ":", "")
+}
+
+// inferAdHocName returns the session name for an ad-hoc new command. If the
+// sole positional arg is @<name> and <name> is a configured mox session, that
+// name is used so that `mox new @foo` creates a session named "foo" rather
+// than a generated tmp- name. Falls back to defaultAdHocName otherwise.
+func inferAdHocName(args []string, configPath string) string {
+	if len(args) == 1 && strings.HasPrefix(args[0], clusterPrefix) {
+		candidate := strings.TrimPrefix(args[0], clusterPrefix)
+		if cfg, _ := tryLoadConfig(configPath); cfg != nil {
+			if _, ok := cfg.GetSession(candidate); ok {
+				return candidate
+			}
+		}
+	}
+	return defaultAdHocName()
 }
 
 // expandPositional applies @cluster expansion to positional args. Missing

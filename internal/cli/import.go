@@ -2,12 +2,15 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/bthall/mox/internal/config"
+	"github.com/bthall/mox/internal/proc"
 	"github.com/bthall/mox/internal/tmux"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -29,9 +32,14 @@ func newImportCommand() *cobra.Command {
 can be recreated later with 'mox -a <name>'. Window/pane structure and
 each pane's current working directory are captured.
 
-Note: per-pane shell commands cannot be recovered from a running tmux
-session (send-keys is one-way), so the imported session is structure-only.
-Add 'commands:' entries to make the imported session fully reproducible.`,
+SSH connections are recovered from the OS process table: a window whose
+panes are all plain 'ssh <host>' connections is imported as a simple-mode
+'hosts:' list, and any other pane running ssh keeps its connection as a
+'commands:' entry.
+
+Note: other per-pane shell commands cannot be recovered (an editor or REPL
+you started by typing is not reproducible), so those panes are
+structure-only. Add 'commands:' entries to make them fully reproducible.`,
 		Example: `  mox import work               under its tmux name
   mox import work -n my-work    rename on import
   mox import work -p            preview on stdout, don't save
@@ -96,8 +104,19 @@ func runImport(cmd *cobra.Command, args []string, o *importOpts) error {
 	return nil
 }
 
+// capturedPane is the per-pane state import recovers from tmux and the process
+// table: the pane's working directory and the argv of its foreground process
+// (nil when none could be recovered or the pane is just a shell).
+type capturedPane struct {
+	path string
+	argv []string
+}
+
 // inspectSession queries tmux and builds a config.Session reflecting the
-// window/pane structure of the running session.
+// window/pane structure of the running session. For each pane it also tries to
+// recover the foreground ssh connection from the OS process table so that
+// SSH fan-outs round-trip as simple-mode `hosts:` rather than losing the host
+// (tmux only reports the command basename, not its arguments).
 func inspectSession(c *tmux.Client, name string) (*config.Session, error) {
 	wins, err := c.ListWindowsForSession(name)
 	if err != nil {
@@ -106,6 +125,10 @@ func inspectSession(c *tmux.Client, name string) (*config.Session, error) {
 	if len(wins) == 0 {
 		return nil, fmt.Errorf("session %q has no windows (unexpected)", name)
 	}
+
+	// Best-effort process snapshot. On failure we degrade to structure-only
+	// import rather than failing the whole command.
+	procs, _ := proc.Capture(context.Background())
 
 	sess := &config.Session{}
 	for _, w := range wins {
@@ -117,35 +140,109 @@ func inspectSession(c *tmux.Client, name string) (*config.Session, error) {
 			return nil, fmt.Errorf("window %s has no panes (unexpected)", w.Name)
 		}
 
-		winRoot := panes[0].CurrentPath
-		// If every pane shares the same cwd, set window root; otherwise
-		// leave it empty (per-pane cwd isn't representable in mox's schema).
+		captured := make([]capturedPane, len(panes))
+		for i, p := range panes {
+			cp := capturedPane{path: p.CurrentPath}
+			if p.PID > 0 && len(procs) > 0 {
+				cp.argv = proc.ForegroundCommand(procs, p.PID, isSSHCommand)
+			}
+			captured[i] = cp
+		}
+
+		sess.Windows = append(sess.Windows, buildWindow(w.Name, captured))
+	}
+	return sess, nil
+}
+
+// buildWindow turns the captured panes of one tmux window into a config.Window.
+//
+// When every pane is a plain `ssh [user@]host` connection sharing one user, the
+// window collapses to simple mode (a `hosts:` list) — this is how an SSH
+// fan-out is meant to be expressed in mox and what makes the import
+// reproducible. Otherwise the explicit pane structure is preserved; any pane
+// that *is* an ssh connection still records its command so that connection is
+// not lost. Non-ssh panes stay structure-only — mox does not try to relaunch
+// editors or REPLs.
+func buildWindow(name string, panes []capturedPane) *config.Window {
+	win := &config.Window{Name: name}
+
+	// Shared working directory across panes becomes the window root; differing
+	// cwds aren't representable per-pane in mox's schema, so leave it empty.
+	if len(panes) > 0 {
+		root := panes[0].path
 		for _, p := range panes[1:] {
-			if p.CurrentPath != winRoot {
-				winRoot = ""
+			if p.path != root {
+				root = ""
 				break
 			}
 		}
-
-		// Default to horizontal stacks for non-root panes. Users can adjust
-		// after import — we can't recover the exact split direction from
-		// tmux's binary layout string without a full parser.
-		configPanes := make([]*config.Pane, len(panes))
-		for i := range panes {
-			split := config.SplitHorizontal
-			if i == 0 {
-				split = config.SplitRoot
-			}
-			configPanes[i] = &config.Pane{Split: split}
-		}
-
-		sess.Windows = append(sess.Windows, &config.Window{
-			Name:  w.Name,
-			Root:  winRoot,
-			Panes: configPanes,
-		})
+		win.Root = root
 	}
-	return sess, nil
+
+	// Can the whole window be expressed as a uniform host fan-out?
+	hosts := make([]string, 0, len(panes))
+	user := ""
+	uniform := len(panes) > 0
+	for i, p := range panes {
+		u, h, plain := parseSSHDest(p.argv)
+		if !plain {
+			uniform = false
+			break
+		}
+		if i == 0 {
+			user = u
+		} else if u != user {
+			uniform = false
+			break
+		}
+		hosts = append(hosts, h)
+	}
+	if uniform {
+		win.Hosts = hosts
+		win.SSHUser = user
+		return win
+	}
+
+	// Explicit panes. Default to horizontal stacks for non-root panes: we can't
+	// recover the exact split direction from tmux's binary layout string
+	// without a full parser. Recover ssh connections as commands.
+	win.Panes = make([]*config.Pane, len(panes))
+	for i, p := range panes {
+		split := config.SplitHorizontal
+		if i == 0 {
+			split = config.SplitRoot
+		}
+		pane := &config.Pane{Split: split}
+		if isSSHCommand(p.argv) {
+			pane.Commands = []string{strings.Join(p.argv, " ")}
+		}
+		win.Panes[i] = pane
+	}
+	return win
+}
+
+// isSSHCommand reports whether argv invokes the ssh client.
+func isSSHCommand(argv []string) bool {
+	return len(argv) > 0 && filepath.Base(argv[0]) == "ssh"
+}
+
+// parseSSHDest parses a plain `ssh [user@]host` invocation. plain is true only
+// when argv is exactly the ssh executable followed by a single destination —
+// no options and no remote command — which is the form representable as a mox
+// host entry. Anything fancier returns plain=false (the caller keeps it as an
+// explicit pane command instead).
+func parseSSHDest(argv []string) (user, host string, plain bool) {
+	if !isSSHCommand(argv) || len(argv) != 2 {
+		return "", "", false
+	}
+	dest := argv[1]
+	if strings.HasPrefix(dest, "-") {
+		return "", "", false
+	}
+	if at := strings.Index(dest, "@"); at >= 0 {
+		return dest[:at], dest[at+1:], true
+	}
+	return "", dest, true
 }
 
 // printSessionYAML writes a YAML snippet of the form `sessions: { name: {...} }`

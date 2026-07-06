@@ -7,8 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `mox new @name` (with a single cluster argument that matches a configured
+  session) now names the created session after the cluster instead of a
+  generated `tmp-<timestamp>` name, so `mox new @staging` and `mox -a staging`
+  land in the same place.
+
+### Fixed
+
+- `mox import` now recovers SSH connections from a running session instead of
+  discarding them. A window whose panes are all plain `ssh <host>` connections
+  is imported as a simple-mode `hosts:` list (matching how SSH fan-outs are
+  meant to be configured), and any other pane running `ssh` keeps its full
+  connection command. Previously these panes imported as anonymous `panes:`,
+  losing every host.
+
 ### Added
 
+- Arch Linux packaging: a source-build PKGBUILD under `packaging/aur/`, and
+  automated publishing of a `mox-tmux-bin` AUR package on release (activates
+  once an `AUR_SSH_KEY` repository secret is configured; releases proceed
+  without the AUR step until then).
 - `mox recent` (alias `r`) — lists the sessions you most recently created or
   attached to, newest first, with their current state (`running` or `gone`).
   Accepts `-n/--limit` (default 10). Backed by a small best-effort history file

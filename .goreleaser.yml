@@ -22,14 +22,14 @@ builds:
       - -s -w -X github.com/bthall/mox/pkg/version.Version={{.Version}} -X github.com/bthall/mox/pkg/version.GitCommit={{.FullCommit}} -X github.com/bthall/mox/pkg/version.BuildDate={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: '{{ incpatch .Version }}-next'
+  version_template: '{{ incpatch .Version }}-next'
 
 changelog:
   use: git
@@ -38,6 +38,24 @@ changelog:
       - '^chore:'
       - '^docs:'
       - '^test:'
+
+aurs:
+  - name: mox-tmux-bin
+    homepage: https://github.com/bthall/mox
+    description: CLI for creating and managing tmux sessions declaratively from YAML config
+    license: MIT
+    depends:
+      - tmux
+    private_key: '{{ envOrDefault "AUR_SSH_KEY" "" }}'
+    git_url: ssh://aur@aur.archlinux.org/mox-tmux-bin.git
+    url_template: "https://github.com/bthall/mox/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    commit_author:
+      name: Brandon Hall
+      email: brandon@brandonhall.us
+    # Publishes only when an AUR deploy key is configured; snapshot builds
+    # always skip. Without the key this resolves to true and the release
+    # proceeds without the AUR step.
+    skip_upload: '{{ if envOrDefault "AUR_SSH_KEY" "" }}auto{{ else }}true{{ end }}'
 
 # TODO: add a `brews:` block here once a Homebrew tap repo exists
 # (e.g. github.com/bthall/homebrew-tap). Example:
