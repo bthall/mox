@@ -6,6 +6,7 @@ package tmux
 type Tmux interface {
 	SessionExists(name string) (bool, error)
 	ListSessions() ([]string, error)
+	ListSessionsDetailed() ([]SessionDetail, error)
 	CreateSession(name, startDir, firstWindow string) error
 	KillSession(name string) error
 	AttachSession(name string) error

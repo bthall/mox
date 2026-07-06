@@ -4,6 +4,7 @@ package tmuxtest
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/bthall/mox/internal/tmux"
 )
@@ -19,6 +20,10 @@ type Fake struct {
 
 	TitlesByPane map[string]string
 	KeysByPane   map[string][][]string
+
+	// Optional per-session detail returned by ListSessionsDetailed.
+	AttachedSessions map[string]bool
+	ActivityBySess   map[string]time.Time
 
 	// Failure injection
 	CreateFails   bool
@@ -77,6 +82,29 @@ func (f *Fake) ListSessions() ([]string, error) {
 	out := make([]string, 0, len(f.sessions))
 	for n := range f.sessions {
 		out = append(out, n)
+	}
+	return out, nil
+}
+
+// ListSessionsDetailed implements tmux.Tmux. Window count comes from the
+// fake's recorded windows; Attached and Activity are taken from the optional
+// AttachedSessions / ActivityBySess maps (zero values otherwise).
+func (f *Fake) ListSessionsDetailed() ([]tmux.SessionDetail, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("ListSessionsDetailed")
+	out := make([]tmux.SessionDetail, 0, len(f.sessions))
+	for n := range f.sessions {
+		windows := len(f.windowsBySess[n])
+		if windows == 0 {
+			windows = 1
+		}
+		out = append(out, tmux.SessionDetail{
+			Name:     n,
+			Windows:  windows,
+			Attached: f.AttachedSessions[n],
+			Activity: f.ActivityBySess[n],
+		})
 	}
 	return out, nil
 }

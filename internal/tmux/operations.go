@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // SessionExists reports whether a tmux session with the given name exists.
@@ -40,6 +41,62 @@ func (c *Client) ListSessions() ([]string, error) {
 		return []string{}, nil
 	}
 	return strings.Split(output, "\n"), nil
+}
+
+// SessionDetail carries the per-session facts `mox list` displays. It is
+// populated from a single `tmux list-sessions` call.
+type SessionDetail struct {
+	Name     string
+	Windows  int
+	Attached bool
+	Activity time.Time
+}
+
+// detailFormat is the -F format string for ListSessionsDetailed. Fields are
+// joined by the ASCII unit separator (\x1f), which cannot appear in a session
+// name, so splitting is unambiguous.
+const detailFormat = "#{session_name}\x1f#{session_windows}\x1f#{session_attached}\x1f#{session_activity}"
+
+// ListSessionsDetailed returns per-session detail for every active session.
+// Like ListSessions, it returns an empty slice (not an error) when no tmux
+// server is running.
+func (c *Client) ListSessionsDetailed() ([]SessionDetail, error) {
+	output, err := c.Run("list-sessions", "-F", detailFormat)
+	if err != nil {
+		var tErr *Error
+		if errors.As(err, &tErr) && tErr.ExitCode == 1 {
+			return []SessionDetail{}, nil
+		}
+		return nil, err
+	}
+	return parseSessionDetails(output), nil
+}
+
+// parseSessionDetails parses the newline-delimited output of a list-sessions
+// call formatted with detailFormat. Malformed numeric fields default to zero
+// values rather than failing the whole listing.
+func parseSessionDetails(output string) []SessionDetail {
+	output = strings.TrimRight(output, "\n")
+	if output == "" {
+		return []SessionDetail{}
+	}
+	lines := strings.Split(output, "\n")
+	details := make([]SessionDetail, 0, len(lines))
+	for _, line := range lines {
+		fields := strings.Split(line, "\x1f")
+		if len(fields) < 4 {
+			continue
+		}
+		windows, _ := strconv.Atoi(fields[1])
+		activitySecs, _ := strconv.ParseInt(fields[3], 10, 64)
+		details = append(details, SessionDetail{
+			Name:     fields[0],
+			Windows:  windows,
+			Attached: fields[2] == "1",
+			Activity: time.Unix(activitySecs, 0),
+		})
+	}
+	return details
 }
 
 // CreateSession creates a new detached session with an optional starting
