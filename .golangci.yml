@@ -17,6 +17,13 @@ linters:
     - misspell
     - unconvert
   settings:
+    errcheck:
+      # fmt.Fprint* to stdout/buffers: write errors are unactionable in a CLI
+      # and checking them everywhere is noise.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
     gosec:
       excludes:
         # G204: Subprocess launched with variable. We deliberately exec tmux

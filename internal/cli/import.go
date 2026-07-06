@@ -153,9 +153,11 @@ func inspectSession(c *tmux.Client, name string) (*config.Session, error) {
 func printSessionYAML(w io.Writer, name string, sess *config.Session) error {
 	wrapped := map[string]map[string]*config.Session{"sessions": {name: sess}}
 	enc := yaml.NewEncoder(w)
-	defer enc.Close()
 	enc.SetIndent(4)
-	return enc.Encode(wrapped)
+	if err := enc.Encode(wrapped); err != nil {
+		return err
+	}
+	return enc.Close() // Close flushes the encoder's buffer
 }
 
 // appendSessionToConfig adds the given session to the YAML config file under
@@ -229,7 +231,7 @@ func findOrCreateMapKey(m *yaml.Node, key string) *yaml.Node {
 }
 
 func writeYAMLNode(path string, node *yaml.Node) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	var buf bytes.Buffer

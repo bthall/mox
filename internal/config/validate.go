@@ -26,11 +26,11 @@ var sshUserRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 // validArrangeLayouts is the set of tmux built-in layout names accepted by
 // the `arrange:` field.
 var validArrangeLayouts = map[string]bool{
-	"tiled":            true,
-	"even-horizontal":  true,
-	"even-vertical":    true,
-	"main-horizontal":  true,
-	"main-vertical":    true,
+	"tiled":           true,
+	"even-horizontal": true,
+	"even-vertical":   true,
+	"main-horizontal": true,
+	"main-vertical":   true,
 }
 
 // Validate validates the entire configuration.

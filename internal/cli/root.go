@@ -138,7 +138,7 @@ func loadConfig(path string) (*config.Config, error) {
 		path = config.DefaultConfigPath()
 	}
 	if !config.Exists(path) {
-		return nil, fmt.Errorf("config file not found at %s\n\nRun 'mox init' to create a default configuration.", path)
+		return nil, fmt.Errorf("config file not found at %s\n\nRun 'mox init' to create a default configuration", path)
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
@@ -179,7 +179,7 @@ func loggerFromContext(ctx context.Context) *slog.Logger {
 	return slog.Default()
 }
 
-// Execute runs the root command with a context cancelled by SIGINT/SIGTERM.
+// Execute runs the root command with a context canceled by SIGINT/SIGTERM.
 func Execute(ctx context.Context) int {
 	rootCmd := NewRootCommand()
 	rootCmd.SetContext(ctx)
