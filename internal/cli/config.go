@@ -52,7 +52,7 @@ func newConfigViewCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("open config: %w", err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }() // read-only; close error is immaterial
 			if _, err := io.Copy(os.Stdout, f); err != nil {
 				return fmt.Errorf("read config: %w", err)
 			}

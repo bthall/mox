@@ -40,7 +40,7 @@ type hostPaneOpts struct {
 }
 
 // BuildSession creates a tmux session from configuration. The context is
-// honored at command boundaries — if the context is cancelled mid-build the
+// honored at command boundaries — if the context is canceled mid-build the
 // caller should call KillSession to clean up the partial session.
 func (b *Builder) BuildSession(ctx context.Context, name string, session *config.Session) error {
 	root, err := resolveDir(session.Root)
@@ -384,19 +384,6 @@ func pickBool(window *bool, session bool) bool {
 		return *window
 	}
 	return session
-}
-
-// connectTemplate returns the effective connect template, with window-level
-// overriding session-level overriding the package default. Kept exported-ish
-// for any future callers; current callers use hostPaneOptsFor directly.
-func connectTemplate(session, window string) string {
-	if window != "" {
-		return window
-	}
-	if session != "" {
-		return session
-	}
-	return DefaultConnectTemplate
 }
 
 // resolveDir expands ~ and converts a relative path to an absolute one.

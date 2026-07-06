@@ -164,7 +164,7 @@ func (o *newOpts) validate() error {
 		return errors.New("--from and --file are mutually exclusive")
 	}
 	if o.temporary && o.detach {
-		return errors.New("--temporary requires attaching: tmux's destroy-unattached would kill the session immediately. Drop --detach.")
+		return errors.New("--temporary requires attaching: tmux's destroy-unattached would kill the session immediately (drop --detach)")
 	}
 	if o.window && (o.temporary || o.detach || o.force) {
 		return errors.New("--window is incompatible with --temporary, --detach, and --force (those are session-lifecycle flags)")
