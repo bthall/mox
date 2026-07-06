@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `mox list` is now a single aligned table (origin, state, window count,
+  attached marker, last activity, and host summary) instead of separate
+  Configured/Unmanaged sections, and degrades cleanly under `NO_COLOR` and
+  non-TTY output.
 - `mox new @name` (with a single cluster argument that matches a configured
   session) now names the created session after the cluster instead of a
   generated `tmp-<timestamp>` name, so `mox new @staging` and `mox -a staging`
@@ -25,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `-x/--exclude` on `mox new` — drop hosts (or whole `@clusters`) from the
+  expanded host list: `mox new @webfarm -x web3`. Exclusions that match
+  nothing are an error, catching typos.
 - `mox edit` — open the config in `$VISUAL`/`$EDITOR` and validate it when the
   editor exits, reporting schema errors with line numbers.
 - Arch Linux packaging: a source-build PKGBUILD under `packaging/aur/`, and
@@ -37,13 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at `$XDG_STATE_HOME/mox/recent.json` (falls back to
   `~/.local/state/mox/recent.json`); this is the only state mox persists.
 - `mox list` now shows recently created/attached sessions in a `Recent:` footer.
-
-### Changed
-
-- `mox list` is now a single aligned table (origin, state, window count,
-  attached marker, last activity, and host summary) instead of separate
-  Configured/Unmanaged sections, and degrades cleanly under `NO_COLOR` and
-  non-TTY output.
 
 ## [0.1.0] — 2026-05-28
 

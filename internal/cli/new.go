@@ -23,6 +23,7 @@ type newOpts struct {
 	from      string
 	file      string
 	arrange   string
+	exclude   []string
 	sync      bool
 	sudo      bool
 	temporary bool
@@ -66,6 +67,7 @@ an existing configured session and override its hosts.`,
   mox new @api-cluster                   cssh-style on a cluster
   mox new host1 host2 host3          cssh-style on literal hosts
   mox new -u root @monitoring    ssh as root
+  mox new @api-cluster -x api2           the cluster minus one host
   mox new -S=false @api-cluster          no synchronize-panes
   mox new -w @api-cluster                open as a window in current tmux
 
@@ -89,10 +91,12 @@ an existing configured session and override its hosts.`,
 	cmd.Flags().BoolVarP(&o.detach, "detach", "d", false, "create without attaching")
 	cmd.Flags().BoolVarP(&o.force, "force", "F", false, "recreate if a session with the same name exists")
 	cmd.Flags().BoolVarP(&o.window, "window", "w", false, "open as a new window in the current tmux session (requires $TMUX)")
+	cmd.Flags().StringArrayVarP(&o.exclude, "exclude", "x", nil, "drop HOST (or @cluster) from the expanded host list; repeatable")
 
 	cmd.ValidArgsFunction = completeHostsOrClusters
 	_ = cmd.RegisterFlagCompletionFunc("arrange", completeArrange)
 	_ = cmd.RegisterFlagCompletionFunc("from", completeConfiguredSession)
+	_ = cmd.RegisterFlagCompletionFunc("exclude", completeHostsOrClusters)
 	return cmd
 }
 
@@ -114,6 +118,17 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 		return err
 	}
 	args = expanded
+
+	if len(o.exclude) > 0 {
+		excluded, err := expandPositional(o.exclude, gopts.configPath)
+		if err != nil {
+			return err
+		}
+		args, err = excludeHosts(args, excluded)
+		if err != nil {
+			return err
+		}
+	}
 
 	// When there are no hosts to broadcast to, the cssh-style defaults
 	// don't make sense. Honor explicit overrides; clear unsignaled defaults.
@@ -266,6 +281,30 @@ func inferAdHocName(args []string, configPath string) string {
 		}
 	}
 	return defaultAdHocName()
+}
+
+// excludeHosts removes every host in exclude from hosts. An exclusion that
+// matches nothing is an error — it is almost always a typo, and silently
+// keeping the host defeats the point of excluding it.
+func excludeHosts(hosts, exclude []string) ([]string, error) {
+	drop := make(map[string]bool, len(exclude))
+	for _, e := range exclude {
+		drop[e] = false // false = not yet matched
+	}
+	kept := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		if _, excluded := drop[h]; excluded {
+			drop[h] = true
+			continue
+		}
+		kept = append(kept, h)
+	}
+	for e, matched := range drop {
+		if !matched {
+			return nil, fmt.Errorf("--exclude %s: host is not in the expanded host list", e)
+		}
+	}
+	return kept, nil
 }
 
 // expandPositional applies @cluster expansion to positional args. Missing
