@@ -22,14 +22,14 @@ builds:
       - -s -w -X github.com/bthall/mox/pkg/version.Version={{.Version}} -X github.com/bthall/mox/pkg/version.GitCommit={{.FullCommit}} -X github.com/bthall/mox/pkg/version.BuildDate={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: '{{ incpatch .Version }}-next'
+  version_template: '{{ incpatch .Version }}-next'
 
 changelog:
   use: git
