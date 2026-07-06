@@ -26,7 +26,7 @@ configuration files.
 - **Configurable connect** — defaults to `ssh {{host}}`; override per session/window; `ssh_user:` shortcut
 - **Reusable named layouts** — define once, reference from any window
 - **Shell completion** — bash, zsh, fish; completes sessions, clusters, layouts, and running tmux sessions
-- **Session picker** — bare `mox` lists every running, configured, and recent session; pick by number or name
+- **Session picker** — bare `mox` opens a fuzzy-filterable list of every running, configured, and recent session
 - **Recent sessions** — `mox list` and `mox recent` remember what you created or attached to; `mox last` bounces back to the previous one
 - **Host exclusion** — `mox new @webfarm -x web3` broadcasts to a cluster minus the hosts you name
 - **Edit with a net** — `mox edit` opens the config in `$EDITOR` and validates it on save
