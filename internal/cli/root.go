@@ -101,6 +101,7 @@ and panes.`,
 
 	rootCmd.AddCommand(newInitCommand())
 	rootCmd.AddCommand(newListCommand())
+	rootCmd.AddCommand(newRecentCommand())
 	rootCmd.AddCommand(newKillCommand())
 	rootCmd.AddCommand(newValidateCommand())
 	rootCmd.AddCommand(newConfigCommand())

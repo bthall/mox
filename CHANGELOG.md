@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `mox recent` (alias `r`) — lists the sessions you most recently created or
+  attached to, newest first, with their current state (`running` or `gone`).
+  Accepts `-n/--limit` (default 10). Backed by a small best-effort history file
+  at `$XDG_STATE_HOME/mox/recent.json` (falls back to
+  `~/.local/state/mox/recent.json`); this is the only state mox persists.
+- `mox list` now shows recently created/attached sessions in a `Recent:` footer.
+
+### Changed
+
+- `mox list` is now a single aligned table (origin, state, window count,
+  attached marker, last activity, and host summary) instead of separate
+  Configured/Unmanaged sections, and degrades cleanly under `NO_COLOR` and
+  non-TTY output.
+
 ## [0.1.0] — 2026-05-28
 
 ### Added
