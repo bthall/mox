@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `mox new @name` (with a single cluster argument that matches a configured
+  session) now names the created session after the cluster instead of a
+  generated `tmp-<timestamp>` name, so `mox new @staging` and `mox -a staging`
+  land in the same place.
+
 ### Fixed
 
 - `mox import` now recovers SSH connections from a running session instead of
