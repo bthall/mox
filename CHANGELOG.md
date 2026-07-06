@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Bare `mox` on a terminal now opens a session picker: every running,
+  configured, and recent session in one numbered list — type a number or a
+  name (unique prefixes work) to create-or-attach. Piped/scripted invocations
+  still print help.
 - `mox last` — attach to the session you used before this one (the session
   equivalent of `cd -`); bindable inside tmux via `run-shell "mox last"`.
 - `-x/--exclude` on `mox new` — drop hosts (or whole `@clusters`) from the
