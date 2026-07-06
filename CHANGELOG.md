@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Arch Linux packaging: a source-build PKGBUILD under `packaging/aur/`, and
+  automated publishing of a `mox-tmux-bin` AUR package on release (activates
+  once an `AUR_SSH_KEY` repository secret is configured; releases proceed
+  without the AUR step until then).
 - `mox recent` (alias `r`) — lists the sessions you most recently created or
   attached to, newest first, with their current state (`running` or `gone`).
   Accepts `-n/--limit` (default 10). Backed by a small best-effort history file
