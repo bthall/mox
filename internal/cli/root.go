@@ -51,7 +51,8 @@ func NewRootCommand() *cobra.Command {
 A session can be a simple host list (one pane per host, optionally with
 synchronized typing and tiled layout) or a fully-specified set of windows
 and panes.`,
-		Example: `  mox -a api-cluster                attach to a configured session
+		Example: `  mox                           pick a session from a list
+  mox -a api-cluster                attach to a configured session
   mox new                       quick local session
   mox new @api-cluster              cssh-style multi-host session
   mox new -u root host1 host2   ssh as a specific user

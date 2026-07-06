@@ -26,7 +26,10 @@ configuration files.
 - **Configurable connect** — defaults to `ssh {{host}}`; override per session/window; `ssh_user:` shortcut
 - **Reusable named layouts** — define once, reference from any window
 - **Shell completion** — bash, zsh, fish; completes sessions, clusters, layouts, and running tmux sessions
-- **Recent sessions** — `mox list` and `mox recent` remember what you created or attached to
+- **Session picker** — bare `mox` lists every running, configured, and recent session; pick by number or name
+- **Recent sessions** — `mox list` and `mox recent` remember what you created or attached to; `mox last` bounces back to the previous one
+- **Host exclusion** — `mox new @webfarm -x web3` broadcasts to a cluster minus the hosts you name
+- **Edit with a net** — `mox edit` opens the config in `$EDITOR` and validates it on save
 - **Strict validation** — typos in config keys error with line numbers
 - **Honest defaults** — single binary, no daemon; the only state is a small recents history
 
@@ -74,6 +77,7 @@ cd packaging/aur && makepkg -si
 ```bash
 mox init                        # scaffold a default config at ~/.config/mox/config.yml
 mox -a example                  # build + attach to the "example" session
+mox                             # or: pick a session interactively
 mox list                        # configured + running tmux sessions
 mox recent                      # sessions you recently created or attached to
 mox kill example                # destroy a running session
@@ -110,6 +114,7 @@ panes, and `sudo -i` auto-sent so you type the root password once.
 ```bash
 mox new host1 host2 host3       # 3 hosts, broadcast typing, sudo on connect
 mox new @api-cluster                # same, using a configured session's host list
+mox new @api-cluster -x api2        # the cluster minus a host that's mid-deploy
 mox new -u root @api-cluster        # ssh as root
 mox new -S=false @api-cluster       # turn off broadcast typing for this one
 mox new --sudo=false @api-cluster   # skip sudo
@@ -297,16 +302,19 @@ See `examples/config.yml` for more.
 
 ```
 Session lifecycle:
+  mox                   interactive picker over running/configured/recent sessions
   mox -a <session>      attach to a configured session (builds it if not running)
                         also attaches to any running tmux session by name
   mox new [hosts...]    ad-hoc session or window (alias: cssh)
   mox list | ls         list configured and running sessions
   mox recent | r        sessions you recently created or attached to
+  mox last              attach to the session you used before this one
   mox kill <session>    destroy a running session
   mox import <session>  capture a running tmux session into the config
 
 Configuration:
   mox init              scaffold a default config
+  mox edit              open the config in $EDITOR, validate on exit
   mox validate          check config syntax
   mox config path       print resolved config path
   mox config view       print the raw config file
