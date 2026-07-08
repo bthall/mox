@@ -1,74 +1,37 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/cursor"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/bthall/mox/internal/config"
+	"github.com/bthall/mox/internal/session"
 )
+
+var testNow = time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
 
 func newTestModel(t *testing.T) pickerModel {
 	t.Helper()
-	m := newPickerModel(orderPickerCandidates(pickerFixtures(), nil), time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
-	// Simulate the size message Bubble Tea sends on startup.
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	sessions := map[string]*config.Session{
+		"dev": {Hosts: []string{"web1", "web2", "db"}, Sync: true, Arrange: "tiled"},
+		"web": {Connect: "ssh -p 2222 ops@{{host}}", Hosts: []string{"host1", "host2"}},
+	}
+	m := newPickerModel(orderPickerCandidates(pickerFixtures(), nil), sessions, testNow)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return next.(pickerModel)
 }
 
-// send runs a sequence of key messages through the model, executing any
-// commands each update returns (as the Bubble Tea runtime would) so that
-// asynchronous behavior like filter application actually happens.
 func send(t *testing.T, m pickerModel, keys ...tea.KeyMsg) pickerModel {
 	t.Helper()
 	for _, k := range keys {
-		m = drain(t, m, k)
+		next, _ := m.Update(k)
+		m = next.(pickerModel)
 	}
 	return m
-}
-
-func drain(t *testing.T, m pickerModel, msg tea.Msg) pickerModel {
-	t.Helper()
-	return drainDepth(t, m, msg, 0)
-}
-
-// drainDepth executes returned commands like the runtime would, but skips
-// cursor-blink messages (they schedule each other forever) and refuses to
-// recurse without bound.
-func drainDepth(t *testing.T, m pickerModel, msg tea.Msg, depth int) pickerModel {
-	t.Helper()
-	if depth > 16 {
-		return m
-	}
-	next, cmd := m.Update(msg)
-	m = next.(pickerModel)
-	if cmd == nil {
-		return m
-	}
-	out := cmd()
-	switch v := out.(type) {
-	case nil, tea.QuitMsg, cursor.BlinkMsg:
-		return m
-	case tea.BatchMsg:
-		for _, c := range v {
-			if c == nil {
-				continue
-			}
-			inner := c()
-			if inner == nil {
-				continue
-			}
-			switch inner.(type) {
-			case tea.QuitMsg, cursor.BlinkMsg:
-				continue
-			}
-			m = drainDepth(t, m, inner, depth+1)
-		}
-		return m
-	default:
-		return drainDepth(t, m, out, depth+1)
-	}
 }
 
 func runes(s string) []tea.KeyMsg {
@@ -79,11 +42,21 @@ func runes(s string) []tea.KeyMsg {
 	return msgs
 }
 
+func manyCandidates(n int) []session.SessionInfo {
+	out := make([]session.SessionInfo, n)
+	for i := range out {
+		out[i] = session.SessionInfo{Name: fmt.Sprintf("sess-%d", i), Managed: true}
+	}
+	return out
+}
+
 var (
 	keyEnter = tea.KeyMsg{Type: tea.KeyEnter}
 	keyEsc   = tea.KeyMsg{Type: tea.KeyEsc}
 	keyDown  = tea.KeyMsg{Type: tea.KeyDown}
+	keyUp    = tea.KeyMsg{Type: tea.KeyUp}
 	keyCtrlC = tea.KeyMsg{Type: tea.KeyCtrlC}
+	keyBksp  = tea.KeyMsg{Type: tea.KeyBackspace}
 )
 
 func TestPickerModel_EnterAcceptsTopCandidate(t *testing.T) {
@@ -95,33 +68,60 @@ func TestPickerModel_EnterAcceptsTopCandidate(t *testing.T) {
 }
 
 func TestPickerModel_TypeToFilterThenEnter(t *testing.T) {
-	// Typing opens the filter without needing "/" first.
 	m := send(t, newTestModel(t), append(runes("web"), keyEnter)...)
 	if m.choice != "web" {
 		t.Errorf("typed filter should select web, got %q", m.choice)
 	}
+	// Fuzzy subsequence: 'ot' matches old-thing.
+	m = send(t, newTestModel(t), append(runes("ot"), keyEnter)...)
+	if m.choice != "old-thing" {
+		t.Errorf("fuzzy filter should select old-thing, got %q", m.choice)
+	}
 }
 
-func TestPickerModel_DownMovesSelection(t *testing.T) {
+func TestPickerModel_ArrowsMoveWithoutWrapping(t *testing.T) {
 	m := send(t, newTestModel(t), keyDown, keyEnter)
 	if m.choice != "web" {
 		t.Errorf("down+enter should pick the second candidate, got %q", m.choice)
 	}
-}
-
-func TestPickerModel_EscOnUnfilteredCancels(t *testing.T) {
-	m := send(t, newTestModel(t), keyEsc)
-	if m.choice != "" {
-		t.Errorf("esc should cancel with empty choice, got %q", m.choice)
+	// No wrap: up from the top stays on the top.
+	m = send(t, newTestModel(t), keyUp, keyUp, keyEnter)
+	if m.choice != "dev" {
+		t.Errorf("up at top should clamp, got %q", m.choice)
+	}
+	// No wrap: down past the end stays on the last.
+	m = send(t, newTestModel(t), keyDown, keyDown, keyDown, keyDown, keyDown, keyEnter)
+	if m.choice != "old-thing" {
+		t.Errorf("down past end should clamp to last, got %q", m.choice)
 	}
 }
 
-func TestPickerModel_EscClearsFilterFirst(t *testing.T) {
-	// Esc while filtering backs out of the filter, not the picker; a second
-	// Enter then accepts the top of the full list again.
-	m := send(t, newTestModel(t), append(runes("web"), keyEsc, keyEnter)...)
+func TestPickerModel_BackspaceRefilters(t *testing.T) {
+	m := send(t, newTestModel(t), append(runes("webz"), keyBksp, keyEnter)...)
+	if m.choice != "web" {
+		t.Errorf("backspace should refilter, got %q", m.choice)
+	}
+}
+
+func TestPickerModel_EnterOnNoMatchCancels(t *testing.T) {
+	m := send(t, newTestModel(t), append(runes("zzz"), keyEnter)...)
+	if m.choice != "" {
+		t.Errorf("enter with no matches should quit with no choice, got %q", m.choice)
+	}
+}
+
+func TestPickerModel_EscClearsFilterThenCancels(t *testing.T) {
+	m := send(t, newTestModel(t), append(runes("web"), keyEsc)...)
+	if len(m.query) != 0 {
+		t.Errorf("first esc should clear the query, still %q", string(m.query))
+	}
+	m = send(t, m, keyEnter)
 	if m.choice != "dev" {
-		t.Errorf("esc should only clear the filter; enter should then pick dev, got %q", m.choice)
+		t.Errorf("after clearing, enter should pick the top of the full list, got %q", m.choice)
+	}
+	m2 := send(t, newTestModel(t), keyEsc)
+	if m2.choice != "" {
+		t.Errorf("esc on unfiltered list should cancel, got %q", m2.choice)
 	}
 }
 
@@ -132,27 +132,61 @@ func TestPickerModel_CtrlCCancels(t *testing.T) {
 	}
 }
 
-func TestPickerModel_ViewShowsSessions(t *testing.T) {
+func TestPickerModel_ViewTwoPane(t *testing.T) {
 	view := newTestModel(t).View()
-	for _, want := range []string{"dev", "web", "running", "Pick a session"} {
+	for _, want := range []string{
+		"sessions", // left title
+		"▸",        // search prompt
+		"dev",      // top candidate (also right pane title)
+		"state",    // preview keys
+		"running",  // preview state
+		"web1",     // preview hosts from config
+		"sync",     // config detail
+		"↵ attach", // footer hints
+		"╭─", "╰─", // panel borders
+	} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view missing %q:\n%s", want, view)
 		}
 	}
 }
 
-func TestPickerItem_Description(t *testing.T) {
-	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	items := orderPickerCandidates(pickerFixtures(), nil)
-	top := pickerItem{info: items[0], now: now} // dev: running, 1m ago
-	desc := top.Description()
-	for _, want := range []string{"running", "1m ago"} {
-		if !strings.Contains(desc, want) {
-			t.Errorf("description missing %q: %q", want, desc)
-		}
+func TestPickerModel_ViewPreviewFollowsSelection(t *testing.T) {
+	m := send(t, newTestModel(t), keyDown) // select web
+	view := m.View()
+	if !strings.Contains(view, "ssh -p 2222 ops@{{host}}") {
+		t.Errorf("preview should show web's connect template:\n%s", view)
 	}
-	stopped := pickerItem{info: items[3], now: now} // batch: stopped, hosts unset
-	if got := stopped.Description(); got != "stopped" {
-		t.Errorf("stopped description = %q, want %q", got, "stopped")
+}
+
+func TestPickerModel_ViewNarrowDropsPreview(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 34, Height: 30})
+	view := next.(pickerModel).View()
+	if strings.Contains(view, "state") {
+		t.Errorf("narrow view should drop the preview pane:\n%s", view)
+	}
+	if !strings.Contains(view, "dev") {
+		t.Errorf("narrow view should still list sessions:\n%s", view)
+	}
+}
+
+func TestPickerModel_ScrollKeepsSelectionVisible(t *testing.T) {
+	// 30 candidates against a short terminal forces scrolling.
+	m := newPickerModel(manyCandidates(30), nil, testNow)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 12})
+	m = next.(pickerModel)
+	for i := 0; i < 29; i++ {
+		m = send(t, m, keyDown)
+	}
+	if m.selected != 29 {
+		t.Fatalf("selected = %d, want 29", m.selected)
+	}
+	if m.offset == 0 {
+		t.Errorf("offset should have scrolled, still 0")
+	}
+	m = send(t, m, keyEnter)
+	if m.choice != "sess-29" {
+		t.Errorf("scrolled enter should pick sess-29, got %q", m.choice)
 	}
 }

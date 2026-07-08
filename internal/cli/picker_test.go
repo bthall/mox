@@ -14,8 +14,8 @@ func pickerFixtures() []session.SessionInfo {
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
 	return []session.SessionInfo{
 		{Name: "batch", Managed: true},
-		{Name: "web", Managed: true, Running: true, LastActivity: now.Add(-time.Hour)},
-		{Name: "dev", Managed: true, Running: true, LastActivity: now.Add(-time.Minute)},
+		{Name: "web", Managed: true, Running: true, LastActivity: now.Add(-time.Hour), Hosts: []string{"host1", "host2"}},
+		{Name: "dev", Managed: true, Running: true, LastActivity: now.Add(-time.Minute), Hosts: []string{"web1", "web2", "db"}},
 		{Name: "old-thing", Managed: true},
 	}
 }

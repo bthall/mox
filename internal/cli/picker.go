@@ -51,7 +51,7 @@ func runPicker(cmd *cobra.Command) error {
 	// Interactive fuzzy picker when the terminal supports it; numbered
 	// prompt as the fallback.
 	if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
-		if name, ran := runFuzzyPicker(candidates); ran {
+		if name, ran := runFuzzyPicker(candidates, cfg.Sessions); ran {
 			if name == "" {
 				return nil // canceled
 			}
