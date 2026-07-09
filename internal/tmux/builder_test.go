@@ -347,11 +347,13 @@ func TestBuilder_AdHocWindow_NoHosts(t *testing.T) {
 	}
 }
 
+// sentKey reports whether a command was sent to any pane, either exactly or
+// as the leading command of a hold/retry-wrapped connect line.
 func sentKey(f *tmuxtest.Fake, want string) bool {
 	for _, batches := range f.KeysByPane {
 		for _, batch := range batches {
 			for _, c := range batch {
-				if c == want {
+				if c == want || strings.HasPrefix(c, want+";") {
 					return true
 				}
 			}

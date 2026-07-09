@@ -30,6 +30,18 @@ type Session struct {
 	// main-horizontal, main-vertical. Empty = no rearrangement.
 	Arrange string `yaml:"arrange,omitempty"`
 
+	// Hold controls what happens to a host pane when its connection ends
+	// (failure or clean exit). When on (the default), the pane shows a
+	// notice and waits for Enter before closing, instead of dropping to a
+	// local shell — which in a sync window would silently receive the
+	// broadcast keystrokes. Set hold: false to restore the local shell.
+	Hold *bool `yaml:"hold,omitempty"`
+
+	// Retry re-runs a failed connect command up to N extra times (3s apart)
+	// before giving up. 0 (the default) disables retrying. A connection
+	// that exits cleanly is never retried.
+	Retry int `yaml:"retry,omitempty"`
+
 	// Simple mode (mutually exclusive with Windows).
 	Hosts    []string `yaml:"hosts,omitempty"`
 	Commands []string `yaml:"commands,omitempty"` // sent to each host pane after connect
@@ -56,6 +68,12 @@ type Window struct {
 
 	// Arrange overrides session-level arrange for this window.
 	Arrange string `yaml:"arrange,omitempty"`
+
+	// Hold overrides session-level hold for this window (nil = inherit).
+	Hold *bool `yaml:"hold,omitempty"`
+
+	// Retry overrides session-level retry for this window (nil = inherit).
+	Retry *int `yaml:"retry,omitempty"`
 
 	// Simple mode (mutually exclusive with Panes/Layout).
 	Hosts    []string `yaml:"hosts,omitempty"`

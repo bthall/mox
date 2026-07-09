@@ -37,6 +37,8 @@ type hostPaneOpts struct {
 	connect string
 	arrange string
 	sync    bool
+	hold    bool
+	retry   int
 }
 
 // BuildSession creates a tmux session from configuration. The context is
@@ -262,7 +264,7 @@ func (b *Builder) buildHostPanes(ctx context.Context, winID string, hosts []stri
 			b.log.Warn("set pane title failed", "host", host, "error", err)
 		}
 
-		connectCmd := strings.ReplaceAll(opts.connect, "{{host}}", host)
+		connectCmd := wrapConnect(strings.ReplaceAll(opts.connect, "{{host}}", host), host, opts.hold, opts.retry)
 		if err := b.tx.SendKeys(paneID, []string{connectCmd}); err != nil {
 			return fmt.Errorf("connect to host %q: %w", host, err)
 		}
@@ -274,6 +276,31 @@ func (b *Builder) buildHostPanes(ctx context.Context, winID string, hosts []stri
 		}
 	}
 	return nil
+}
+
+// wrapConnect decorates the substituted connect command with retry and hold
+// behavior. With retry, a failing connection is re-attempted (a clean exit
+// never retries); with hold, an ended connection prints a notice and waits
+// for Enter before the pane closes — the pane never drops back to a local
+// shell, which in a sync window would silently receive broadcast keystrokes.
+// host is already validated against the safe-hostname pattern.
+func wrapConnect(connectCmd, host string, hold bool, retry int) string {
+	cmd := connectCmd
+	if retry > 0 {
+		attempts := make([]string, 0, retry+1)
+		for i := 1; i <= retry+1; i++ {
+			attempts = append(attempts, fmt.Sprintf("%d", i))
+		}
+		cmd = fmt.Sprintf(
+			"for _mox_try in %s; do %s && break; printf '[mox] %s: connection failed (attempt %%s)\\n' \"$_mox_try\"; sleep 3; done",
+			strings.Join(attempts, " "), connectCmd, host)
+	}
+	if hold {
+		cmd += fmt.Sprintf(
+			"; printf '\\n[mox] %s: connection ended. Press Enter to close this pane.\\n'; read -r _mox_ack; exit",
+			host)
+	}
+	return cmd
 }
 
 // applyWindowPostBuild applies arrange and sync to a window after its panes
@@ -346,10 +373,22 @@ func hostPaneOptsFor(session *config.Session, window *config.Window) hostPaneOpt
 		wArrange = window.Arrange
 		wSync = window.Sync
 	}
+	hold := true
+	if window != nil && window.Hold != nil {
+		hold = *window.Hold
+	} else if session.Hold != nil {
+		hold = *session.Hold
+	}
+	retry := session.Retry
+	if window != nil && window.Retry != nil {
+		retry = *window.Retry
+	}
 	return hostPaneOpts{
 		connect: pickConnect(sConnect, sUser, wConnect, wUser),
 		arrange: pickString(wArrange, sArrange),
 		sync:    pickBool(wSync, sSync),
+		hold:    hold,
+		retry:   retry,
 	}
 }
 
