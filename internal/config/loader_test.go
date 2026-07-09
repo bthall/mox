@@ -142,7 +142,7 @@ func TestEffectivePath_LocalDirIgnored(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	// A directory named .mox.yml must not be picked up.
-	if err := os.Mkdir(LocalConfigName, 0o755); err != nil {
+	if err := os.Mkdir(LocalConfigName, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	if _, local := EffectivePath(""); local {

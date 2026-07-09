@@ -159,7 +159,8 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 	cfg := &config.Config{Sessions: map[string]*config.Session{name: sess}}
 	var mgr *session.Manager
 	if o.print {
-		mgr = session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger)
+		mgr = session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger,
+			session.WithHookRunner(printHookRunner(cmd)))
 	} else {
 		var err error
 		mgr, err = session.NewManager(cfg, logger)

@@ -36,3 +36,16 @@ func TestWrapConnect_Disabled(t *testing.T) {
 		t.Errorf("hold:false retry:0 must leave the command untouched, got %q", got)
 	}
 }
+
+func TestPrependCmds(t *testing.T) {
+	got := prependCmds([]string{"a", "b"}, []string{"c"})
+	if len(got) != 3 || got[0] != "a" || got[2] != "c" {
+		t.Errorf("prependCmds = %v", got)
+	}
+	if got := prependCmds(nil, []string{"c"}); len(got) != 1 {
+		t.Errorf("nil pre should pass through, got %v", got)
+	}
+	if got := prependCmds([]string{"a"}, nil); len(got) != 1 || got[0] != "a" {
+		t.Errorf("pre alone should still run, got %v", got)
+	}
+}

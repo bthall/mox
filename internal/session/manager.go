@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/exec"
 	"time"
 
 	"github.com/bthall/mox/internal/config"
@@ -19,10 +21,18 @@ type Manager struct {
 	builder  *tmux.Builder
 	log      *slog.Logger
 	recorder func(name, action string) error
+	hookRun  func(command string) error
 }
 
 // ManagerOption customizes a Manager built with NewManagerWith.
 type ManagerOption func(*Manager)
+
+// WithHookRunner injects how on_start/on_stop hook commands execute.
+// Production uses sh -c with the terminal attached; tests inject a recorder,
+// and dry-run mode injects a printer.
+func WithHookRunner(fn func(command string) error) ManagerOption {
+	return func(m *Manager) { m.hookRun = fn }
+}
 
 // WithRecorder injects the function used to persist recent-session history.
 // Production code uses history.Record (wired by NewManager); tests inject a
@@ -53,11 +63,45 @@ func NewManagerWith(cfg *config.Config, tx tmux.Tmux, logger *slog.Logger, opts 
 		builder:  tmux.NewBuilder(tx, cfg, logger),
 		log:      logger,
 		recorder: func(string, string) error { return nil },
+		hookRun:  runShellHook,
 	}
 	for _, opt := range opts {
 		opt(m)
 	}
 	return m
+}
+
+// runShellHook is the production hook runner: sh -c with the terminal
+// attached, so hooks can prompt (ssh-add, VPN password) if they need to.
+func runShellHook(command string) error {
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// runStartHooks runs a session's on_start commands in order; the first
+// failure aborts (the session has not been created yet).
+func (m *Manager) runStartHooks(name string, sess *config.Session) error {
+	for _, hook := range sess.OnStart {
+		m.log.Debug("on_start hook", "session", name, "command", hook)
+		if err := m.hookRun(hook); err != nil {
+			return fmt.Errorf("on_start hook %q failed: %w", hook, err)
+		}
+	}
+	return nil
+}
+
+// runStopHooks runs a session's on_stop commands. Failures are logged and
+// never propagate — the session is already gone.
+func (m *Manager) runStopHooks(name string, sess *config.Session) {
+	for _, hook := range sess.OnStop {
+		m.log.Debug("on_stop hook", "session", name, "command", hook)
+		if err := m.hookRun(hook); err != nil {
+			m.log.Warn("on_stop hook failed", "session", name, "command", hook, "error", err)
+		}
+	}
 }
 
 // recordHistory notes a created/attached interaction in the recents history.
@@ -109,6 +153,9 @@ func (m *Manager) CreateOrAttach(ctx context.Context, name string, force bool) e
 
 	built := false
 	if !exists {
+		if err := m.runStartHooks(name, session); err != nil {
+			return err
+		}
 		if err := m.builder.BuildSession(ctx, name, session); err != nil {
 			// Best-effort cleanup of the partial session.
 			if killErr := m.tx.KillSession(name); killErr != nil {
@@ -153,6 +200,9 @@ func (m *Manager) Create(ctx context.Context, name string, force bool) error {
 		}
 	}
 
+	if err := m.runStartHooks(name, session); err != nil {
+		return err
+	}
 	if err := m.builder.BuildSession(ctx, name, session); err != nil {
 		if killErr := m.tx.KillSession(name); killErr != nil {
 			m.log.Warn("cleanup of partial session failed", "session", name, "error", killErr)
@@ -162,7 +212,8 @@ func (m *Manager) Create(ctx context.Context, name string, force bool) error {
 	return nil
 }
 
-// Kill destroys a session.
+// Kill destroys a session. For config-managed sessions, on_stop hooks run
+// afterward (best-effort).
 func (m *Manager) Kill(name string) error {
 	exists, err := m.tx.SessionExists(name)
 	if err != nil {
@@ -173,6 +224,9 @@ func (m *Manager) Kill(name string) error {
 	}
 	if err := m.tx.KillSession(name); err != nil {
 		return fmt.Errorf("kill session: %w", err)
+	}
+	if sess, ok := m.config.GetSession(name); ok {
+		m.runStopHooks(name, sess)
 	}
 	return nil
 }
@@ -255,6 +309,9 @@ func (m *Manager) CreateAdHoc(ctx context.Context, name string, session *config.
 		}
 	}
 
+	if err := m.runStartHooks(name, session); err != nil {
+		return err
+	}
 	if err := m.builder.BuildSession(ctx, name, session); err != nil {
 		if killErr := m.tx.KillSession(name); killErr != nil {
 			m.log.Warn("cleanup of partial session failed", "session", name, "error", killErr)

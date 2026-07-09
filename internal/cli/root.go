@@ -138,7 +138,8 @@ func runSession(cmd *cobra.Command, args []string) error {
 	}
 
 	if opts.print {
-		mgr := session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger)
+		mgr := session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger,
+			session.WithHookRunner(printHookRunner(cmd)))
 		return mgr.CreateOrAttach(cmd.Context(), opts.attach, opts.force)
 	}
 	mgr, err := session.NewManager(cfg, logger)
@@ -146,6 +147,15 @@ func runSession(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return mgr.CreateOrAttach(cmd.Context(), opts.attach, opts.force)
+}
+
+// printHookRunner returns a hook runner for --print mode: hooks are shown
+// as the sh invocations they would be, not executed.
+func printHookRunner(cmd *cobra.Command) func(string) error {
+	return func(hook string) error {
+		fmt.Fprintf(cmd.OutOrStdout(), "sh -c %q\n", hook)
+		return nil
+	}
 }
 
 // loadConfig is the shared loader used by subcommands. When ./.mox.yml is

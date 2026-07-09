@@ -42,6 +42,20 @@ type Session struct {
 	// that exits cleanly is never retried.
 	Retry int `yaml:"retry,omitempty"`
 
+	// OnStart commands run locally (sh -c, in order) before the session is
+	// built; a non-zero exit aborts creation. Use for prerequisites like
+	// bringing up a VPN. They do not run when attaching to an already
+	// running session.
+	OnStart []string `yaml:"on_start,omitempty"`
+
+	// OnStop commands run locally after 'mox kill' destroys this session.
+	// Failures are logged but never block the kill.
+	OnStop []string `yaml:"on_stop,omitempty"`
+
+	// Pre commands are prepended to every pane's command list in this
+	// session — handy for environment setup that every pane needs.
+	Pre []string `yaml:"pre,omitempty"`
+
 	// Simple mode (mutually exclusive with Windows).
 	Hosts    []string `yaml:"hosts,omitempty"`
 	Commands []string `yaml:"commands,omitempty"` // sent to each host pane after connect
@@ -74,6 +88,10 @@ type Window struct {
 
 	// Retry overrides session-level retry for this window (nil = inherit).
 	Retry *int `yaml:"retry,omitempty"`
+
+	// Pre commands are prepended to every pane's command list in this
+	// window, after any session-level pre commands.
+	Pre []string `yaml:"pre,omitempty"`
 
 	// Simple mode (mutually exclusive with Panes/Layout).
 	Hosts    []string `yaml:"hosts,omitempty"`
