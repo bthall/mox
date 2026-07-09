@@ -9,6 +9,7 @@ import (
 
 	"github.com/bthall/mox/internal/config"
 	"github.com/bthall/mox/internal/session"
+	"github.com/bthall/mox/internal/tmux"
 	"github.com/bthall/mox/pkg/version"
 	"github.com/spf13/cobra"
 )
@@ -22,6 +23,7 @@ type globalOpts struct {
 	verbose    bool
 	quiet      bool
 	attach     string // -a / --attach: session to attach to
+	print      bool   // --print: emit tmux commands instead of executing
 }
 
 type ctxKey int
@@ -84,6 +86,7 @@ and panes.`,
 	}
 
 	rootCmd.Flags().StringVarP(&opts.attach, "attach", "a", "", "attach to the named configured session")
+	rootCmd.Flags().BoolVar(&opts.print, "print", false, "print the tmux commands instead of executing them")
 	rootCmd.PersistentFlags().StringVarP(&opts.configPath, "config", "c", "", "config file path (default: $XDG_CONFIG_HOME/mox/config.yml)")
 	rootCmd.PersistentFlags().BoolVar(&opts.force, "force", false, "force recreate existing sessions")
 	rootCmd.PersistentFlags().BoolVarP(&opts.verbose, "verbose", "v", false, "verbose (debug) logging to stderr")
@@ -134,6 +137,10 @@ func runSession(cmd *cobra.Command, args []string) error {
 		cfg = &config.Config{Sessions: map[string]*config.Session{}}
 	}
 
+	if opts.print {
+		mgr := session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger)
+		return mgr.CreateOrAttach(cmd.Context(), opts.attach, opts.force)
+	}
 	mgr, err := session.NewManager(cfg, logger)
 	if err != nil {
 		return err

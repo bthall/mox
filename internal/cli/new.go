@@ -30,6 +30,7 @@ type newOpts struct {
 	detach    bool
 	force     bool
 	window    bool
+	print     bool
 }
 
 func newNewCommand() *cobra.Command {
@@ -92,6 +93,7 @@ an existing configured session and override its hosts.`,
 	cmd.Flags().BoolVarP(&o.force, "force", "F", false, "recreate if a session with the same name exists")
 	cmd.Flags().BoolVarP(&o.window, "window", "w", false, "open as a new window in the current tmux session (requires $TMUX)")
 	cmd.Flags().StringArrayVarP(&o.exclude, "exclude", "x", nil, "drop HOST (or @cluster) from the expanded host list; repeatable")
+	cmd.Flags().BoolVar(&o.print, "print", false, "print the tmux commands instead of executing them")
 
 	cmd.ValidArgsFunction = completeHostsOrClusters
 	_ = cmd.RegisterFlagCompletionFunc("arrange", completeArrange)
@@ -150,9 +152,15 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 	}
 
 	cfg := &config.Config{Sessions: map[string]*config.Session{name: sess}}
-	mgr, err := session.NewManager(cfg, logger)
-	if err != nil {
-		return err
+	var mgr *session.Manager
+	if o.print {
+		mgr = session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger)
+	} else {
+		var err error
+		mgr, err = session.NewManager(cfg, logger)
+		if err != nil {
+			return err
+		}
 	}
 
 	if o.window {
