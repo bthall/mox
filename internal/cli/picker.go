@@ -48,6 +48,17 @@ func runPicker(cmd *cobra.Command) error {
 		return nil
 	}
 
+	// Interactive fuzzy picker when the terminal supports it; numbered
+	// prompt as the fallback.
+	if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
+		if name, ran := runFuzzyPicker(candidates, cfg.Sessions); ran {
+			if name == "" {
+				return nil // canceled
+			}
+			return mgr.CreateOrAttach(cmd.Context(), name, false)
+		}
+	}
+
 	renderPicker(out, candidates, time.Now())
 	fmt.Fprint(out, "\nAttach to (number or name, empty cancels): ")
 

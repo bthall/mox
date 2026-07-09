@@ -29,10 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Bare `mox` on a terminal now opens a session picker: every running,
-  configured, and recent session in one numbered list — type a number or a
-  name (unique prefixes work) to create-or-attach. Piped/scripted invocations
-  still print help.
+- Bare `mox` on a terminal now opens an interactive two-pane session picker:
+  a fuzzy-filterable list of every running, configured, and recent session
+  on the left, and a live preview of the highlighted session (state, window
+  count, hosts, connect template, sync/arrange/root) on the right. Status
+  dots are colored by state, everything draws with the terminal's own
+  palette, and narrow terminals collapse to the list alone. Enter attaches
+  (building configured sessions as needed), Esc backs out of the filter and
+  then the picker. Terminals that can't host it get a numbered prompt, and
+  piped/scripted invocations still print help.
 - `mox last` — attach to the session you used before this one (the session
   equivalent of `cd -`); bindable inside tmux via `run-shell "mox last"`.
 - `-x/--exclude` on `mox new` — drop hosts (or whole `@clusters`) from the

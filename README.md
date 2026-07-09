@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/bthall/mox/actions/workflows/ci.yml"><img src="https://github.com/bthall/mox/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/bthall/mox/releases/latest"><img src="https://img.shields.io/github/v/release/bthall/mox" alt="Latest release"></a>
-  <a href="https://goreportcard.com/report/github.com/bthall/mox"><img src="https://goreportcard.com/badge/github.com/bthall/mox" alt="Go Report Card"></a>
+  <a href="https://pkg.go.dev/github.com/bthall/mox"><img src="https://pkg.go.dev/badge/github.com/bthall/mox.svg" alt="Go Reference"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/bthall/mox" alt="License"></a>
 </p>
 
@@ -26,7 +26,7 @@ configuration files.
 - **Configurable connect** — defaults to `ssh {{host}}`; override per session/window; `ssh_user:` shortcut
 - **Reusable named layouts** — define once, reference from any window
 - **Shell completion** — bash, zsh, fish; completes sessions, clusters, layouts, and running tmux sessions
-- **Session picker** — bare `mox` lists every running, configured, and recent session; pick by number or name
+- **Session picker** — bare `mox` opens a fuzzy-filterable list of every running, configured, and recent session
 - **Recent sessions** — `mox list` and `mox recent` remember what you created or attached to; `mox last` bounces back to the previous one
 - **Host exclusion** — `mox new @webfarm -x web3` broadcasts to a cluster minus the hosts you name
 - **Edit with a net** — `mox edit` opens the config in `$EDITOR` and validates it on save
