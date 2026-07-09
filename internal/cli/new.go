@@ -332,7 +332,8 @@ func hasClusterRef(args []string) bool {
 // the config file is missing or invalid. Used for completion/expansion
 // where the absence of a config should not break the command.
 func tryLoadConfig(path string) (*config.Config, error) {
-	cfg, err := loadConfig(path)
+	resolved, _ := config.EffectivePath(path)
+	cfg, err := loadConfigAt(resolved)
 	if err != nil {
 		return nil, err
 	}

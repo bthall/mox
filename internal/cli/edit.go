@@ -30,11 +30,10 @@ and run 'mox edit' or 'mox validate' again.`,
 func runEdit(cmd *cobra.Command, args []string) error {
 	opts := optsFromContext(cmd.Context())
 
-	path := opts.configPath
-	if path == "" {
-		path = config.DefaultConfigPath()
+	path, local := config.EffectivePath(opts.configPath)
+	if local {
+		fmt.Fprintf(os.Stderr, "mox: using ./%s\n", config.LocalConfigName)
 	}
-	path = config.ResolvePath(path)
 	if !config.Exists(path) {
 		return fmt.Errorf("config file not found at %s\n\nRun 'mox init' to create a default configuration", path)
 	}

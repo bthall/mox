@@ -141,11 +141,20 @@ func runSession(cmd *cobra.Command, args []string) error {
 	return mgr.CreateOrAttach(cmd.Context(), opts.attach, opts.force)
 }
 
-// loadConfig is the shared loader used by subcommands.
+// loadConfig is the shared loader used by subcommands. When ./.mox.yml is
+// in play it says so on stderr, so there is never a mystery about which
+// config file is live.
 func loadConfig(path string) (*config.Config, error) {
-	if path == "" {
-		path = config.DefaultConfigPath()
+	resolved, local := config.EffectivePath(path)
+	if local {
+		fmt.Fprintf(os.Stderr, "mox: using ./%s\n", config.LocalConfigName)
 	}
+	return loadConfigAt(resolved)
+}
+
+// loadConfigAt loads a fully resolved path with no notice — shared by the
+// noisy and silent loaders.
+func loadConfigAt(path string) (*config.Config, error) {
 	if !config.Exists(path) {
 		return nil, fmt.Errorf("config file not found at %s\n\nRun 'mox init' to create a default configuration", path)
 	}

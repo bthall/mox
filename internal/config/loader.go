@@ -44,6 +44,25 @@ func ResolvePath(path string) string {
 	return path
 }
 
+// LocalConfigName is the per-directory config filename. When it exists in
+// the working directory and no explicit --config was given, it wins over the
+// global config — project session definitions can live in the project.
+const LocalConfigName = ".mox.yml"
+
+// EffectivePath resolves which config file a command should use: an explicit
+// path always wins, then ./.mox.yml when present in the working directory,
+// then the global default. local reports whether the per-directory file was
+// chosen, so callers can surface which config is live.
+func EffectivePath(explicit string) (path string, local bool) {
+	if explicit != "" {
+		return ResolvePath(explicit), false
+	}
+	if fi, err := os.Stat(LocalConfigName); err == nil && !fi.IsDir() {
+		return LocalConfigName, true
+	}
+	return DefaultConfigPath(), false
+}
+
 // Load loads, parses, and validates the configuration at the given path.
 // An empty path means "use DefaultConfigPath()". The path is tilde-expanded.
 func Load(path string) (*Config, error) {

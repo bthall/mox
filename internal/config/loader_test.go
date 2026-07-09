@@ -111,3 +111,41 @@ func TestExists(t *testing.T) {
 		t.Errorf("Exists(nonexistent) = true, want false")
 	}
 }
+
+func TestEffectivePath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	// No local file, no explicit path: global default wins.
+	got, local := EffectivePath("")
+	if local || got != DefaultConfigPath() {
+		t.Errorf("EffectivePath() = (%q, %v), want global default", got, local)
+	}
+
+	// Local .mox.yml present: it wins when no explicit path is given.
+	if err := os.WriteFile(LocalConfigName, []byte("sessions: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, local = EffectivePath("")
+	if !local || got != LocalConfigName {
+		t.Errorf("EffectivePath() = (%q, %v), want local file", got, local)
+	}
+
+	// Explicit path always wins over the local file.
+	got, local = EffectivePath("/some/where/config.yml")
+	if local || got != "/some/where/config.yml" {
+		t.Errorf("EffectivePath(explicit) = (%q, %v), want explicit", got, local)
+	}
+}
+
+func TestEffectivePath_LocalDirIgnored(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// A directory named .mox.yml must not be picked up.
+	if err := os.Mkdir(LocalConfigName, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, local := EffectivePath(""); local {
+		t.Error("a directory named .mox.yml should not count as a local config")
+	}
+}
