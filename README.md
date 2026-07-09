@@ -64,8 +64,8 @@ Archives for linux/macOS × amd64/arm64 are attached to each
 `checksums.txt`:
 
 ```bash
-curl -LO https://github.com/bthall/mox/releases/latest/download/mox_0.1.0_linux_amd64.tar.gz
-tar xzf mox_0.1.0_linux_amd64.tar.gz && install -Dm755 mox ~/.local/bin/mox
+curl -LO https://github.com/bthall/mox/releases/latest/download/mox_0.2.0_linux_amd64.tar.gz
+tar xzf mox_0.2.0_linux_amd64.tar.gz && install -Dm755 mox ~/.local/bin/mox
 ```
 
 ### Arch Linux
