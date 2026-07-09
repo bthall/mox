@@ -30,6 +30,9 @@ type newOpts struct {
 	detach    bool
 	force     bool
 	window    bool
+	print     bool
+	hold      bool
+	retry     int
 }
 
 func newNewCommand() *cobra.Command {
@@ -40,6 +43,7 @@ func newNewCommand() *cobra.Command {
 		sync:    true,
 		arrange: "tiled",
 		sudo:    true,
+		hold:    true,
 	}
 	cmd := &cobra.Command{
 		Use:     "new [hosts...]",
@@ -92,6 +96,9 @@ an existing configured session and override its hosts.`,
 	cmd.Flags().BoolVarP(&o.force, "force", "F", false, "recreate if a session with the same name exists")
 	cmd.Flags().BoolVarP(&o.window, "window", "w", false, "open as a new window in the current tmux session (requires $TMUX)")
 	cmd.Flags().StringArrayVarP(&o.exclude, "exclude", "x", nil, "drop HOST (or @cluster) from the expanded host list; repeatable")
+	cmd.Flags().BoolVar(&o.print, "print", false, "print the tmux commands instead of executing them")
+	cmd.Flags().BoolVar(&o.hold, "hold", o.hold, "ended connections prompt before the pane closes (never drop to a local shell)")
+	cmd.Flags().IntVar(&o.retry, "retry", 0, "re-attempt a failed connection N extra times, 3s apart")
 
 	cmd.ValidArgsFunction = completeHostsOrClusters
 	_ = cmd.RegisterFlagCompletionFunc("arrange", completeArrange)
@@ -150,9 +157,16 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 	}
 
 	cfg := &config.Config{Sessions: map[string]*config.Session{name: sess}}
-	mgr, err := session.NewManager(cfg, logger)
-	if err != nil {
-		return err
+	var mgr *session.Manager
+	if o.print {
+		mgr = session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger,
+			session.WithHookRunner(printHookRunner(cmd)))
+	} else {
+		var err error
+		mgr, err = session.NewManager(cfg, logger)
+		if err != nil {
+			return err
+		}
 	}
 
 	if o.window {
@@ -250,6 +264,13 @@ func buildAdHocSession(o *newOpts, args []string, configPath string) (*config.Se
 	if o.sudo {
 		base.Commands = append(base.Commands, "sudo -i")
 	}
+	if !o.hold {
+		f := false
+		base.Hold = &f
+	}
+	if o.retry > 0 {
+		base.Retry = o.retry
+	}
 
 	// Zero hosts + zero windows is allowed — it becomes a single local
 	// pane in a new session (with --sudo / commands optional).
@@ -332,7 +353,8 @@ func hasClusterRef(args []string) bool {
 // the config file is missing or invalid. Used for completion/expansion
 // where the absence of a config should not break the command.
 func tryLoadConfig(path string) (*config.Config, error) {
-	cfg, err := loadConfig(path)
+	resolved, _ := config.EffectivePath(path)
+	cfg, err := loadConfigAt(resolved)
 	if err != nil {
 		return nil, err
 	}

@@ -5,14 +5,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 )
 
-// Client wraps tmux command execution.
+// Client wraps tmux command execution. In dry-run mode it prints each tmux
+// invocation instead of executing it, fabricating just enough output
+// (window/pane ids, existence checks) for session building to proceed.
 type Client struct {
 	executable string
+
+	dryOut   io.Writer // non-nil enables dry-run
+	nextWin  int
+	nextPane int
 }
 
 // NewClient locates tmux on PATH and returns a Client.
@@ -22,6 +29,63 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("tmux not found in PATH: %w", err)
 	}
 	return &Client{executable: path}, nil
+}
+
+// NewDryRun returns a Client that prints every tmux command to out instead
+// of executing it. tmux does not need to be installed.
+func NewDryRun(out io.Writer) *Client {
+	return &Client{executable: "tmux", dryOut: out}
+}
+
+// dryRun prints the command and fabricates the minimal responses the
+// builder needs to keep going: fresh window/pane ids for the -P prints,
+// "does not exist" for session checks, and empty output otherwise.
+func (c *Client) dryRun(args []string) (string, error) {
+	fmt.Fprintln(c.dryOut, "tmux "+shellJoin(args))
+	switch args[0] {
+	case "has-session":
+		return "", &Error{ExitCode: 1, Stderr: "can't find session (dry-run)"}
+	case "list-sessions":
+		return "", &Error{ExitCode: 1, Stderr: "no server running (dry-run)"}
+	case "new-window", "split-window":
+		for _, a := range args {
+			if a == "-P" {
+				if args[0] == "new-window" {
+					c.nextWin++
+					return fmt.Sprintf("@%d", c.nextWin), nil
+				}
+				c.nextPane++
+				return fmt.Sprintf("%%%d", c.nextPane), nil
+			}
+		}
+		return "", nil
+	case "new-session":
+		c.nextWin++
+		return "", nil
+	case "list-windows":
+		return fmt.Sprintf("@%d", max(c.nextWin, 1)), nil
+	case "list-panes":
+		c.nextPane++
+		return fmt.Sprintf("%%%d", c.nextPane), nil
+	case "show-options":
+		return "0", nil
+	default:
+		return "", nil
+	}
+}
+
+// shellJoin renders an argv as a copy-pasteable shell line, quoting any
+// argument that needs it.
+func shellJoin(args []string) string {
+	parts := make([]string, len(args))
+	for i, a := range args {
+		if a == "" || strings.ContainsAny(a, " \t\"'$&|;<>(){}*?#~") {
+			parts[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+		} else {
+			parts[i] = a
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // Error is returned by Run when tmux exits non-zero.
@@ -62,6 +126,9 @@ func (c *Client) Run(args ...string) (string, error) {
 
 // RunContext is Run with cancellation support.
 func (c *Client) RunContext(ctx context.Context, args ...string) (string, error) {
+	if c.dryOut != nil {
+		return c.dryRun(args)
+	}
 	cmd := exec.CommandContext(ctx, c.executable, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -84,6 +151,10 @@ func (c *Client) RunContext(ctx context.Context, args ...string) (string, error)
 // RunInteractive executes a tmux command with stdio attached. Used for
 // attach-session and switch-client which take over the terminal.
 func (c *Client) RunInteractive(args ...string) error {
+	if c.dryOut != nil {
+		_, err := c.dryRun(args)
+		return err
+	}
 	cmd := exec.Command(c.executable, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Host panes no longer drop to a local shell when their connection ends.
+  By default the pane prints a notice and waits for Enter before closing —
+  in a `sync` window the old behavior meant broadcast keystrokes (including
+  sudo passwords) could silently execute on the local machine. Restore it
+  per session/window with `hold: false` (or `--hold=false` on `mox new`).
 - `mox list` is now a single aligned table (origin, state, window count,
   attached marker, last activity, and host summary) instead of separate
   Configured/Unmanaged sections, and degrades cleanly under `NO_COLOR` and
@@ -29,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Per-directory config: when `./.mox.yml` exists and no `--config` is given,
+  it wins over the global config for every command (with a stderr notice).
+  Project session definitions can live in the repo they belong to.
+- `--print` on `mox new` and `mox -a` — print the exact tmux commands a
+  build would run, one copy-pasteable line each, without executing anything.
+- `retry: N` (session/window key, `--retry` flag) — re-attempt a failed
+  connection up to N extra times, 3s apart; clean exits never retry.
+- Lifecycle hooks: `on_start` commands run locally before a session is
+  built (a failure aborts creation), `on_stop` runs after `mox kill`
+  destroys a managed session, and `pre` commands (session- and
+  window-level) are prepended to every pane's command list.
 - Bare `mox` on a terminal now opens an interactive two-pane session picker:
   a fuzzy-filterable list of every running, configured, and recent session
   on the left, and a live preview of the highlighted session (state, window

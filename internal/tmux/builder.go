@@ -37,6 +37,8 @@ type hostPaneOpts struct {
 	connect string
 	arrange string
 	sync    bool
+	hold    bool
+	retry   int
 }
 
 // BuildSession creates a tmux session from configuration. The context is
@@ -58,6 +60,17 @@ func (b *Builder) BuildSession(ctx context.Context, name string, session *config
 	}
 }
 
+// prependCmds returns pre followed by cmds in a fresh slice; nil when both
+// are empty.
+func prependCmds(pre, cmds []string) []string {
+	if len(pre) == 0 {
+		return cmds
+	}
+	out := make([]string, 0, len(pre)+len(cmds))
+	out = append(out, pre...)
+	return append(out, cmds...)
+}
+
 // buildLocalSession creates a session with a single local pane — no ssh,
 // no broadcast — and optionally runs the session.Commands in that pane.
 // Used when the user wants a quick named tmux session without any host list.
@@ -68,7 +81,8 @@ func (b *Builder) buildLocalSession(ctx context.Context, name string, session *c
 	if err := b.tx.CreateSession(name, root, "main"); err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
-	if len(session.Commands) == 0 {
+	cmds := prependCmds(session.Pre, session.Commands)
+	if len(cmds) == 0 {
 		return nil
 	}
 	winID, err := b.tx.FirstWindowID(name)
@@ -79,7 +93,7 @@ func (b *Builder) buildLocalSession(ctx context.Context, name string, session *c
 	if err != nil {
 		return fmt.Errorf("locate first pane: %w", err)
 	}
-	if err := b.tx.SendKeys(paneID, session.Commands); err != nil {
+	if err := b.tx.SendKeys(paneID, cmds); err != nil {
 		return fmt.Errorf("send commands: %w", err)
 	}
 	return nil
@@ -104,12 +118,12 @@ func (b *Builder) BuildAdHocWindow(ctx context.Context, parentSession, windowNam
 
 	if !session.IsSimple() {
 		// Local single-pane window. Just send commands if any.
-		if len(session.Commands) > 0 {
+		if cmds := prependCmds(session.Pre, session.Commands); len(cmds) > 0 {
 			paneID, err := b.tx.FirstPaneID(winID)
 			if err != nil {
 				return winID, fmt.Errorf("locate first pane: %w", err)
 			}
-			if err := b.tx.SendKeys(paneID, session.Commands); err != nil {
+			if err := b.tx.SendKeys(paneID, cmds); err != nil {
 				return winID, fmt.Errorf("send commands: %w", err)
 			}
 		}
@@ -117,7 +131,7 @@ func (b *Builder) BuildAdHocWindow(ctx context.Context, parentSession, windowNam
 	}
 
 	opts := hostPaneOptsFor(session, nil)
-	if err := b.buildHostPanes(ctx, winID, session.Hosts, opts, session.Commands, root); err != nil {
+	if err := b.buildHostPanes(ctx, winID, session.Hosts, opts, prependCmds(session.Pre, session.Commands), root); err != nil {
 		return winID, err
 	}
 	b.applyWindowPostBuild(winID, opts)
@@ -139,7 +153,7 @@ func (b *Builder) buildSimpleSession(ctx context.Context, name string, session *
 	}
 
 	opts := hostPaneOptsFor(session, nil)
-	if err := b.buildHostPanes(ctx, winID, session.Hosts, opts, session.Commands, root); err != nil {
+	if err := b.buildHostPanes(ctx, winID, session.Hosts, opts, prependCmds(session.Pre, session.Commands), root); err != nil {
 		return err
 	}
 	b.applyWindowPostBuild(winID, opts)
@@ -194,9 +208,10 @@ func (b *Builder) buildComplexSession(ctx context.Context, name string, session 
 }
 
 func (b *Builder) buildWindow(ctx context.Context, winID string, session *config.Session, window *config.Window, root string) error {
+	pre := prependCmds(session.Pre, window.Pre)
 	if window.IsSimple() {
 		opts := hostPaneOptsFor(session, window)
-		if err := b.buildHostPanes(ctx, winID, window.Hosts, opts, window.Commands, root); err != nil {
+		if err := b.buildHostPanes(ctx, winID, window.Hosts, opts, prependCmds(pre, window.Commands), root); err != nil {
 			return err
 		}
 		b.applyWindowPostBuild(winID, opts)
@@ -213,7 +228,7 @@ func (b *Builder) buildWindow(ctx context.Context, winID string, session *config
 	} else {
 		panes = window.Panes
 	}
-	return b.buildPanes(ctx, winID, panes, root)
+	return b.buildPanes(ctx, winID, panes, pre, root)
 }
 
 // buildHostPanes splits a window into one pane per host, runs the connect
@@ -262,7 +277,7 @@ func (b *Builder) buildHostPanes(ctx context.Context, winID string, hosts []stri
 			b.log.Warn("set pane title failed", "host", host, "error", err)
 		}
 
-		connectCmd := strings.ReplaceAll(opts.connect, "{{host}}", host)
+		connectCmd := wrapConnect(strings.ReplaceAll(opts.connect, "{{host}}", host), host, opts.hold, opts.retry)
 		if err := b.tx.SendKeys(paneID, []string{connectCmd}); err != nil {
 			return fmt.Errorf("connect to host %q: %w", host, err)
 		}
@@ -274,6 +289,31 @@ func (b *Builder) buildHostPanes(ctx context.Context, winID string, hosts []stri
 		}
 	}
 	return nil
+}
+
+// wrapConnect decorates the substituted connect command with retry and hold
+// behavior. With retry, a failing connection is re-attempted (a clean exit
+// never retries); with hold, an ended connection prints a notice and waits
+// for Enter before the pane closes — the pane never drops back to a local
+// shell, which in a sync window would silently receive broadcast keystrokes.
+// host is already validated against the safe-hostname pattern.
+func wrapConnect(connectCmd, host string, hold bool, retry int) string {
+	cmd := connectCmd
+	if retry > 0 {
+		attempts := make([]string, 0, retry+1)
+		for i := 1; i <= retry+1; i++ {
+			attempts = append(attempts, fmt.Sprintf("%d", i))
+		}
+		cmd = fmt.Sprintf(
+			"for _mox_try in %s; do %s && break; printf '[mox] %s: connection failed (attempt %%s)\\n' \"$_mox_try\"; sleep 3; done",
+			strings.Join(attempts, " "), connectCmd, host)
+	}
+	if hold {
+		cmd += fmt.Sprintf(
+			"; printf '\\n[mox] %s: connection ended. Press Enter to close this pane.\\n'; read -r _mox_ack; exit",
+			host)
+	}
+	return cmd
 }
 
 // applyWindowPostBuild applies arrange and sync to a window after its panes
@@ -291,7 +331,7 @@ func (b *Builder) applyWindowPostBuild(winID string, opts hostPaneOpts) {
 	}
 }
 
-func (b *Builder) buildPanes(ctx context.Context, winID string, panes []*config.Pane, root string) error {
+func (b *Builder) buildPanes(ctx context.Context, winID string, panes []*config.Pane, pre []string, root string) error {
 	if len(panes) == 0 {
 		return fmt.Errorf("no panes defined")
 	}
@@ -301,8 +341,8 @@ func (b *Builder) buildPanes(ctx context.Context, winID string, panes []*config.
 		return fmt.Errorf("locate first pane: %w", err)
 	}
 
-	if len(panes[0].Commands) > 0 {
-		if err := b.tx.SendKeys(firstPane, panes[0].Commands); err != nil {
+	if cmds := prependCmds(pre, panes[0].Commands); len(cmds) > 0 {
+		if err := b.tx.SendKeys(firstPane, cmds); err != nil {
 			return fmt.Errorf("send commands to root pane: %w", err)
 		}
 	}
@@ -323,8 +363,8 @@ func (b *Builder) buildPanes(ctx context.Context, winID string, panes []*config.
 		}
 		prevPane = paneID
 
-		if len(pane.Commands) > 0 {
-			if err := b.tx.SendKeys(paneID, pane.Commands); err != nil {
+		if cmds := prependCmds(pre, pane.Commands); len(cmds) > 0 {
+			if err := b.tx.SendKeys(paneID, cmds); err != nil {
 				return fmt.Errorf("send commands to pane %d: %w", i, err)
 			}
 		}
@@ -346,10 +386,22 @@ func hostPaneOptsFor(session *config.Session, window *config.Window) hostPaneOpt
 		wArrange = window.Arrange
 		wSync = window.Sync
 	}
+	hold := true
+	if window != nil && window.Hold != nil {
+		hold = *window.Hold
+	} else if session.Hold != nil {
+		hold = *session.Hold
+	}
+	retry := session.Retry
+	if window != nil && window.Retry != nil {
+		retry = *window.Retry
+	}
 	return hostPaneOpts{
 		connect: pickConnect(sConnect, sUser, wConnect, wUser),
 		arrange: pickString(wArrange, sArrange),
 		sync:    pickBool(wSync, sSync),
+		hold:    hold,
+		retry:   retry,
 	}
 }
 

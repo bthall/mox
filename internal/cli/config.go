@@ -27,11 +27,8 @@ func newConfigPathCommand() *cobra.Command {
 		Short: "Show config file path",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := optsFromContext(cmd.Context())
-			path := opts.configPath
-			if path == "" {
-				path = config.DefaultConfigPath()
-			}
-			fmt.Println(config.ResolvePath(path))
+			path, _ := config.EffectivePath(opts.configPath)
+			fmt.Println(path)
 			return nil
 		},
 	}
@@ -43,11 +40,7 @@ func newConfigViewCommand() *cobra.Command {
 		Short: "View current configuration (raw file contents)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := optsFromContext(cmd.Context())
-			path := opts.configPath
-			if path == "" {
-				path = config.DefaultConfigPath()
-			}
-			path = config.ResolvePath(path)
+			path, _ := config.EffectivePath(opts.configPath)
 			f, err := os.Open(path) //nolint:gosec // user-supplied path is intentional
 			if err != nil {
 				return fmt.Errorf("open config: %w", err)

@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 
+	"github.com/bthall/mox/internal/config"
+	"github.com/bthall/mox/internal/session"
 	"github.com/bthall/mox/internal/tmux"
 	"github.com/spf13/cobra"
 )
@@ -34,19 +36,21 @@ not just ones in the mox config.`,
 
 func runKill(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	client, err := tmux.NewClient()
+	opts := optsFromContext(cmd.Context())
+	logger := loggerFromContext(cmd.Context())
+
+	// Config is optional (unmanaged sessions can be killed too), but when
+	// present it supplies on_stop hooks for managed sessions.
+	cfg, _ := tryLoadConfig(opts.configPath)
+	if cfg == nil {
+		cfg = &config.Config{Sessions: map[string]*config.Session{}}
+	}
+	mgr, err := session.NewManager(cfg, logger)
 	if err != nil {
 		return err
 	}
-	exists, err := client.SessionExists(name)
-	if err != nil {
-		return fmt.Errorf("check session: %w", err)
-	}
-	if !exists {
-		return fmt.Errorf("session %q does not exist", name)
-	}
-	if err := client.KillSession(name); err != nil {
-		return fmt.Errorf("kill session: %w", err)
+	if err := mgr.Kill(name); err != nil {
+		return err
 	}
 	fmt.Printf("Session %q killed successfully.\n", name)
 	return nil

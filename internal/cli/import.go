@@ -91,11 +91,10 @@ func runImport(cmd *cobra.Command, args []string, o *importOpts) error {
 	}
 
 	gopts := optsFromContext(cmd.Context())
-	path := gopts.configPath
-	if path == "" {
-		path = config.DefaultConfigPath()
+	path, local := config.EffectivePath(gopts.configPath)
+	if local {
+		fmt.Fprintf(cmd.ErrOrStderr(), "mox: importing into ./%s\n", config.LocalConfigName)
 	}
-	path = config.ResolvePath(path)
 	if err := appendSessionToConfig(path, dst, imported, o.force); err != nil {
 		return err
 	}

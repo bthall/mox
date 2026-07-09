@@ -30,6 +30,10 @@ configuration files.
 - **Recent sessions** — `mox list` and `mox recent` remember what you created or attached to; `mox last` bounces back to the previous one
 - **Host exclusion** — `mox new @webfarm -x web3` broadcasts to a cluster minus the hosts you name
 - **Edit with a net** — `mox edit` opens the config in `$EDITOR` and validates it on save
+- **Project configs** — a `./.mox.yml` in the current directory overrides the global config
+- **Lifecycle hooks** — `on_start`/`on_stop` run locally around a session; `pre` seeds every pane
+- **Connection holding** — an ended connection prompts before its pane closes instead of dropping to a local shell; `retry:` re-attempts failures
+- **Dry-run** — `--print` shows the exact tmux commands without running them
 - **Strict validation** — typos in config keys error with line numbers
 - **Honest defaults** — single binary, no daemon; the only state is a small recents history
 
@@ -152,6 +156,23 @@ Anything else (editors, REPLs, scripts you typed) isn't recoverable from
 tmux's running state — add `commands:` entries afterward to make those
 panes fully reproducible.
 
+### Preview what mox will do
+
+`--print` emits the tmux commands a build would run, one line each,
+without touching your tmux server:
+
+```bash
+mox new @api-cluster --print        # inspect the full build
+mox -a dev --print              # same for a configured session
+```
+
+### Project-local config
+
+Drop a `.mox.yml` in a project directory and every mox command run from
+there uses it instead of the global config (a stderr notice says so).
+An explicit `--config` always wins. Great for keeping a project's session
+layout versioned with its code.
+
 ### Migrate from clusterssh
 
 If you already maintain `~/.clusterssh/clusters`, you don't have to
@@ -245,6 +266,46 @@ sessions:
 `arrange:` accepts any of tmux's built-in layouts: `tiled`, `even-horizontal`,
 `even-vertical`, `main-horizontal`, `main-vertical`. Both `sync:` and
 `arrange:` work at the session and window level (window overrides session).
+
+### Lifecycle hooks and pre commands
+
+`on_start` runs locally (in order) before the session is built — a failing
+command aborts creation. `on_stop` runs after `mox kill` destroys the
+session. `pre` commands are prepended to every pane's command list; a
+window-level `pre` runs after the session-level one.
+
+```yaml
+sessions:
+  staging:
+    on_start:
+      - vpn-up staging          # non-zero exit aborts creation
+    on_stop:
+      - vpn-down staging        # best-effort, never blocks the kill
+    pre:
+      - export DEPLOY_ENV=staging
+    hosts: [app1, app2]
+```
+
+### Connection holding and retry
+
+When a host pane's connection ends — failure or clean exit — the pane
+prints a notice and waits for Enter before closing, so a `sync` window can
+never broadcast keystrokes into a local shell by accident. `hold: false`
+restores the old drop-to-shell behavior; `retry: N` re-attempts failed
+connections (3s apart, clean exits never retry):
+
+```yaml
+sessions:
+  flaky-lab:
+    hosts: [lab1, lab2]
+    retry: 3                    # 4 attempts total per host
+  quick-look:
+    hosts: [box1]
+    hold: false                 # ended connection drops to a local shell
+```
+
+Both keys work at the window level too, and `mox new` accepts them as
+`--hold=false` / `--retry N`.
 
 ### Multiple windows
 

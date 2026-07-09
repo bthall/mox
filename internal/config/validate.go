@@ -88,6 +88,9 @@ func (s *Session) Validate(name string) error {
 	if err := validateArrange(s.Arrange); err != nil {
 		return err
 	}
+	if err := validateRetry(s.Retry); err != nil {
+		return err
+	}
 
 	hasHosts := len(s.Hosts) > 0
 	hasWindows := len(s.Windows) > 0
@@ -121,6 +124,15 @@ func (s *Session) Validate(name string) error {
 	return nil
 }
 
+// validateRetry bounds the connect retry count: negative makes no sense and
+// large values just hide a host that is actually down.
+func validateRetry(n int) error {
+	if n < 0 || n > 10 {
+		return fmt.Errorf("retry must be between 0 and 10, got %d", n)
+	}
+	return nil
+}
+
 // Validate validates a window configuration.
 func (w *Window) Validate() error {
 	if w.Name == "" {
@@ -135,6 +147,11 @@ func (w *Window) Validate() error {
 	}
 	if err := validateArrange(w.Arrange); err != nil {
 		return err
+	}
+	if w.Retry != nil {
+		if err := validateRetry(*w.Retry); err != nil {
+			return err
+		}
 	}
 
 	hasHosts := len(w.Hosts) > 0
