@@ -10,10 +10,12 @@ Session lifecycle:
   mox recent | r        sessions you recently created or attached to
   mox last              attach to the session you used before this one
   mox kill <session>    destroy a running session
-  mox import <session>  capture a running tmux session into the config
+  mox import [session]  capture a running tmux session into the config
+                        (no argument: the session you're inside)
 
 Configuration:
   mox init              scaffold a default config
+  mox add [name]        interactive wizard: build a session, save it to config
   mox edit              open the config in $EDITOR, validate on exit
   mox validate          check config syntax
   mox config path       print resolved config path
@@ -58,6 +60,26 @@ hosts on the same line, and drop hosts back out with `-x/--exclude`:
 ```bash
 mox new @webfarm -x web3        # the cluster minus a host that's mid-deploy
 ```
+
+## Getting sessions into the config
+
+Three routes, by decreasing interactivity:
+
+1. **`mox add`** — a short wizard: name, hosts (with live `@cluster`
+   expansion), ssh user, sync, arrangement, directory, commands, then a
+   YAML preview with *save* or *save + start*. Simple-mode sessions only.
+2. **`mox new ... --save`** — you already expressed the session in flags;
+   `--save` persists that definition to the config (requires `-n`) and
+   creates the session as usual. Refuses to overwrite an existing entry.
+3. **`mox import [session]`** — capture a *running* session: window/pane
+   structure with real split directions and sizes, working directories,
+   and SSH connections recovered from the process table. Run it with no
+   argument from inside tmux to capture the session you're in.
+
+The build-by-doing loop for custom layouts: `mox new`, split and arrange
+panes by hand until the window looks right, then `mox import` from inside
+it. A layout that can't be expressed as mox's sequential splits falls back
+to a plain stack with a notice on stderr.
 
 ## Dry-run (`--print`)
 
