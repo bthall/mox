@@ -1,0 +1,289 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://raw.githubusercontent.com/bthall/mox/main/schema/mox.schema.json",
+    "title": "mox configuration",
+    "description": "Declarative tmux session definitions for mox. See https://github.com/bthall/mox/blob/main/docs/configuration.md",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["sessions"],
+    "properties": {
+        "layouts": {
+            "type": "object",
+            "description": "Reusable named pane configurations, referenced from windows via 'layout:'.",
+            "propertyNames": {
+                "pattern": "^[^:.$\\s]+$"
+            },
+            "additionalProperties": {
+                "$ref": "#/definitions/layout"
+            }
+        },
+        "sessions": {
+            "type": "object",
+            "description": "Session definitions. Keys are session names (no ':', '.', '$', or whitespace — special in tmux target syntax).",
+            "minProperties": 1,
+            "propertyNames": {
+                "pattern": "^[^:.$\\s]+$"
+            },
+            "additionalProperties": {
+                "$ref": "#/definitions/session"
+            }
+        }
+    },
+    "definitions": {
+        "hostname": {
+            "type": "string",
+            "description": "Hostname safe to interpolate into the default 'ssh {{host}}' template. For exotic hostnames, override 'connect:' instead.",
+            "pattern": "^[A-Za-z0-9._%@-]+$"
+        },
+        "commandList": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "connect": {
+            "type": "string",
+            "description": "Template used to connect to each host; '{{host}}' is substituted. Defaults to 'ssh {{host}}'. Mutually exclusive with 'ssh_user'."
+        },
+        "sshUser": {
+            "type": "string",
+            "description": "Prefixes each host with 'USER@' in the default ssh template. Ignored (and rejected) when 'connect:' is set.",
+            "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "arrange": {
+            "type": "string",
+            "description": "Built-in tmux layout applied to each simple-mode window after panes are created.",
+            "enum": ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"]
+        },
+        "hold": {
+            "type": "boolean",
+            "description": "When true (the default), a pane whose connection ends shows a notice and waits for Enter instead of dropping to a local shell."
+        },
+        "retry": {
+            "type": "integer",
+            "description": "Re-run a failed connect command up to N extra times (3s apart). 0 disables retrying. Clean exits are never retried.",
+            "minimum": 0,
+            "maximum": 10
+        },
+        "session": {
+            "type": "object",
+            "additionalProperties": false,
+            "not": {
+                "anyOf": [
+                    {
+                        "required": ["hosts", "windows"]
+                    },
+                    {
+                        "required": ["commands", "windows"]
+                    },
+                    {
+                        "required": ["connect", "ssh_user"]
+                    }
+                ]
+            },
+            "properties": {
+                "root": {
+                    "type": "string",
+                    "description": "Working directory for the session ('~' is expanded)."
+                },
+                "connect": {
+                    "$ref": "#/definitions/connect"
+                },
+                "ssh_user": {
+                    "$ref": "#/definitions/sshUser"
+                },
+                "sync": {
+                    "type": "boolean",
+                    "description": "Enable synchronize-panes on each simple-mode window — typed input is broadcast to every pane. Defaults to false."
+                },
+                "arrange": {
+                    "$ref": "#/definitions/arrange"
+                },
+                "hold": {
+                    "$ref": "#/definitions/hold"
+                },
+                "retry": {
+                    "$ref": "#/definitions/retry"
+                },
+                "on_start": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands run locally (in order) before the session is built; a non-zero exit aborts creation."
+                },
+                "on_stop": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands run locally after 'mox kill' destroys this session. Best-effort; never blocks the kill."
+                },
+                "pre": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands prepended to every pane's command list in this session."
+                },
+                "hosts": {
+                    "type": "array",
+                    "description": "Simple mode: one window with a pane per host. Mutually exclusive with 'windows'.",
+                    "items": {
+                        "$ref": "#/definitions/hostname"
+                    }
+                },
+                "commands": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands sent to each host pane after connect (simple mode only)."
+                },
+                "windows": {
+                    "type": "array",
+                    "description": "Complex mode: explicit window list. Mutually exclusive with 'hosts'.",
+                    "items": {
+                        "$ref": "#/definitions/window"
+                    }
+                }
+            }
+        },
+        "window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "anyOf": [
+                {
+                    "required": ["hosts"]
+                },
+                {
+                    "required": ["panes"]
+                },
+                {
+                    "required": ["layout"]
+                }
+            ],
+            "not": {
+                "anyOf": [
+                    {
+                        "required": ["hosts", "panes"]
+                    },
+                    {
+                        "required": ["hosts", "layout"]
+                    },
+                    {
+                        "required": ["panes", "layout"]
+                    },
+                    {
+                        "required": ["connect", "ssh_user"]
+                    }
+                ]
+            },
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Window name (no ':', '.', '$', or whitespace). Duplicate names across windows are allowed.",
+                    "pattern": "^[^:.$\\s]+$"
+                },
+                "root": {
+                    "type": "string",
+                    "description": "Working directory for this window ('~' is expanded)."
+                },
+                "connect": {
+                    "$ref": "#/definitions/connect"
+                },
+                "ssh_user": {
+                    "$ref": "#/definitions/sshUser"
+                },
+                "sync": {
+                    "type": "boolean",
+                    "description": "Override session-level synchronize-panes for this window."
+                },
+                "arrange": {
+                    "$ref": "#/definitions/arrange"
+                },
+                "hold": {
+                    "$ref": "#/definitions/hold"
+                },
+                "retry": {
+                    "$ref": "#/definitions/retry"
+                },
+                "pre": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands prepended to every pane's command list in this window, after session-level pre."
+                },
+                "hosts": {
+                    "type": "array",
+                    "description": "Simple mode: a pane per host. Mutually exclusive with 'panes' and 'layout'.",
+                    "items": {
+                        "$ref": "#/definitions/hostname"
+                    }
+                },
+                "commands": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands sent to each host pane after connect."
+                },
+                "layout": {
+                    "type": "string",
+                    "description": "Reference to a top-level layout by name. Mutually exclusive with 'hosts' and 'panes'."
+                },
+                "panes": {
+                    "$ref": "#/definitions/panes"
+                }
+            }
+        },
+        "panes": {
+            "type": "array",
+            "description": "Explicit pane list. The first pane must have 'split: root'; later panes split the previous pane.",
+            "minItems": 1,
+            "items": [
+                {
+                    "$ref": "#/definitions/rootPane"
+                }
+            ],
+            "additionalItems": {
+                "$ref": "#/definitions/splitPane"
+            }
+        },
+        "rootPane": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["split"],
+            "properties": {
+                "split": {
+                    "const": "root",
+                    "description": "Marks the pane that exists when the window is created. Required on the first pane; no split is performed."
+                },
+                "commands": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands run in this pane."
+                }
+            }
+        },
+        "splitPane": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["split"],
+            "properties": {
+                "split": {
+                    "type": "string",
+                    "description": "'horizontal' stacks the new pane under the previous; 'vertical' places it side-by-side.",
+                    "enum": ["horizontal", "vertical"]
+                },
+                "size": {
+                    "type": "integer",
+                    "description": "Percent of the parent pane (1-99). 0 or omitted = tmux default (half).",
+                    "minimum": 1,
+                    "maximum": 99
+                },
+                "commands": {
+                    "$ref": "#/definitions/commandList",
+                    "description": "Commands run in this pane."
+                }
+            }
+        },
+        "layout": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["panes"],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Optional explicit name; defaults to the map key."
+                },
+                "panes": {
+                    "$ref": "#/definitions/panes"
+                }
+            }
+        }
+    }
+}

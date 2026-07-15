@@ -33,6 +33,7 @@ type newOpts struct {
 	print     bool
 	hold      bool
 	retry     int
+	save      bool
 }
 
 func newNewCommand() *cobra.Command {
@@ -76,7 +77,9 @@ an existing configured session and override its hosts.`,
   mox new -w @api-cluster                open as a window in current tmux
 
   mox new --from api-cluster extra-host  clone configured session, add a host
-  echo 'hosts: [a, b]' | mox new -n tmp -f -`,
+  echo 'hosts: [a, b]' | mox new -n tmp -f -
+
+  mox new host1 host2 -n web --save  also save the definition to the config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runNew(cmd, args, o)
 		},
@@ -99,6 +102,7 @@ an existing configured session and override its hosts.`,
 	cmd.Flags().BoolVar(&o.print, "print", false, "print the tmux commands instead of executing them")
 	cmd.Flags().BoolVar(&o.hold, "hold", o.hold, "ended connections prompt before the pane closes (never drop to a local shell)")
 	cmd.Flags().IntVar(&o.retry, "retry", 0, "re-attempt a failed connection N extra times, 3s apart")
+	cmd.Flags().BoolVar(&o.save, "save", false, "also save the session definition to the config (requires --name)")
 
 	cmd.ValidArgsFunction = completeHostsOrClusters
 	_ = cmd.RegisterFlagCompletionFunc("arrange", completeArrange)
@@ -156,6 +160,17 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 		return err
 	}
 
+	if o.save {
+		path, local := config.EffectivePath(gopts.configPath)
+		if local {
+			fmt.Fprintf(cmd.ErrOrStderr(), "mox: saving into ./%s\n", config.LocalConfigName)
+		}
+		if err := saveNewSession(path, name, sess); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "Saved session %q -> %s\n", name, path)
+	}
+
 	cfg := &config.Config{Sessions: map[string]*config.Session{name: sess}}
 	var mgr *session.Manager
 	if o.print {
@@ -201,7 +216,55 @@ func (o *newOpts) validate() error {
 	if o.user != "" && o.connect != "" {
 		return errors.New("--user is ignored when --connect is set; specify the user inside the connect template instead")
 	}
+	if o.save {
+		if o.name == "" {
+			return errors.New("--save requires --name: the config entry needs a meaningful name")
+		}
+		if o.temporary {
+			return errors.New("--save is incompatible with --temporary: a session destroyed on detach has no business in the config")
+		}
+		if o.print {
+			return errors.New("--save writes to the config, which --print (dry-run) must not; drop one of them")
+		}
+	}
 	return nil
+}
+
+// saveNewSession persists an ad-hoc session definition to the config file at
+// path. The definition is validated first so an unusable entry never lands in
+// the config. Re-saving an identical definition is a no-op (so a retried
+// `mox new --save` isn't blocked by its own first attempt); a *different*
+// existing entry is never overwritten.
+func saveNewSession(path, name string, sess *config.Session) error {
+	if err := sess.Validate(name); err != nil {
+		return fmt.Errorf("session is not saveable: %w", err)
+	}
+	if existing, ok := configuredSessionAt(path, name); ok {
+		if sameSessionYAML(existing, sess) {
+			return nil
+		}
+		return fmt.Errorf("config already has a different session %q; pick another --name, or edit the config", name)
+	}
+	return appendSessionToConfig(path, name, sess, false)
+}
+
+// configuredSessionAt looks up a session in the config file at path,
+// tolerating a missing or unreadable config (no session then).
+func configuredSessionAt(path, name string) (*config.Session, bool) {
+	cfg, err := loadConfigAt(path)
+	if err != nil || cfg == nil {
+		return nil, false
+	}
+	return cfg.GetSession(name)
+}
+
+// sameSessionYAML reports whether two session definitions are equivalent,
+// compared via their YAML forms so in-memory and loaded representations
+// agree.
+func sameSessionYAML(a, b *config.Session) bool {
+	ay, errA := yaml.Marshal(a)
+	by, errB := yaml.Marshal(b)
+	return errA == nil && errB == nil && string(ay) == string(by)
 }
 
 // buildAdHocSession assembles a *config.Session from --file/--from/flags/args.

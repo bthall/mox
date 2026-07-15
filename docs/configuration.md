@@ -14,6 +14,22 @@ Override via the `--config` flag (which expands `~`).
 The file is created with mode `0600` (owner read/write only) since it can
 list hostnames and shell commands.
 
+### Editor autocomplete and validation
+
+A JSON Schema for the config format is published at
+[`schema/mox.schema.json`](../schema/mox.schema.json). Configs scaffolded by
+`mox init` start with a modeline that LSP-aware editors (VS Code with the
+YAML extension, neovim with yamlls, and others) pick up automatically:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bthall/mox/main/schema/mox.schema.json
+```
+
+That gives field completion, typo squiggles, and hover documentation while
+editing. Add the line to an existing config to get the same. It's a plain
+YAML comment — editors without LSP support ignore it, and mox's own
+validation remains the source of truth.
+
 ### Project-local config
 
 When a `.mox.yml` exists in the current directory and no `--config` was

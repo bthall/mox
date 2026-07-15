@@ -25,12 +25,14 @@ type importOpts struct {
 func newImportCommand() *cobra.Command {
 	o := &importOpts{}
 	cmd := &cobra.Command{
-		Use:     "import <tmux-session>",
+		Use:     "import [tmux-session]",
 		GroupID: groupSession,
 		Short:   "Capture a running tmux session into the config",
 		Long: `Inspect a running tmux session and add it to your mox config so it
-can be recreated later with 'mox -a <name>'. Window/pane structure and
-each pane's current working directory are captured.
+can be recreated later with 'mox -a <name>'. Window/pane structure —
+including split directions and sizes — and each pane's current working
+directory are captured. With no argument, the session you are currently
+inside is imported.
 
 SSH connections are recovered from the OS process table: a window whose
 panes are all plain 'ssh <host>' connections is imported as a simple-mode
@@ -41,10 +43,11 @@ Note: other per-pane shell commands cannot be recovered (an editor or REPL
 you started by typing is not reproducible), so those panes are
 structure-only. Add 'commands:' entries to make them fully reproducible.`,
 		Example: `  mox import work               under its tmux name
+  mox import                    the session you're inside
   mox import work -n my-work    rename on import
   mox import work -p            preview on stdout, don't save
   mox import work -F            overwrite an existing config entry`,
-		Args:              cobra.ExactArgs(1),
+		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeRunningTmuxSessions,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runImport(cmd, args, o)
@@ -58,15 +61,18 @@ structure-only. Add 'commands:' entries to make them fully reproducible.`,
 }
 
 func runImport(cmd *cobra.Command, args []string, o *importOpts) error {
-	src := args[0]
-	dst := o.as
-	if dst == "" {
-		dst = src
-	}
-
 	client, err := tmux.NewClient()
 	if err != nil {
 		return err
+	}
+
+	src, err := resolveImportSource(client, args)
+	if err != nil {
+		return err
+	}
+	dst := o.as
+	if dst == "" {
+		dst = src
 	}
 
 	exists, err := client.SessionExists(src)
@@ -77,9 +83,12 @@ func runImport(cmd *cobra.Command, args []string, o *importOpts) error {
 		return fmt.Errorf("tmux session %q does not exist", src)
 	}
 
-	imported, err := inspectSession(client, src)
+	imported, warnings, err := inspectSession(client, src)
 	if err != nil {
 		return fmt.Errorf("inspect %q: %w", src, err)
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(cmd.ErrOrStderr(), "mox: %s\n", w)
 	}
 
 	if err := imported.Validate(dst); err != nil {
@@ -104,9 +113,11 @@ func runImport(cmd *cobra.Command, args []string, o *importOpts) error {
 }
 
 // capturedPane is the per-pane state import recovers from tmux and the process
-// table: the pane's working directory and the argv of its foreground process
-// (nil when none could be recovered or the pane is just a shell).
+// table: the pane's id (for matching against the window layout), its working
+// directory, and the argv of its foreground process (nil when none could be
+// recovered or the pane is just a shell).
 type capturedPane struct {
+	id   string
 	path string
 	argv []string
 }
@@ -115,14 +126,15 @@ type capturedPane struct {
 // window/pane structure of the running session. For each pane it also tries to
 // recover the foreground ssh connection from the OS process table so that
 // SSH fan-outs round-trip as simple-mode `hosts:` rather than losing the host
-// (tmux only reports the command basename, not its arguments).
-func inspectSession(c *tmux.Client, name string) (*config.Session, error) {
+// (tmux only reports the command basename, not its arguments). warnings lists
+// windows whose pane geometry could not be captured faithfully.
+func inspectSession(c *tmux.Client, name string) (*config.Session, []string, error) {
 	wins, err := c.ListWindowsForSession(name)
 	if err != nil {
-		return nil, fmt.Errorf("list windows: %w", err)
+		return nil, nil, fmt.Errorf("list windows: %w", err)
 	}
 	if len(wins) == 0 {
-		return nil, fmt.Errorf("session %q has no windows (unexpected)", name)
+		return nil, nil, fmt.Errorf("session %q has no windows (unexpected)", name)
 	}
 
 	// Best-effort process snapshot. On failure we degrade to structure-only
@@ -130,27 +142,35 @@ func inspectSession(c *tmux.Client, name string) (*config.Session, error) {
 	procs, _ := proc.Capture(context.Background())
 
 	sess := &config.Session{}
+	var warnings []string
 	for _, w := range wins {
 		panes, err := c.ListPanesForWindow(w.ID)
 		if err != nil {
-			return nil, fmt.Errorf("list panes for window %s: %w", w.Name, err)
+			return nil, nil, fmt.Errorf("list panes for window %s: %w", w.Name, err)
 		}
 		if len(panes) == 0 {
-			return nil, fmt.Errorf("window %s has no panes (unexpected)", w.Name)
+			return nil, nil, fmt.Errorf("window %s has no panes (unexpected)", w.Name)
 		}
 
 		captured := make([]capturedPane, len(panes))
 		for i, p := range panes {
-			cp := capturedPane{path: p.CurrentPath}
+			cp := capturedPane{id: p.ID, path: p.CurrentPath}
 			if p.PID > 0 && len(procs) > 0 {
 				cp.argv = proc.ForegroundCommand(procs, p.PID, isSSHCommand)
 			}
 			captured[i] = cp
 		}
 
-		sess.Windows = append(sess.Windows, buildWindow(w.Name, captured))
+		win, degraded := buildWindow(w.Name, w.Layout, captured)
+		if degraded {
+			// Several causes land here (non-linearizable tree, unparseable
+			// or missing layout, a pane appearing/closing mid-inspection),
+			// so the message stays neutral about which.
+			warnings = append(warnings, fmt.Sprintf("window %q: pane geometry could not be captured; imported as a plain stack", w.Name))
+		}
+		sess.Windows = append(sess.Windows, win)
 	}
-	return sess, nil
+	return sess, warnings, nil
 }
 
 // buildWindow turns the captured panes of one tmux window into a config.Window.
@@ -158,12 +178,14 @@ func inspectSession(c *tmux.Client, name string) (*config.Session, error) {
 // When every pane is a plain `ssh [user@]host` connection sharing one user, the
 // window collapses to simple mode (a `hosts:` list) — this is how an SSH
 // fan-out is meant to be expressed in mox and what makes the import
-// reproducible. Otherwise the explicit pane structure is preserved; any pane
-// that *is* an ssh connection still records its command so that connection is
-// not lost. Non-ssh panes stay structure-only — mox does not try to relaunch
+// reproducible. Otherwise the explicit pane structure is preserved with its
+// real geometry when the window layout can be replayed as sequential splits;
+// degraded reports the fallback to a plain horizontal stack. Any pane that
+// *is* an ssh connection still records its command so that connection is not
+// lost. Non-ssh panes stay structure-only — mox does not try to relaunch
 // editors or REPLs.
-func buildWindow(name string, panes []capturedPane) *config.Window {
-	win := &config.Window{Name: name}
+func buildWindow(name, layout string, panes []capturedPane) (win *config.Window, degraded bool) {
+	win = &config.Window{Name: name}
 
 	// Shared working directory across panes becomes the window root; differing
 	// cwds aren't representable per-pane in mox's schema, so leave it empty.
@@ -199,12 +221,30 @@ func buildWindow(name string, panes []capturedPane) *config.Window {
 	if uniform {
 		win.Hosts = hosts
 		win.SSHUser = user
-		return win
+		return win, false
 	}
 
-	// Explicit panes. Default to horizontal stacks for non-root panes: we can't
-	// recover the exact split direction from tmux's binary layout string
-	// without a full parser. Recover ssh connections as commands.
+	// Explicit panes, with real geometry when the layout linearizes into
+	// mox's split-the-previous-pane model. Recover ssh connections as
+	// commands either way.
+	if chain := geometryChain(layout, panes); chain != nil {
+		byID := make(map[string]capturedPane, len(panes))
+		for _, p := range panes {
+			byID[p.id] = p
+		}
+		win.Panes = make([]*config.Pane, len(chain))
+		for i, g := range chain {
+			pane := &config.Pane{Split: g.split, Size: g.size}
+			if p := byID[g.paneID]; isSSHCommand(p.argv) {
+				pane.Commands = []string{strings.Join(p.argv, " ")}
+			}
+			win.Panes[i] = pane
+		}
+		return win, false
+	}
+
+	// Fallback: a plain horizontal stack. Degraded only when there was
+	// geometry to lose.
 	win.Panes = make([]*config.Pane, len(panes))
 	for i, p := range panes {
 		split := config.SplitHorizontal
@@ -217,7 +257,48 @@ func buildWindow(name string, panes []capturedPane) *config.Window {
 		}
 		win.Panes[i] = pane
 	}
-	return win
+	return win, len(panes) > 1
+}
+
+// geometryChain parses and linearizes a window layout, returning nil when the
+// geometry cannot be applied: unparseable layout, a tree that doesn't reduce
+// to sequential splits, or panes that don't match the captured set.
+func geometryChain(layout string, panes []capturedPane) []paneGeom {
+	if layout == "" {
+		return nil
+	}
+	root, err := tmux.ParseLayout(layout)
+	if err != nil {
+		return nil
+	}
+	chain, ok := chainFromLayout(root)
+	if !ok || len(chain) != len(panes) {
+		return nil
+	}
+	ids := make(map[string]bool, len(panes))
+	for _, p := range panes {
+		ids[p.id] = true
+	}
+	for _, g := range chain {
+		if !ids[g.paneID] {
+			return nil
+		}
+	}
+	return chain
+}
+
+// resolveImportSource picks the tmux session to import: the explicit
+// argument when given, otherwise the session the caller is inside — so a
+// bare `mox import` from within tmux captures the current session.
+func resolveImportSource(client *tmux.Client, args []string) (string, error) {
+	if len(args) == 1 {
+		return args[0], nil
+	}
+	name, err := client.CurrentSession()
+	if err != nil {
+		return "", fmt.Errorf("no session named and not inside tmux (run 'mox import <session>' or run from within the session): %w", err)
+	}
+	return name, nil
 }
 
 // isSSHCommand reports whether argv invokes the ssh client.
@@ -261,6 +342,7 @@ func printSessionYAML(w io.Writer, name string, sess *config.Session) error {
 // comments and ordering survive.
 func appendSessionToConfig(path, name string, sess *config.Session, force bool) error {
 	var root yaml.Node
+	fresh := false
 	data, err := os.ReadFile(path) //nolint:gosec // user-supplied path is intentional
 	switch {
 	case err == nil:
@@ -270,7 +352,9 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 			}
 		}
 	case os.IsNotExist(err):
-		// New file — we'll create it below.
+		// New file — we'll create it below, schema modeline included, so
+		// every writer scaffolds editor support the way `mox init` does.
+		fresh = true
 	default:
 		return fmt.Errorf("read %s: %w", path, err)
 	}
@@ -300,14 +384,14 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 				return fmt.Errorf("config already has session %q (use --force to overwrite)", name)
 			}
 			sessionsMap.Content[i+1] = &sessNode
-			return writeYAMLNode(path, &root)
+			return writeYAMLNode(path, &root, false)
 		}
 	}
 	sessionsMap.Content = append(sessionsMap.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Value: name},
 		&sessNode,
 	)
-	return writeYAMLNode(path, &root)
+	return writeYAMLNode(path, &root, fresh)
 }
 
 // findOrCreateMapKey returns the value Node for a given key in a MappingNode,
@@ -326,11 +410,17 @@ func findOrCreateMapKey(m *yaml.Node, key string) *yaml.Node {
 	return v
 }
 
-func writeYAMLNode(path string, node *yaml.Node) error {
+// writeYAMLNode writes the config document; modeline prepends the
+// yaml-language-server schema comment (for brand-new files only — an
+// existing file's header is the user's).
+func writeYAMLNode(path string, node *yaml.Node, modeline bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	var buf bytes.Buffer
+	if modeline {
+		buf.WriteString("# yaml-language-server: $schema=" + config.SchemaURL + "\n\n")
+	}
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(4)
 	if err := enc.Encode(node); err != nil {

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `mox add` — an interactive wizard that builds a simple-mode session
+  (name, hosts with live `@cluster` expansion, ssh user, sync, arrangement,
+  directory, commands), previews the YAML, and saves it to the config with
+  an optional immediate start.
+- `mox new --save` — persist the ad-hoc session definition expressed in
+  flags to the config (requires `--name`) in addition to creating it.
+- A JSON Schema for the config format (`schema/mox.schema.json`). Configs
+  scaffolded by `mox init` now start with a `yaml-language-server` modeline,
+  so LSP-aware editors offer completion, typo detection, and hover docs.
+
+### Changed
+
+- `mox import` now captures real pane geometry: split directions and sizes
+  are recovered from tmux's layout string instead of defaulting every pane
+  to a horizontal stack. Layouts that can't be expressed as mox's
+  sequential splits fall back to the old behavior with a stderr notice.
+- `mox import` with no argument, run inside tmux, imports the session you
+  are currently in.
+
 ## [0.2.0] — 2026-07-09
 
 ### Changed
