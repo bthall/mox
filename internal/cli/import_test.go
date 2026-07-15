@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/bthall/mox/internal/config"
+	"github.com/bthall/mox/internal/tmux"
 )
 
 func TestParseSSHDest(t *testing.T) {
@@ -35,10 +36,31 @@ func TestParseSSHDest(t *testing.T) {
 	}
 }
 
+func TestResolveImportSource_ExplicitArg(t *testing.T) {
+	got, err := resolveImportSource(nil, []string{"work"})
+	if err != nil {
+		t.Fatalf("resolveImportSource: %v", err)
+	}
+	if got != "work" {
+		t.Errorf("source = %q, want work", got)
+	}
+}
+
+func TestResolveImportSource_NoArgOutsideTmux(t *testing.T) {
+	t.Setenv("TMUX", "")
+	client, err := tmux.NewClient()
+	if err != nil {
+		t.Skipf("tmux not installed: %v", err)
+	}
+	if _, err := resolveImportSource(client, nil); err == nil {
+		t.Error("no-arg import outside tmux should error")
+	}
+}
+
 func TestBuildWindow_UniformSSHFanout(t *testing.T) {
 	// The reported bug: a window of plain ssh panes must import as simple-mode
 	// hosts, not anonymous panes.
-	w := buildWindow("main", []capturedPane{
+	w, _ := buildWindow("main", "", []capturedPane{
 		{path: "/home/bthall", argv: []string{"ssh", "apisix-1.example.com"}},
 		{path: "/home/bthall", argv: []string{"ssh", "apisix-2.example.com"}},
 		{path: "/home/bthall", argv: []string{"ssh", "apisix-3.example.com"}},
@@ -59,7 +81,7 @@ func TestBuildWindow_UniformSSHFanout(t *testing.T) {
 }
 
 func TestBuildWindow_UniformUser(t *testing.T) {
-	w := buildWindow("main", []capturedPane{
+	w, _ := buildWindow("main", "", []capturedPane{
 		{path: "/root", argv: []string{"ssh", "deploy@a"}},
 		{path: "/root", argv: []string{"ssh", "deploy@b"}},
 	})
@@ -73,7 +95,7 @@ func TestBuildWindow_UniformUser(t *testing.T) {
 
 func TestBuildWindow_SingleSSHPane(t *testing.T) {
 	// e.g. samba / pythia: a one-pane ssh window -> single host.
-	w := buildWindow("ssh", []capturedPane{
+	w, _ := buildWindow("ssh", "", []capturedPane{
 		{path: "/home/bthall", argv: []string{"ssh", "samba"}},
 	})
 	if !reflect.DeepEqual(w.Hosts, []string{"samba"}) {
@@ -87,7 +109,7 @@ func TestBuildWindow_SingleSSHPane(t *testing.T) {
 func TestBuildWindow_MixedUsersStaysComplex(t *testing.T) {
 	// Differing users can't be one ssh_user, so fall back to panes, but the ssh
 	// connections are recovered as commands so the import stays reproducible.
-	w := buildWindow("main", []capturedPane{
+	w, _ := buildWindow("main", "", []capturedPane{
 		{path: "/x", argv: []string{"ssh", "alice@a"}},
 		{path: "/y", argv: []string{"ssh", "bob@b"}},
 	})
@@ -111,7 +133,7 @@ func TestBuildWindow_MixedUsersStaysComplex(t *testing.T) {
 func TestBuildWindow_NonSSHStaysStructureOnly(t *testing.T) {
 	// A local working window: no ssh anywhere -> anonymous panes, no commands
 	// (we don't try to reproduce editors/REPLs).
-	w := buildWindow("dev", []capturedPane{
+	w, _ := buildWindow("dev", "", []capturedPane{
 		{path: "/home/bthall/proj", argv: []string{"vim"}},
 		{path: "/home/bthall/proj", argv: nil},
 	})
@@ -131,9 +153,128 @@ func TestBuildWindow_NonSSHStaysStructureOnly(t *testing.T) {
 	}
 }
 
+func TestBuildWindow_GeometryFromLayout(t *testing.T) {
+	// Real-world layout: left pane full height, right side stacked.
+	// Non-uniform panes -> complex mode with faithful splits and sizes.
+	layout := "d67e,80x24,0,0{40x24,0,0,0,39x24,41,0[39x12,41,0,1,39x11,41,13,2]}"
+	w, degraded := buildWindow("dev", layout, []capturedPane{
+		{id: "%0", path: "/p", argv: []string{"vim"}},
+		{id: "%1", path: "/p"},
+		{id: "%2", path: "/p", argv: []string{"ssh", "-p", "2222", "web"}},
+	})
+	if degraded {
+		t.Fatal("linearizable layout should not be degraded")
+	}
+	if len(w.Panes) != 3 {
+		t.Fatalf("want 3 panes, got %d", len(w.Panes))
+	}
+	if w.Panes[0].Split != config.SplitRoot || w.Panes[0].Size != 0 {
+		t.Errorf("pane 0 = %+v, want root without size", w.Panes[0])
+	}
+	if w.Panes[1].Split != config.SplitVertical || w.Panes[1].Size != 49 {
+		t.Errorf("pane 1 = %+v, want vertical size 49", w.Panes[1])
+	}
+	if w.Panes[2].Split != config.SplitHorizontal || w.Panes[2].Size != 46 {
+		t.Errorf("pane 2 = %+v, want horizontal size 46", w.Panes[2])
+	}
+	if !reflect.DeepEqual(w.Panes[2].Commands, []string{"ssh -p 2222 web"}) {
+		t.Errorf("pane 2 commands = %v, want the ssh connection", w.Panes[2].Commands)
+	}
+}
+
+func TestBuildWindow_GeometryFollowsChainOrder(t *testing.T) {
+	// Captured pane order and layout chain order can disagree; commands must
+	// stay attached to the right pane.
+	layout := "aaaa,208x62,0,0{104x62,0,0,1,103x62,105,0,2}"
+	w, degraded := buildWindow("main", layout, []capturedPane{
+		{id: "%2", path: "/y", argv: []string{"ssh", "bob@b"}},
+		{id: "%1", path: "/x", argv: []string{"ssh", "alice@a"}},
+	})
+	if degraded {
+		t.Fatal("should not be degraded")
+	}
+	if !reflect.DeepEqual(w.Panes[0].Commands, []string{"ssh alice@a"}) {
+		t.Errorf("pane 0 commands = %v, want alice's (chain starts at %%1)", w.Panes[0].Commands)
+	}
+	if !reflect.DeepEqual(w.Panes[1].Commands, []string{"ssh bob@b"}) {
+		t.Errorf("pane 1 commands = %v, want bob's", w.Panes[1].Commands)
+	}
+}
+
+func TestBuildWindow_UnparseableLayoutFallsBack(t *testing.T) {
+	w, degraded := buildWindow("dev", "not-a-layout", []capturedPane{
+		{id: "%0", path: "/p", argv: []string{"vim"}},
+		{id: "%1", path: "/p"},
+	})
+	if !degraded {
+		t.Error("unparseable layout with multiple panes should report degraded geometry")
+	}
+	if len(w.Panes) != 2 || w.Panes[0].Split != config.SplitRoot || w.Panes[1].Split != config.SplitHorizontal {
+		t.Errorf("fallback structure wrong: %+v", w.Panes)
+	}
+}
+
+func TestBuildWindow_NonLinearizableFallsBack(t *testing.T) {
+	// {[a,b],c}: container in non-last position can't be replayed as
+	// sequential splits of the previous pane.
+	layout := "aaaa,80x24,0,0{40x24,0,0[40x12,0,0,0,40x11,0,13,1],39x24,41,0,2}"
+	w, degraded := buildWindow("dev", layout, []capturedPane{
+		{id: "%0", path: "/p"},
+		{id: "%1", path: "/p"},
+		{id: "%2", path: "/p"},
+	})
+	if !degraded {
+		t.Error("non-linearizable layout should report degraded geometry")
+	}
+	if len(w.Panes) != 3 {
+		t.Errorf("fallback should keep all panes, got %d", len(w.Panes))
+	}
+}
+
+func TestBuildWindow_PaneIDMismatchFallsBack(t *testing.T) {
+	// Layout referencing panes we didn't capture must not panic or misassign.
+	layout := "aaaa,208x62,0,0{104x62,0,0,7,103x62,105,0,8}"
+	w, degraded := buildWindow("dev", layout, []capturedPane{
+		{id: "%0", path: "/p"},
+		{id: "%1", path: "/p"},
+	})
+	if !degraded {
+		t.Error("id mismatch should report degraded geometry")
+	}
+	if len(w.Panes) != 2 {
+		t.Errorf("fallback should keep all panes, got %d", len(w.Panes))
+	}
+}
+
+func TestBuildWindow_HostsModeIgnoresLayout(t *testing.T) {
+	// A uniform ssh fan-out imports as hosts regardless of layout geometry.
+	w, degraded := buildWindow("main", "not-a-layout", []capturedPane{
+		{id: "%0", path: "/h", argv: []string{"ssh", "a"}},
+		{id: "%1", path: "/h", argv: []string{"ssh", "b"}},
+	})
+	if degraded {
+		t.Error("hosts-mode import has no geometry to lose")
+	}
+	if !reflect.DeepEqual(w.Hosts, []string{"a", "b"}) {
+		t.Errorf("hosts = %v", w.Hosts)
+	}
+}
+
+func TestBuildWindow_SingleLocalPaneNotDegraded(t *testing.T) {
+	w, degraded := buildWindow("solo", "", []capturedPane{
+		{id: "%0", path: "/p", argv: []string{"vim"}},
+	})
+	if degraded {
+		t.Error("a single pane has no geometry to lose")
+	}
+	if len(w.Panes) != 1 {
+		t.Errorf("want 1 pane, got %d", len(w.Panes))
+	}
+}
+
 func TestBuildWindow_PartialSSHRecoversCommand(t *testing.T) {
 	// One ssh pane + one local pane: stays complex, ssh pane keeps its command.
-	w := buildWindow("main", []capturedPane{
+	w, _ := buildWindow("main", "", []capturedPane{
 		{path: "/a", argv: []string{"ssh", "web-1"}},
 		{path: "/a", argv: []string{"htop"}},
 	})
