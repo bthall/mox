@@ -26,9 +26,7 @@ Non-interactive alternative: 'mox new ... --save'.`,
 		Example: `  mox add            start the wizard
   mox add dbfarm     start with the name filled in`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAdd(cmd, args)
-		},
+		RunE: runAdd,
 	}
 	return cmd
 }

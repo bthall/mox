@@ -55,7 +55,7 @@ func TestRunAdd_DevNullStdinErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer devnull.Close()
+	defer func() { _ = devnull.Close() }()
 
 	cmd := newAddCommand()
 	cmd.SetIn(devnull)

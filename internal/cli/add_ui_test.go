@@ -36,15 +36,15 @@ func through(t *testing.T, m addModel, text string) addModel {
 func TestAddWizard_HappyPathBroadcastSession(t *testing.T) {
 	m := newTestAddModel()
 
-	m = through(t, m, "dbfarm")    // name
-	m = through(t, m, "db1 db2")   // hosts
-	m = through(t, m, "root")      // ssh user
-	m = sendAdd(t, m, keyEnter)    // sync: keep default (on for >1 host)
-	m = sendAdd(t, m, keyEnter)    // arrange: keep default (tiled)
-	m = through(t, m, "~/ops")     // root dir
-	m = through(t, m, "sudo -i")   // one command
-	m = sendAdd(t, m, keyEnter)    // empty command -> confirm step
-	m = sendAdd(t, m, keyEnter)    // confirm: save (first choice)
+	m = through(t, m, "dbfarm")  // name
+	m = through(t, m, "db1 db2") // hosts
+	m = through(t, m, "root")    // ssh user
+	m = sendAdd(t, m, keyEnter)  // sync: keep default (on for >1 host)
+	m = sendAdd(t, m, keyEnter)  // arrange: keep default (tiled)
+	m = through(t, m, "~/ops")   // root dir
+	m = through(t, m, "sudo -i") // one command
+	m = sendAdd(t, m, keyEnter)  // empty command -> confirm step
+	m = sendAdd(t, m, keyEnter)  // confirm: save (first choice)
 
 	if m.done.action != addActionSave {
 		t.Fatalf("action = %v, want save", m.done.action)
