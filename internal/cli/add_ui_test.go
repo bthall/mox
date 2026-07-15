@@ -232,6 +232,72 @@ func TestAddWizard_ConfirmShowsYAMLAndOffersStart(t *testing.T) {
 	}
 }
 
+func TestAddWizard_SpaceKeyInserts(t *testing.T) {
+	// bubbletea delivers a lone space as tea.KeySpace, not KeyRunes; the
+	// hosts step is space-separated so this must not be dropped.
+	m := newTestAddModel()
+	m = through(t, m, "web")
+	m = sendAdd(t, m, runes("db1")...)
+	m = sendAdd(t, m, tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+	m = sendAdd(t, m, runes("db2")...)
+	if len(m.expanded) != 2 {
+		t.Fatalf("expanded = %v, want [db1 db2] — space keystroke was dropped", m.expanded)
+	}
+}
+
+func TestAddWizard_OverwriteResetOnNameChange(t *testing.T) {
+	cfg := &config.Config{Sessions: map[string]*config.Session{
+		"web": {Hosts: []string{"a"}},
+		"db":  {Hosts: []string{"b"}},
+	}}
+	m := newAddModel(cfg, nil, "")
+	m = sendAdd(t, m, runes("web")...)
+	m = sendAdd(t, m, keyEnter, keyEnter) // collision + confirm overwrite for "web"
+	if m.step != stepHosts || !m.overwrite {
+		t.Fatal("setup: expected confirmed overwrite of web")
+	}
+	m = sendAdd(t, m, keyEsc) // back to name
+	m = sendAdd(t, m, keyBksp, keyBksp, keyBksp)
+	m = sendAdd(t, m, runes("db")...)
+	m = sendAdd(t, m, keyEnter)
+	if m.step != stepName {
+		t.Error("renaming to a different existing session must re-trigger the collision hold")
+	}
+	if m.overwrite {
+		t.Error("overwrite confirmed for one name must not carry to another")
+	}
+}
+
+func TestAddWizard_SyncToggleSurvivesBackNav(t *testing.T) {
+	m := newTestAddModel()
+	m = through(t, m, "web")
+	m = through(t, m, "w1 w2")
+	m = sendAdd(t, m, keyEnter) // ssh user: skip
+	m = sendAdd(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = sendAdd(t, m, keyEnter) // -> arrange
+	m = sendAdd(t, m, keyEsc)   // back to sync
+	if m.sync {
+		t.Error("explicit sync toggle must survive back-navigation")
+	}
+}
+
+func TestWrapWords_FitsWidthAndKeepsEveryWord(t *testing.T) {
+	words := make([]string, 12)
+	for i := range words {
+		words[i] = "longhostname-xx"
+	}
+	lines := wrapWords(words, 40)
+	for _, l := range lines {
+		if len(l) > 40 {
+			t.Errorf("line wider than 40 (%d): %q", len(l), l)
+		}
+	}
+	joined := strings.Join(lines, " ")
+	if got := strings.Count(joined, "longhostname-xx"); got != 12 {
+		t.Errorf("wrapped output has %d hosts, want 12 — hosts were dropped", got)
+	}
+}
+
 func TestAddWizard_PrefilledName(t *testing.T) {
 	cfg := &config.Config{Sessions: map[string]*config.Session{}}
 	m := newAddModel(cfg, nil, "prefilled")

@@ -45,12 +45,16 @@ type addResult struct {
 	overwrite bool
 }
 
-// arrangeChoices are the arrange-step options; the empty label means no
-// rearrangement and maps to an unset arrange field.
-var arrangeChoices = []string{"tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical", "(none)"}
+// arrangeChoices are the arrange-step options: the shared tmux layout list
+// plus a no-rearrangement entry that maps to an unset arrange field.
+var arrangeChoices = append(append([]string{}, arrangeLayouts...), "(none)")
 
-// confirmChoices are the final-step options, in addAction order minus cancel.
-var confirmChoices = []string{"save to config", "save + start now", "cancel"}
+// confirmChoices and confirmActions are parallel: the final-step menu and
+// the action each entry maps to.
+var (
+	confirmChoices = []string{"save to config", "save + start now", "cancel"}
+	confirmActions = []addAction{addActionSave, addActionSaveStart, addActionCancel}
+)
 
 type addModel struct {
 	cfg      *config.Config      // existing config, for collision checks and @refs
@@ -122,6 +126,10 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.setInput(m.input[:len(m.input)-1])
 			}
 			return m, nil
+		case tea.KeySpace:
+			// bubbletea reports a lone space as KeySpace, not KeyRunes.
+			m.setInput(append(m.input, ' '))
+			return m, nil
 		case tea.KeyRunes:
 			if m.step == stepSync {
 				return m.syncKey(msg.Runes)
@@ -144,6 +152,11 @@ func (m *addModel) setInput(buf []rune) {
 	m.input = buf
 	m.errMsg = ""
 	m.collision = false
+	if m.step == stepName {
+		// An overwrite confirmation belongs to one specific name; editing
+		// the name revokes it so a different session can't be clobbered.
+		m.overwrite = false
+	}
 	if m.step == stepHosts {
 		m.reexpand()
 	}
@@ -241,6 +254,9 @@ func (m addModel) advance() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.user = user
+		// Seed the sync default on the forward pass only — re-entering the
+		// step via Esc must not discard an explicit toggle.
+		m.sync = len(m.expanded) > 1
 		return m.goTo(stepSync), nil
 
 	case stepSync:
@@ -263,13 +279,10 @@ func (m addModel) advance() (tea.Model, tea.Cmd) {
 		return m.goTo(stepConfirm), nil
 
 	case stepConfirm:
-		switch m.confirmIdx {
-		case 0:
-			m.done = addResult{action: addActionSave, name: m.name, sess: m.buildSession(), overwrite: m.overwrite}
-		case 1:
-			m.done = addResult{action: addActionSaveStart, name: m.name, sess: m.buildSession(), overwrite: m.overwrite}
-		default:
+		if action := confirmActions[m.confirmIdx]; action == addActionCancel {
 			m.done = addResult{action: addActionCancel}
+		} else {
+			m.done = addResult{action: action, name: m.name, sess: m.buildSession(), overwrite: m.overwrite}
 		}
 		return m, tea.Quit
 	}
@@ -284,13 +297,13 @@ func (m addModel) goTo(step addStep) addModel {
 	switch step {
 	case stepName:
 		m.input = []rune(m.name)
+		// Returning to the name step re-arms the collision confirmation.
+		m.overwrite = false
 	case stepHosts:
 		m.input = []rune(m.hostsRaw)
 		m.reexpand()
 	case stepUser:
 		m.input = []rune(m.user)
-	case stepSync:
-		m.sync = len(m.expanded) > 1
 	case stepRoot:
 		m.input = []rune(m.root)
 	case stepCommands:
@@ -347,6 +360,24 @@ func (m *addModel) buildSession() *config.Session {
 		}
 	}
 	return s
+}
+
+// wrapWords greedily wraps words into 2-space-indented lines of at most
+// width characters.
+func wrapWords(words []string, width int) []string {
+	var lines []string
+	cur := " "
+	for _, word := range words {
+		if len(cur) > 1 && len(cur)+1+len(word) > width {
+			lines = append(lines, cur)
+			cur = " "
+		}
+		cur += " " + word
+	}
+	if len(cur) > 1 {
+		lines = append(lines, cur)
+	}
+	return lines
 }
 
 // renderPreview produces the YAML snippet shown on the confirm step.
@@ -430,7 +461,7 @@ func (m addModel) stepLines(w int) []string {
 			lines = append(lines, "", pkForeign.Render(truncate(m.expandErr, w)))
 		case len(m.expanded) > 0:
 			lines = append(lines, "", pkDim.Render(fmt.Sprintf("%d host(s):", len(m.expanded))))
-			lines = append(lines, wrapKV("hosts", m.expanded, w+6, func(_, v string) string { return "  " + v })...)
+			lines = append(lines, wrapWords(m.expanded, w)...)
 		}
 		return lines
 

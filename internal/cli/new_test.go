@@ -153,6 +153,38 @@ func TestSaveNewSession_CollisionErrors(t *testing.T) {
 	}
 }
 
+func TestSaveNewSession_IdenticalResaveIsIdempotent(t *testing.T) {
+	// A failed `mox new --save` retry must not be blocked by the entry the
+	// first attempt already wrote.
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yml")
+
+	sess := &config.Session{Hosts: []string{"db1"}, Sync: true}
+	if err := saveNewSession(cfgPath, "web", sess); err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+	if err := saveNewSession(cfgPath, "web", &config.Session{Hosts: []string{"db1"}, Sync: true}); err != nil {
+		t.Errorf("re-saving an identical definition should succeed, got: %v", err)
+	}
+}
+
+func TestSaveNewSession_DifferingCollisionErrorIsActionable(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("sessions:\n  web:\n    hosts: [a]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := saveNewSession(cfgPath, "web", &config.Session{Hosts: []string{"b"}})
+	if err == nil {
+		t.Fatal("differing definition must not overwrite")
+	}
+	// `mox new` has no flag that can force this; the advice must not name one.
+	if strings.Contains(err.Error(), "--force") {
+		t.Errorf("error suggests --force, which cannot work here: %v", err)
+	}
+}
+
 func TestSaveNewSession_InvalidSessionRejected(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yml")

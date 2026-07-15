@@ -14,6 +14,7 @@ import (
 	"github.com/bthall/mox/internal/history"
 	"github.com/bthall/mox/internal/session"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // runPicker is what bare `mox` does on a terminal: show every session you
@@ -152,8 +153,9 @@ func resolvePickerChoice(input string, candidates []session.SessionInfo) (string
 	}
 }
 
-// isTerminal reports whether f is attached to a terminal.
+// isTerminal reports whether f is attached to a terminal. The termios probe
+// (rather than a char-device mode check) matters: /dev/null is a character
+// device but can't host an interactive UI.
 func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(f.Fd()))
 }

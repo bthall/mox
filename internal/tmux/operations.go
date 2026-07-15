@@ -277,7 +277,9 @@ type WindowInfo struct {
 // ListWindowsForSession returns the windows of the named session in display
 // order. Used by `mox import` to capture an existing tmux session.
 func (c *Client) ListWindowsForSession(session string) ([]WindowInfo, error) {
-	out, err := c.Run("list-windows", "-t", "="+session, "-F", "#{window_id}\t#{window_name}\t#{window_layout}")
+	// The name goes last: it's the only field that may itself contain a
+	// tab, and ids/layouts never do, so the first two splits stay unambiguous.
+	out, err := c.Run("list-windows", "-t", "="+session, "-F", "#{window_id}\t#{window_layout}\t#{window_name}")
 	if err != nil {
 		return nil, err
 	}
@@ -287,17 +289,20 @@ func (c *Client) ListWindowsForSession(session string) ([]WindowInfo, error) {
 	}
 	var wins []WindowInfo
 	for _, line := range strings.Split(out, "\n") {
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) < 2 {
-			continue
+		if w, ok := parseWindowLine(line); ok {
+			wins = append(wins, w)
 		}
-		w := WindowInfo{ID: parts[0], Name: parts[1]}
-		if len(parts) == 3 {
-			w.Layout = parts[2]
-		}
-		wins = append(wins, w)
 	}
 	return wins, nil
+}
+
+// parseWindowLine parses one `id \t layout \t name` line from list-windows.
+func parseWindowLine(line string) (WindowInfo, bool) {
+	parts := strings.SplitN(line, "\t", 3)
+	if len(parts) < 3 {
+		return WindowInfo{}, false
+	}
+	return WindowInfo{ID: parts[0], Layout: parts[1], Name: parts[2]}, true
 }
 
 // PaneInfo describes a single pane for inspection / import.

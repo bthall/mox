@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/bthall/mox/internal/config"
@@ -54,6 +57,49 @@ func TestResolveImportSource_NoArgOutsideTmux(t *testing.T) {
 	}
 	if _, err := resolveImportSource(client, nil); err == nil {
 		t.Error("no-arg import outside tmux should error")
+	}
+}
+
+func TestAppendSessionToConfig_FreshFileGetsModeline(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yml")
+
+	err := appendSessionToConfig(cfgPath, "web", &config.Session{Hosts: []string{"a"}}, false)
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := strings.SplitN(string(data), "\n", 2)[0]
+	if first != "# yaml-language-server: $schema="+config.SchemaURL {
+		t.Errorf("fresh config should start with the schema modeline, got %q", first)
+	}
+	if _, err := config.Load(cfgPath); err != nil {
+		t.Errorf("modeline must not break loading: %v", err)
+	}
+}
+
+func TestAppendSessionToConfig_ExistingFileHeaderUntouched(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("# my config\nsessions:\n  a:\n    hosts: [x]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := appendSessionToConfig(cfgPath, "web", &config.Session{Hosts: []string{"b"}}, false); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "# my config") {
+		t.Errorf("existing header comment must survive, got: %q", strings.SplitN(string(data), "\n", 2)[0])
+	}
+	if strings.Contains(string(data), "yaml-language-server") {
+		t.Error("modeline must not be injected into an existing config")
 	}
 }
 

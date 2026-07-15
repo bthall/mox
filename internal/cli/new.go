@@ -232,12 +232,39 @@ func (o *newOpts) validate() error {
 
 // saveNewSession persists an ad-hoc session definition to the config file at
 // path. The definition is validated first so an unusable entry never lands in
-// the config; an existing entry with the same name is never overwritten.
+// the config. Re-saving an identical definition is a no-op (so a retried
+// `mox new --save` isn't blocked by its own first attempt); a *different*
+// existing entry is never overwritten.
 func saveNewSession(path, name string, sess *config.Session) error {
 	if err := sess.Validate(name); err != nil {
 		return fmt.Errorf("session is not saveable: %w", err)
 	}
+	if existing, ok := configuredSessionAt(path, name); ok {
+		if sameSessionYAML(existing, sess) {
+			return nil
+		}
+		return fmt.Errorf("config already has a different session %q; pick another --name, or edit the config", name)
+	}
 	return appendSessionToConfig(path, name, sess, false)
+}
+
+// configuredSessionAt looks up a session in the config file at path,
+// tolerating a missing or unreadable config (no session then).
+func configuredSessionAt(path, name string) (*config.Session, bool) {
+	cfg, err := loadConfigAt(path)
+	if err != nil || cfg == nil {
+		return nil, false
+	}
+	return cfg.GetSession(name)
+}
+
+// sameSessionYAML reports whether two session definitions are equivalent,
+// compared via their YAML forms so in-memory and loaded representations
+// agree.
+func sameSessionYAML(a, b *config.Session) bool {
+	ay, errA := yaml.Marshal(a)
+	by, errB := yaml.Marshal(b)
+	return errA == nil && errB == nil && string(ay) == string(by)
 }
 
 // buildAdHocSession assembles a *config.Session from --file/--from/flags/args.

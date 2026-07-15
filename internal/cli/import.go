@@ -163,7 +163,10 @@ func inspectSession(c *tmux.Client, name string) (*config.Session, []string, err
 
 		win, degraded := buildWindow(w.Name, w.Layout, captured)
 		if degraded {
-			warnings = append(warnings, fmt.Sprintf("window %q: pane geometry simplified (layout is not expressible as sequential splits)", w.Name))
+			// Several causes land here (non-linearizable tree, unparseable
+			// or missing layout, a pane appearing/closing mid-inspection),
+			// so the message stays neutral about which.
+			warnings = append(warnings, fmt.Sprintf("window %q: pane geometry could not be captured; imported as a plain stack", w.Name))
 		}
 		sess.Windows = append(sess.Windows, win)
 	}
@@ -339,6 +342,7 @@ func printSessionYAML(w io.Writer, name string, sess *config.Session) error {
 // comments and ordering survive.
 func appendSessionToConfig(path, name string, sess *config.Session, force bool) error {
 	var root yaml.Node
+	fresh := false
 	data, err := os.ReadFile(path) //nolint:gosec // user-supplied path is intentional
 	switch {
 	case err == nil:
@@ -348,7 +352,9 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 			}
 		}
 	case os.IsNotExist(err):
-		// New file — we'll create it below.
+		// New file — we'll create it below, schema modeline included, so
+		// every writer scaffolds editor support the way `mox init` does.
+		fresh = true
 	default:
 		return fmt.Errorf("read %s: %w", path, err)
 	}
@@ -378,14 +384,14 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 				return fmt.Errorf("config already has session %q (use --force to overwrite)", name)
 			}
 			sessionsMap.Content[i+1] = &sessNode
-			return writeYAMLNode(path, &root)
+			return writeYAMLNode(path, &root, false)
 		}
 	}
 	sessionsMap.Content = append(sessionsMap.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Value: name},
 		&sessNode,
 	)
-	return writeYAMLNode(path, &root)
+	return writeYAMLNode(path, &root, fresh)
 }
 
 // findOrCreateMapKey returns the value Node for a given key in a MappingNode,
@@ -404,11 +410,17 @@ func findOrCreateMapKey(m *yaml.Node, key string) *yaml.Node {
 	return v
 }
 
-func writeYAMLNode(path string, node *yaml.Node) error {
+// writeYAMLNode writes the config document; modeline prepends the
+// yaml-language-server schema comment (for brand-new files only — an
+// existing file's header is the user's).
+func writeYAMLNode(path string, node *yaml.Node, modeline bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	var buf bytes.Buffer
+	if modeline {
+		buf.WriteString("# yaml-language-server: $schema=" + config.SchemaURL + "\n\n")
+	}
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(4)
 	if err := enc.Encode(node); err != nil {

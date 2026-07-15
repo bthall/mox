@@ -7,7 +7,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/bthall/mox/internal/config"
 	"github.com/bthall/mox/internal/session"
@@ -35,16 +34,25 @@ Non-interactive alternative: 'mox new ... --save'.`,
 }
 
 func runAdd(cmd *cobra.Command, args []string) error {
+	// A broken config aborts before any typing: running the wizard without
+	// the real session map would disable collision checks and fail only at
+	// save time, losing the user's input.
+	gopts := optsFromContext(cmd.Context())
+	path, local := config.EffectivePath(gopts.configPath)
+	cfg := &config.Config{Sessions: map[string]*config.Session{}}
+	if config.Exists(path) {
+		loaded, err := loadConfigAt(path)
+		if err != nil {
+			return fmt.Errorf("fix the config before adding to it: %w", err)
+		}
+		cfg = loaded
+	}
+
 	stdin, ok := cmd.InOrStdin().(*os.File)
-	if !ok || !term.IsTerminal(int(stdin.Fd())) {
+	if !ok || !isTerminal(stdin) {
 		return errors.New("mox add is interactive and needs a terminal; use 'mox new ... --save' or 'mox edit' instead")
 	}
 
-	gopts := optsFromContext(cmd.Context())
-	cfg, _ := tryLoadConfig(gopts.configPath)
-	if cfg == nil {
-		cfg = &config.Config{Sessions: map[string]*config.Session{}}
-	}
 	clusters, _ := loadClusterssh() // missing file is fine
 
 	prefill := ""
@@ -66,7 +74,6 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("built session is invalid: %w", err)
 	}
 
-	path, local := config.EffectivePath(gopts.configPath)
 	if local {
 		fmt.Fprintf(cmd.ErrOrStderr(), "mox: saving into ./%s\n", config.LocalConfigName)
 	}
@@ -79,11 +86,11 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	saved, err := loadConfigAt(path)
-	if err != nil {
-		return fmt.Errorf("reload config after save: %w", err)
-	}
-	mgr, err := session.NewManager(saved, loggerFromContext(cmd.Context()))
+	// The wizard's session is self-contained (hosts pre-expanded, no
+	// cross-session references), so start it from memory instead of
+	// re-reading the file we just wrote.
+	built := &config.Config{Sessions: map[string]*config.Session{res.name: res.sess}}
+	mgr, err := session.NewManager(built, loggerFromContext(cmd.Context()))
 	if err != nil {
 		return err
 	}
