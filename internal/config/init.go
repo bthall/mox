@@ -16,6 +16,11 @@ const configFileMode os.FileMode = 0o600
 // configDirMode mirrors the standard XDG config directory permissions.
 const configDirMode os.FileMode = 0o755
 
+// SchemaURL is the published JSON Schema for the config format. Scaffolded
+// configs start with a yaml-language-server modeline pointing here so
+// LSP-aware editors offer completion and validation while editing.
+const SchemaURL = "https://raw.githubusercontent.com/bthall/mox/main/schema/mox.schema.json"
+
 // exampleConfig is the configuration scaffolded by `mox init`.
 func exampleConfig() *Config {
 	return &Config{
@@ -69,6 +74,7 @@ func Init(force bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal default config: %w", err)
 	}
+	data = append([]byte("# yaml-language-server: $schema="+SchemaURL+"\n\n"), data...)
 
 	if err := os.WriteFile(configPath, data, configFileMode); err != nil {
 		return "", fmt.Errorf("write %s: %w", configPath, err)
