@@ -113,6 +113,7 @@ and panes.`,
 	rootCmd.AddCommand(newConfigCommand())
 	rootCmd.AddCommand(newNewCommand())
 	rootCmd.AddCommand(newImportCommand())
+	rootCmd.AddCommand(newAddCommand())
 
 	return rootCmd
 }
