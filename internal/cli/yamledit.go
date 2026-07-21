@@ -53,7 +53,9 @@ func setMapValue(m *yaml.Node, key string, val *yaml.Node) bool {
 }
 
 // renameMapKey renames key in place — position and attached comments
-// survive; reports whether key existed.
+// survive; reports whether key existed. The caller must ensure newKey is
+// not already present: renaming onto an existing key produces a duplicate
+// mapping that yaml.v3 refuses to decode.
 func renameMapKey(m *yaml.Node, oldKey, newKey string) bool {
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		if m.Content[i].Value == oldKey {
@@ -76,10 +78,23 @@ func removeMapKey(m *yaml.Node, key string) bool {
 }
 
 // writeYAMLNode writes the config document atomically (temp file in the same
-// directory, then rename) so a crash can never leave a torn config; modeline
-// prepends the yaml-language-server schema comment (for brand-new files only
-// — an existing file's header is the user's).
+// directory, then rename) so an interrupted write can't leave a torn config
+// (no fsync — a power loss may still lose the update, an acceptable
+// trade-off for a config tool). A symlinked config (dotfiles setups) is
+// written through (the symlink is preserved), and an existing file keeps its
+// permissions. modeline prepends the yaml-language-server schema comment
+// (for brand-new files only — an existing file's header is the user's).
 func writeYAMLNode(path string, node *yaml.Node, modeline bool) error {
+	// A rename replaces the path itself; a symlinked config (dotfiles setups)
+	// must be written through, and an existing file keeps its permissions.
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	mode := os.FileMode(0o600)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
+
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -103,7 +118,7 @@ func writeYAMLNode(path string, node *yaml.Node, modeline bool) error {
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName) //nolint:errcheck // no-op after successful rename
-	if err := tmp.Chmod(0o600); err != nil {
+	if err := tmp.Chmod(mode); err != nil {
 		tmp.Close() //nolint:errcheck,gosec // best-effort cleanup
 		return err
 	}
