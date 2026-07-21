@@ -121,3 +121,41 @@ func TestFieldSettersAndCycles(t *testing.T) {
 		t.Fatal("hosts list accessor not live")
 	}
 }
+
+func TestFieldClosuresUsePassedSession(t *testing.T) {
+	a := &config.Session{Hosts: []string{"a1"}}
+	b := &config.Session{Hosts: []string{"b1"}}
+	fields := sessionFields(a)
+
+	if err := fieldByKey(t, fields, "connect").set(b, "ssh -J jump {{host}}"); err != nil {
+		t.Fatal(err)
+	}
+	if b.Connect == "" || a.Connect != "" {
+		t.Fatalf("set bound to wrong session: a=%q b=%q", a.Connect, b.Connect)
+	}
+	fieldByKey(t, fields, "sync").cycle(b)
+	if !b.Sync || a.Sync {
+		t.Fatal("cycle bound to wrong session")
+	}
+	if got := fieldByKey(t, fields, "hosts").display(b); got != "b1" {
+		t.Fatalf("display bound to wrong session: %q", got)
+	}
+	if items := fieldByKey(t, fields, "hosts").list(b); (*items)[0] != "b1" {
+		t.Fatal("list bound to wrong session")
+	}
+}
+
+func TestFieldKinds(t *testing.T) {
+	fields := sessionFields(&config.Session{Hosts: []string{"h1"}})
+	want := map[string]fieldKind{
+		"hosts": fieldList, "connect": fieldText, "ssh_user": fieldText,
+		"sync": fieldCycle, "arrange": fieldCycle, "hold": fieldCycle,
+		"retry": fieldNumber, "root": fieldText, "pre": fieldList,
+		"commands": fieldList, "on_start": fieldList, "on_stop": fieldList,
+	}
+	for key, k := range want {
+		if got := fieldByKey(t, fields, key).kind; got != k {
+			t.Errorf("field %q kind = %v, want %v", key, got, k)
+		}
+	}
+}
