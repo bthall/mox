@@ -21,8 +21,8 @@ import (
 
 // Diff/error styles; everything else reuses the picker's pk* palette.
 var (
-	pkDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) //nolint:unused // wired in by Task 10
-	pkDiffDel = lipgloss.NewStyle().Foreground(lipgloss.Color("1")) //nolint:unused // wired in by Task 10
+	pkDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	pkDiffDel = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	pkErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 )
 
@@ -100,8 +100,8 @@ type editorModel struct {
 	inputErr     string
 
 	listEd  listEditState
-	diff    []diffLine //nolint:unused // wired in by Task 10
-	diffOff int        //nolint:unused // wired in by Task 10
+	diff    []diffLine
+	diffOff int
 	pending pendingAction
 	wizard  *addModel
 
@@ -214,6 +214,10 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateInput(msg)
 		case modeConfirmDelete:
 			return m.updateConfirmDelete(msg)
+		case modeDiff:
+			return m.updateDiff(msg)
+		case modeStale:
+			return m.updateStale(msg)
 		case modeGuard:
 			return m.updateGuard(msg)
 		}
@@ -296,6 +300,8 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.input = nil
 		m.inputErr = ""
 		return m, nil
+	case "s":
+		return m.startSave()
 	case "D":
 		if m.draft == nil {
 			return m, nil
@@ -572,6 +578,84 @@ func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// startSave validates the draft and opens the diff preview.
+func (m editorModel) startSave() (tea.Model, tea.Cmd) {
+	if !m.isDirty() {
+		m.status = "no changes to save"
+		m.statusErr = false
+		return m, nil
+	}
+	if err := m.st.nextConfig(m.draft).Validate(); err != nil {
+		m.status = err.Error()
+		m.statusErr = true
+		m.jumpToErrorField(err)
+		return m, nil
+	}
+	m.diff = draftDiff(m.st.cfg, m.draft)
+	m.diffOff = 0
+	m.mode = modeDiff
+	return m, nil
+}
+
+// updateDiff is the save-preview modal: Enter writes, Esc backs out.
+func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc:
+		m.mode = modeBrowse
+		return m, nil
+	case tea.KeyEnter:
+		m, _ = m.finishSave()
+		return m, nil
+	case tea.KeyUp:
+		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))
+		return m, nil
+	case tea.KeyDown:
+		m.diffOff = clampChoice(m.diffOff+1, len(m.diff))
+		return m, nil
+	}
+	switch string(msg.Runes) {
+	case "k":
+		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))
+	case "j":
+		m.diffOff = clampChoice(m.diffOff+1, len(m.diff))
+	}
+	return m, nil
+}
+
+// updateStale is the refused-save view: R reloads from disk.
+func (m editorModel) updateStale(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc:
+		m.mode = modeBrowse
+		return m, nil
+	}
+	if string(msg.Runes) == "R" {
+		st, err := loadEditorState(m.st.path)
+		if err != nil {
+			m.mode = modeBrowse
+			m.status = "reload failed: " + err.Error()
+			m.statusErr = true
+			return m, nil
+		}
+		m.st = st
+		m.draft = nil
+		m.pending = pendingAction{}
+		m.refilter()
+		if m.sel > len(m.visible)-1 {
+			m.sel = len(m.visible) - 1
+		}
+		m.resetDraft()
+		m.mode = modeBrowse
+		m.status = "reloaded from disk"
+		m.statusErr = false
+	}
+	return m, nil
+}
+
 // requestSelect moves the list selection, interposing the guard when the
 // active draft has unsaved changes.
 func (m editorModel) requestSelect(idx int) (tea.Model, tea.Cmd) {
@@ -679,7 +763,11 @@ func (m editorModel) finishSave() (editorModel, bool) {
 	m.keepVisible()
 	m.resetDraft()
 	m.mode = modeBrowse
-	m.status = "saved " + d.name + " ✓"
+	verb := "saved "
+	if d.deleted {
+		verb = "deleted "
+	}
+	m.status = verb + d.name + " ✓"
 	if info, ok := m.running[d.name]; ok && info.Running {
 		m.status += " — session is running; changes apply on next build"
 	}
@@ -691,12 +779,17 @@ func (m editorModel) finishSave() (editorModel, bool) {
 // names, when one matches (best-effort substring match on field keys).
 func (m *editorModel) jumpToErrorField(err error) {
 	msg := err.Error()
+	bestIdx := -1
+	bestPos := len(msg)
 	for i, f := range m.fields {
-		if strings.Contains(msg, f.key) {
-			m.fieldSel = i
-			m.pane = paneForm
-			return
+		if pos := strings.Index(msg, f.key); pos >= 0 && pos < bestPos {
+			bestIdx = i
+			bestPos = pos
 		}
+	}
+	if bestIdx >= 0 {
+		m.fieldSel = bestIdx
+		m.pane = paneForm
 	}
 }
 
@@ -734,6 +827,52 @@ func (m editorModel) guardLines(w int) []string {
 		"  " + pkSelected.Render("s") + pkDim.Render("  save them, then continue"),
 		"  " + pkSelected.Render("d") + pkDim.Render("  discard them, then continue"),
 		"  " + pkSelected.Render("esc") + pkDim.Render("  stay here"),
+	}
+}
+
+// diffModalLines renders the colorized save preview. The diff shows both
+// sides in canonical (re-encoded) form — a semantic preview, not a byte
+// diff of the file; unchanged context lines may differ in formatting from
+// what is on disk.
+func (m editorModel) diffModalLines(w, h int) []string {
+	title := fmt.Sprintf("save %q — changes shown in canonical form:", m.draft.name)
+	if m.draft.deleted {
+		title = fmt.Sprintf("delete %q — review the change:", m.draft.name)
+	}
+	lines := []string{pkDim.Render(truncate(title, w)), ""}
+	rows := h - 3
+	if rows < 1 {
+		rows = 1
+	}
+	end := m.diffOff + rows
+	if end > len(m.diff) {
+		end = len(m.diff)
+	}
+	for _, dl := range m.diff[m.diffOff:end] {
+		switch dl.kind {
+		case diffAdd:
+			lines = append(lines, pkDiffAdd.Render(truncate("+ "+dl.text, w)))
+		case diffDel:
+			lines = append(lines, pkDiffDel.Render(truncate("- "+dl.text, w)))
+		default:
+			lines = append(lines, pkDim.Render(truncate("  "+dl.text, w)))
+		}
+	}
+	if end < len(m.diff) {
+		lines = append(lines, pkDim.Render(fmt.Sprintf("  … %d more (j/k to scroll)", len(m.diff)-end)))
+	}
+	return lines
+}
+
+// staleLines renders the refused-save explanation.
+func (m editorModel) staleLines(w int) []string {
+	return []string{
+		pkErr.Render("save refused: the config file changed on disk"),
+		"",
+		pkDim.Render(truncate("Something else wrote "+m.st.path+" after the editor loaded it.", w)),
+		"",
+		"  " + pkSelected.Render("R") + pkDim.Render("    reload from disk (discards your unsaved changes)"),
+		"  " + pkSelected.Render("esc") + pkDim.Render("  go back (your draft is kept, but saving stays blocked)"),
 	}
 }
 
@@ -909,6 +1048,10 @@ func (m editorModel) rightLines(w, h int) []string {
 		return m.confirmDeleteLines(w)
 	case modeGuard:
 		return m.guardLines(w)
+	case modeDiff:
+		return m.diffModalLines(w, h)
+	case modeStale:
+		return m.staleLines(w)
 	}
 	return m.formLines(w, h)
 }

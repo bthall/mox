@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -681,5 +682,156 @@ func TestEditorGuardProtectsAddedDraft(t *testing.T) {
 	data, _ := os.ReadFile(m.st.path)
 	if !strings.Contains(string(data), "copy1") {
 		t.Fatal("added draft not in the file after guard save")
+	}
+}
+
+func TestEditorSaveNoChanges(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "s")
+	if m.mode != modeBrowse || !strings.Contains(m.status, "no changes") {
+		t.Fatalf("mode=%v status=%q", m.mode, m.status)
+	}
+}
+
+func TestEditorSaveDiffAndWrite(t *testing.T) {
+	m := dirtyModel(t) // solo root → /tmp/solox
+	m = edRunes(t, m, "s")
+	if m.mode != modeDiff {
+		t.Fatalf("s did not open the diff: mode=%v status=%q", m.mode, m.status)
+	}
+	out := m.View()
+	if !strings.Contains(out, "/tmp/solox") {
+		t.Fatalf("diff view missing new value:\n%s", out)
+	}
+
+	// esc backs out, draft intact
+	m = edType(t, m, tea.KeyEsc)
+	if m.mode != modeBrowse || !m.isDirty() {
+		t.Fatal("esc from diff lost the draft")
+	}
+
+	// confirm writes
+	m = edRunes(t, m, "s")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeBrowse || !strings.Contains(m.status, "saved solo") {
+		t.Fatalf("after confirm: mode=%v status=%q", m.mode, m.status)
+	}
+	data, _ := os.ReadFile(m.st.path)
+	if !strings.Contains(string(data), "/tmp/solox") {
+		t.Fatalf("file not written:\n%s", data)
+	}
+	if m.isDirty() {
+		t.Fatal("draft still dirty after save")
+	}
+}
+
+func TestEditorSaveValidationJumpsToField(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // webfarm (has hosts)
+	// connect + ssh_user together is a cross-field validation error
+	m = focusField(t, m, "connect")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "ssh -J jump {{host}}")
+	m = edType(t, m, tea.KeyEnter)
+	m = focusField(t, m, "ssh_user")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "root")
+	m = edType(t, m, tea.KeyEnter)
+
+	m = edRunes(t, m, "s")
+	if m.mode == modeDiff {
+		t.Fatal("invalid draft reached the diff preview")
+	}
+	if !m.statusErr {
+		t.Fatal("no validation error surfaced")
+	}
+	if m.fields[m.fieldSel].key != "ssh_user" {
+		t.Fatalf("cursor on %q, want ssh_user", m.fields[m.fieldSel].key)
+	}
+}
+
+func TestEditorGuardSaveValidationFailure(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // webfarm
+	m = focusField(t, m, "connect")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "ssh -J jump {{host}}")
+	m = edType(t, m, tea.KeyEnter)
+	m = focusField(t, m, "ssh_user")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "root")
+	m = edType(t, m, tea.KeyEnter) // draft dirty AND invalid
+	m.pane = paneList
+	m = edRunes(t, m, "k") // guard
+	if m.mode != modeGuard {
+		t.Fatal("no guard on dirty switch")
+	}
+	m = edRunes(t, m, "s") // guard-save must fail validation cleanly
+	if m.mode != modeBrowse || !m.statusErr {
+		t.Fatalf("guard-save failure: mode=%v statusErr=%v", m.mode, m.statusErr)
+	}
+	if m.selectedName() != "webfarm" {
+		t.Fatal("selection moved despite failed save")
+	}
+	if !m.isDirty() {
+		t.Fatal("draft lost on failed guard-save")
+	}
+}
+
+func TestEditorSaveStaleThenReload(t *testing.T) {
+	m := dirtyModel(t)
+	// external change after load
+	future := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(m.st.path, future, future); err != nil {
+		t.Fatal(err)
+	}
+	m = edRunes(t, m, "s")
+	m = edType(t, m, tea.KeyEnter) // confirm diff → hits staleness
+	if m.mode != modeStale {
+		t.Fatalf("mode=%v, want modeStale", m.mode)
+	}
+	// stale view renders an explanation
+	if !strings.Contains(m.View(), "changed on disk") {
+		t.Fatal("stale view missing explanation")
+	}
+	// R reloads from disk, dropping the draft
+	m = edRunes(t, m, "R")
+	if m.mode != modeBrowse || m.isDirty() {
+		t.Fatal("reload did not produce a clean editor")
+	}
+	if m.st.cfg.Sessions["solo"].Root != "/tmp/solo" {
+		t.Fatal("reload did not restore disk state")
+	}
+}
+
+func TestEditorSaveRenameAndDelete(t *testing.T) {
+	m := testEditorModel(t) // solo selected
+	m = edRunes(t, m, "r")
+	m.input = []rune("lonely")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "s")
+	m = edType(t, m, tea.KeyEnter)
+	if m.selectedName() != "lonely" {
+		t.Fatalf("selection after rename-save = %q", m.selectedName())
+	}
+	data, _ := os.ReadFile(m.st.path)
+	if !strings.Contains(string(data), "lonely:") || strings.Contains(string(data), "solo:") {
+		t.Fatalf("rename not written:\n%s", data)
+	}
+
+	// now delete it
+	m = edRunes(t, m, "D")
+	m = edRunes(t, m, "y")
+	m = edRunes(t, m, "s")
+	m = edType(t, m, tea.KeyEnter)
+	data, _ = os.ReadFile(m.st.path)
+	if strings.Contains(string(data), "lonely:") {
+		t.Fatalf("delete not written:\n%s", data)
+	}
+	if m.selectedName() != "webfarm" {
+		t.Fatalf("selection after delete-save = %q", m.selectedName())
+	}
+	if !strings.Contains(m.status, "deleted lonely") {
+		t.Fatalf("delete save status = %q, want deleted wording", m.status)
 	}
 }
