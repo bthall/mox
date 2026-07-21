@@ -753,6 +753,11 @@ func (m editorModel) continuePending() (tea.Model, tea.Cmd) {
 // Its "save + start now" choice behaves like "save to config" in embedded
 // mode (the draft still goes through s → diff → write).
 func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		// Hard-quit like every other sub-mode — the wizard's own ctrl+c
+		// handling would only cancel back into the editor.
+		return m, tea.Quit
+	}
 	nm, _ := m.wizard.Update(msg) // swallow the wizard's tea.Quit
 	aw, ok := nm.(addModel)
 	if !ok {

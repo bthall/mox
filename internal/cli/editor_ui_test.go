@@ -947,3 +947,17 @@ func TestEditorWizardOverwriteExisting(t *testing.T) {
 		t.Fatal("overwrite draft should be dirty (empty session != original)")
 	}
 }
+
+// TestEditorWizardCtrlCQuits pins that ctrl+c inside the embedded wizard
+// hard-quits the whole editor, matching every other sub-mode.
+func TestEditorWizardCtrlCQuits(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "a")
+	if m.mode != modeWizard {
+		t.Fatal("wizard did not open")
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if !isQuit(cmd) {
+		t.Fatal("ctrl+c inside the wizard did not quit the editor")
+	}
+}
