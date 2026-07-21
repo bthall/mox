@@ -19,8 +19,8 @@ import (
 
 // Diff/error styles; everything else reuses the picker's pk* palette.
 var (
-	pkDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	pkDiffDel = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	pkDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) //nolint:unused // wired in by Task 10
+	pkDiffDel = lipgloss.NewStyle().Foreground(lipgloss.Color("1")) //nolint:unused // wired in by Task 10
 	pkErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 )
 
@@ -46,35 +46,35 @@ const (
 	paneForm
 )
 
-type inputPurpose int
+type inputPurpose int //nolint:unused // wired in by Task 8
 
 const (
-	inputRename inputPurpose = iota
-	inputDuplicate
+	inputRename    inputPurpose = iota //nolint:unused // wired in by Task 8
+	inputDuplicate                     //nolint:unused // wired in by Task 8
 )
 
 // pendingAction is what a guard resolution continues with.
-type pendingKind int
+type pendingKind int //nolint:unused // wired in by Task 9
 
 const (
-	pendingNone   pendingKind = iota
-	pendingSelect             // move list selection to target
-	pendingQuit
+	pendingNone   pendingKind = iota //nolint:unused // wired in by Task 9
+	pendingSelect                    //nolint:unused // wired in by Task 9 (move list selection to target)
+	pendingQuit                      //nolint:unused // wired in by Task 9
 )
 
-type pendingAction struct {
+type pendingAction struct { //nolint:unused // wired in by Task 9
 	kind   pendingKind
 	target int
 }
 
 // listEditState is the list sub-editor (hosts, commands, pre, hooks).
 type listEditState struct {
-	field   int // index into fields
-	sel     int
-	editing bool // inline input active
-	adding  bool // editing a new entry (vs replacing sel)
-	input   []rune
-	errMsg  string
+	field   int    //nolint:unused // wired in by Task 7
+	sel     int    //nolint:unused // wired in by Task 7
+	editing bool   // inline input active
+	adding  bool   //nolint:unused // wired in by Task 7 (editing a new entry vs replacing sel)
+	input   []rune //nolint:unused // wired in by Task 7
+	errMsg  string //nolint:unused // wired in by Task 7
 }
 
 type editorModel struct {
@@ -93,14 +93,14 @@ type editorModel struct {
 	pane     editorPane
 
 	mode         editorMode
-	input        []rune // shared buffer for modeFieldEdit / modeInput
-	inputPurpose inputPurpose
-	inputErr     string
+	input        []rune       //nolint:unused // wired in by Task 6 (shared buffer for modeFieldEdit / modeInput)
+	inputPurpose inputPurpose //nolint:unused // wired in by Task 8
+	inputErr     string       //nolint:unused // wired in by Task 6
 
 	listEd  listEditState
-	diff    []diffLine
-	diffOff int
-	pending pendingAction
+	diff    []diffLine    //nolint:unused // wired in by Task 10
+	diffOff int           //nolint:unused // wired in by Task 10
+	pending pendingAction //nolint:unused // wired in by Task 9
 	wizard  *addModel
 
 	status    string
@@ -135,7 +135,7 @@ func (m editorModel) Init() tea.Cmd { return nil }
 
 // displayNames is the list-pane order: sorted config names plus a pending
 // added draft (wizard / duplicate) that exists only in the draft.
-func (m *editorModel) displayNames() []string {
+func (m editorModel) displayNames() []string {
 	names := m.st.cfg.ListSessionNames()
 	if m.draft != nil && m.draft.added {
 		names = append(names, m.draft.name)
@@ -160,6 +160,10 @@ func (m *editorModel) refilter() {
 	if m.sel < 0 {
 		m.sel = 0
 	}
+	if m.offset > m.sel {
+		m.offset = m.sel
+	}
+	m.keepVisible()
 }
 
 func (m *editorModel) selectedName() string {
@@ -354,7 +358,7 @@ func (m editorModel) View() string {
 		if w < 24 {
 			w = 24
 		}
-		if m.pane == paneList && m.mode == modeBrowse || m.mode == modeFilter {
+		if (m.pane == paneList && m.mode == modeBrowse) || m.mode == modeFilter {
 			return panel(m.listTitle(), m.footer(), m.listLines(w-4, h-2), w, h) + "\n" + m.statusLine()
 		}
 		return panel(m.formTitle(), m.footer(), m.rightLines(w-4, h-2), w, h) + "\n" + m.statusLine()
@@ -374,18 +378,9 @@ func (m editorModel) View() string {
 
 func (m editorModel) listTitle() string {
 	if len(m.filter) > 0 || m.mode == modeFilter {
-		return fmt.Sprintf("sessions · %d/%d", len(m.visible), len(m.displayNamesView()))
+		return fmt.Sprintf("sessions · %d/%d", len(m.visible), len(m.displayNames()))
 	}
 	return "sessions"
-}
-
-// displayNamesView is displayNames for a value receiver (View methods).
-func (m editorModel) displayNamesView() []string {
-	names := m.st.cfg.ListSessionNames()
-	if m.draft != nil && m.draft.added {
-		names = append(names, m.draft.name)
-	}
-	return names
 }
 
 func (m editorModel) formTitle() string {
@@ -445,6 +440,12 @@ func (m editorModel) listLines(w, h int) []string {
 	rows := h - 2
 	if rows < 1 {
 		rows = 1
+	}
+	if len(m.visible) > m.offset+rows {
+		rows-- // reserve the last line for the "… N more" indicator
+		if rows < 1 {
+			rows = 1
+		}
 	}
 	end := m.offset + rows
 	if end > len(m.visible) {

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -151,5 +152,56 @@ func TestEditorNarrowView(t *testing.T) {
 	out = m.View()
 	if !strings.Contains(out, "connect") {
 		t.Fatalf("narrow view after tab missing form:\n%s", out)
+	}
+}
+
+func TestEditorEmptyFilterAndNavGuards(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "/")
+	m = edRunes(t, m, "zzz")
+	if len(m.visible) != 0 {
+		t.Fatalf("visible = %v, want none", m.visible)
+	}
+	m = edType(t, m, tea.KeyEnter) // back to browse with empty filter result
+	m = edRunes(t, m, "j")         // must not panic
+	m = edRunes(t, m, "k")
+	if !strings.Contains(m.View(), "no match") {
+		t.Fatal("empty-match placeholder missing")
+	}
+}
+
+func TestEditorScrolledFilterShowsSelection(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("sessions:\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "    sess%02d:\n        root: /tmp\n", i)
+	}
+	st := testEditorState(t, b.String())
+	m := newEditorModel(st, nil, nil, "")
+	m.width, m.height = 100, 20
+	for i := 0; i < 39; i++ {
+		m = edRunes(t, m, "j") // scroll to the bottom
+	}
+	m = edRunes(t, m, "/")
+	m = edRunes(t, m, "sess03")
+	if len(m.visible) != 1 {
+		t.Fatalf("visible = %v", m.visible)
+	}
+	if !strings.Contains(m.View(), "sess03") {
+		t.Fatal("filtered selection not visible after scrolling (stale offset)")
+	}
+}
+
+func TestEditorOverflowIndicator(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("sessions:\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "    sess%02d:\n        root: /tmp\n", i)
+	}
+	st := testEditorState(t, b.String())
+	m := newEditorModel(st, nil, nil, "")
+	m.width, m.height = 100, 20
+	if !strings.Contains(m.View(), "more") {
+		t.Fatal("overflow indicator not rendered with 40 sessions in a 20-row terminal")
 	}
 }
