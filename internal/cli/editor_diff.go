@@ -37,71 +37,7 @@ func sessionBlock(name string, sess *config.Session) []string {
 	if len(lines) > 0 && strings.HasPrefix(lines[0], "sessions:") {
 		lines = lines[1:]
 	}
-	// Collapse block-style lists to flow style to avoid "-" markers in diffs.
-	lines = collapseListsToFlow(lines)
 	return lines
-}
-
-// collapseListsToFlow converts YAML block-style lists to flow style.
-// Converts:
-//
-//	key:
-//	    - item1
-//	    - item2
-//
-// To:
-//
-//	key: [item1, item2]
-func collapseListsToFlow(lines []string) []string {
-	var out []string
-	i := 0
-	for i < len(lines) {
-		line := lines[i]
-		// Check if this line ends with ":" (potential list key)
-		if strings.HasSuffix(strings.TrimRight(line, " "), ":") {
-			// Check if next line is a list item (starts with indent and "- ")
-			if i+1 < len(lines) && isListItem(lines[i+1]) {
-				// Collect all list items
-				keyLine := line
-				keyIndent := getIndent(line)
-				var items []string
-				j := i + 1
-				for j < len(lines) && isListItem(lines[j]) && getIndent(lines[j]) > keyIndent {
-					item := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[j]), "- "))
-					items = append(items, item)
-					j++
-				}
-				// Add the key with flow-style list
-				if len(items) > 0 {
-					out = append(out, keyLine[:len(keyLine)-1]+" ["+strings.Join(items, ", ")+"]")
-					i = j
-					continue
-				}
-			}
-		}
-		out = append(out, line)
-		i++
-	}
-	return out
-}
-
-func isListItem(line string) bool {
-	trimmed := strings.TrimLeft(line, " \t")
-	return strings.HasPrefix(trimmed, "- ")
-}
-
-func getIndent(line string) int {
-	count := 0
-	for _, ch := range line {
-		if ch == ' ' {
-			count++
-		} else if ch == '\t' {
-			count += 4
-		} else {
-			break
-		}
-	}
-	return count
 }
 
 // diffLines computes a line diff of a → b via longest common subsequence.

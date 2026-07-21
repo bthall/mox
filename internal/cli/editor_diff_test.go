@@ -24,6 +24,26 @@ func renderDiffForTest(dls []diffLine) string {
 	return b.String()
 }
 
+// diffHasKind checks if a diff contains any line of the given kind.
+func diffHasKind(dls []diffLine, k diffKind) bool {
+	for _, dl := range dls {
+		if dl.kind == k {
+			return true
+		}
+	}
+	return false
+}
+
+// diffHasKindWithText checks if a diff contains a line of the given kind that contains text.
+func diffHasKindWithText(dls []diffLine, k diffKind, text string) bool {
+	for _, dl := range dls {
+		if dl.kind == k && strings.Contains(dl.text, text) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestDiffLines(t *testing.T) {
 	got := renderDiffForTest(diffLines(
 		[]string{"a", "b", "c"},
@@ -48,37 +68,41 @@ func TestDraftDiffShapes(t *testing.T) {
 	// edit: changed lines marked, unchanged lines context
 	d := newDraft(st.cfg, "webfarm")
 	d.sess.Sync = false
-	out := renderDiffForTest(draftDiff(st.cfg, d))
-	if !strings.Contains(out, "-") || !strings.Contains(out, "sync") {
-		t.Fatalf("edit diff missing removal of sync line:\n%s", out)
+	dls := draftDiff(st.cfg, d)
+	if !diffHasKindWithText(dls, diffDel, "sync") {
+		t.Fatalf("edit diff missing removal of sync line:\n%s", renderDiffForTest(dls))
 	}
 
 	// delete: everything removed
 	del := newDraft(st.cfg, "solo")
 	del.deleted = true
-	out = renderDiffForTest(draftDiff(st.cfg, del))
-	if strings.Contains(out, "+") {
-		t.Fatalf("delete diff has additions:\n%s", out)
+	dls = draftDiff(st.cfg, del)
+	if diffHasKind(dls, diffAdd) {
+		t.Fatalf("delete diff has additions:\n%s", renderDiffForTest(dls))
 	}
-	if !strings.Contains(out, "-") {
-		t.Fatalf("delete diff has no removals:\n%s", out)
+	if !diffHasKind(dls, diffDel) {
+		t.Fatalf("delete diff has no removals:\n%s", renderDiffForTest(dls))
 	}
 
 	// add: everything added
 	add := &sessionDraft{name: "extra", added: true, sess: &config.Session{Hosts: []string{"h1"}}}
-	out = renderDiffForTest(draftDiff(st.cfg, add))
-	if strings.Contains(out, "-") {
-		t.Fatalf("add diff has removals:\n%s", out)
+	dls = draftDiff(st.cfg, add)
+	if diffHasKind(dls, diffDel) {
+		t.Fatalf("add diff has removals:\n%s", renderDiffForTest(dls))
 	}
-	if !strings.Contains(out, "+") || !strings.Contains(out, "extra") {
-		t.Fatalf("add diff missing new block:\n%s", out)
+	if !diffHasKind(dls, diffAdd) || !diffHasKindWithText(dls, diffAdd, "extra") {
+		t.Fatalf("add diff missing new block:\n%s", renderDiffForTest(dls))
+	}
+	// Assert the preview is truthful: YAML lists use block style with "-"
+	if !diffHasKindWithText(dls, diffAdd, "- h1") {
+		t.Fatalf("add diff should show block-style list marker (- h1):\n%s", renderDiffForTest(dls))
 	}
 
 	// rename: old key removed, new key added
 	rn := newDraft(st.cfg, "webfarm")
 	rn.name = "farm"
-	out = renderDiffForTest(draftDiff(st.cfg, rn))
-	if !strings.Contains(out, "-") || !strings.Contains(out, "+") {
-		t.Fatalf("rename diff missing both sides:\n%s", out)
+	dls = draftDiff(st.cfg, rn)
+	if !diffHasKind(dls, diffDel) || !diffHasKind(dls, diffAdd) {
+		t.Fatalf("rename diff missing both sides:\n%s", renderDiffForTest(dls))
 	}
 }
