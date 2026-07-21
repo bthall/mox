@@ -8,6 +8,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"unicode"
 
@@ -68,6 +69,9 @@ type pendingAction struct {
 	kind   pendingKind
 	target int
 }
+
+// editorReturnMsg arrives when the external $EDITOR process exits.
+type editorReturnMsg struct{ err error }
 
 // listEditState is the list sub-editor (hosts, commands, pre, hooks).
 type listEditState struct {
@@ -205,6 +209,29 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.wizard = &aw
 			}
 		}
+		return m, nil
+	case editorReturnMsg:
+		if msg.err != nil {
+			m.status = "editor: " + msg.err.Error()
+			m.statusErr = true
+			return m, nil
+		}
+		st, err := loadEditorState(m.st.path)
+		if err != nil {
+			// keep the last-good state; the user can fix the file and retry
+			m.status = "config now invalid — fix it and press o again: " + err.Error()
+			m.statusErr = true
+			return m, nil
+		}
+		m.st = st
+		m.draft = nil
+		m.refilter()
+		if m.sel > len(m.visible)-1 {
+			m.sel = len(m.visible) - 1
+		}
+		m.resetDraft()
+		m.status = "reloaded after external edit"
+		m.statusErr = false
 		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
@@ -345,6 +372,21 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.mode = modeConfirmDelete
 		return m, nil
+	case "o":
+		if m.isDirty() {
+			m.status = "unsaved changes — save (s) or discard (D) before opening $EDITOR"
+			m.statusErr = true
+			return m, nil
+		}
+		editor := editorCommand()
+		if editor == "" {
+			m.status = "no editor found: set $VISUAL or $EDITOR"
+			m.statusErr = true
+			return m, nil
+		}
+		parts := strings.Fields(editor)
+		ed := exec.Command(parts[0], append(parts[1:], m.st.path)...) //nolint:gosec // the user's own $EDITOR choice
+		return m, tea.ExecProcess(ed, func(err error) tea.Msg { return editorReturnMsg{err: err} })
 	}
 	return m, nil
 }

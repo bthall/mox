@@ -961,3 +961,73 @@ func TestEditorWizardCtrlCQuits(t *testing.T) {
 		t.Fatal("ctrl+c inside the wizard did not quit the editor")
 	}
 }
+
+func TestEditorOpenExternalEditor(t *testing.T) {
+	t.Setenv("VISUAL", "true") // /usr/bin/true: exits 0 immediately
+	m := testEditorModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	_ = nm.(editorModel)
+	if cmd == nil {
+		t.Fatal("o did not produce an ExecProcess command")
+	}
+}
+
+func TestEditorOpenBlockedWhenDirty(t *testing.T) {
+	t.Setenv("VISUAL", "true")
+	m := dirtyModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = nm.(editorModel)
+	if cmd != nil || !m.statusErr {
+		t.Fatal("o ran despite a dirty draft")
+	}
+}
+
+func TestEditorOpenNoEditorConfigured(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+	t.Setenv("PATH", t.TempDir()) // no vi on PATH either
+	m := testEditorModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = nm.(editorModel)
+	if cmd != nil || !m.statusErr {
+		t.Fatal("o without an editor should set an error status, not a cmd")
+	}
+}
+
+func TestEditorReloadAfterExternalEdit(t *testing.T) {
+	m := testEditorModel(t)
+	// simulate the external editor adding a session
+	extra := "    added-outside:\n        root: /tmp/x\n"
+	data, err := os.ReadFile(m.st.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//nolint:gosec // test-controlled path
+	if err := os.WriteFile(m.st.path, append(data, []byte(extra)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nm, _ := m.Update(editorReturnMsg{})
+	m = nm.(editorModel)
+	if _, ok := m.st.cfg.Sessions["added-outside"]; !ok {
+		t.Fatal("reload after external edit missed the new session")
+	}
+	if !strings.Contains(m.View(), "added-outside") {
+		t.Fatal("list not refreshed after reload")
+	}
+}
+
+func TestEditorReloadSurvivesBrokenExternalEdit(t *testing.T) {
+	m := testEditorModel(t)
+	if err := os.WriteFile(m.st.path, []byte("sessions: [broken\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nm, _ := m.Update(editorReturnMsg{})
+	m = nm.(editorModel)
+	if !m.statusErr {
+		t.Fatal("broken external edit not surfaced")
+	}
+	// old in-memory state survives so the user isn't stranded
+	if len(m.st.cfg.Sessions) != 2 {
+		t.Fatal("editor lost its last-good state")
+	}
+}
