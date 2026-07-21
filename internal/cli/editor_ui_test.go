@@ -426,3 +426,128 @@ func TestEditorCommandsList(t *testing.T) {
 		t.Fatalf("commands = %v", got)
 	}
 }
+
+func TestEditorRename(t *testing.T) {
+	m := testEditorModel(t) // solo selected
+	m = edRunes(t, m, "r")
+	if m.mode != modeInput || m.inputPurpose != inputRename {
+		t.Fatal("r did not open the rename prompt")
+	}
+	// seeded with the current name
+	if string(m.input) != "solo" {
+		t.Fatalf("rename seed = %q", m.input)
+	}
+	m.input = nil
+	m = edRunes(t, m, "lonely")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeBrowse || m.draft.name != "lonely" || m.draft.orig != "solo" {
+		t.Fatalf("rename draft = %+v", m.draft)
+	}
+	if !m.isDirty() {
+		t.Fatal("rename did not dirty the draft")
+	}
+}
+
+func TestEditorRenameRejectsCollisionAndBadNames(t *testing.T) {
+	m := testEditorModel(t) // solo selected
+	m = edRunes(t, m, "r")
+	m.input = nil
+	m = edRunes(t, m, "webfarm") // exists
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeInput || m.inputErr == "" {
+		t.Fatal("rename accepted a colliding name")
+	}
+	m.input = []rune("bad:name") // reserved character
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeInput || m.inputErr == "" {
+		t.Fatal("rename accepted a reserved character")
+	}
+	// rename back to its own current name is allowed (no-op rename)
+	m.input = []rune("solo")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeBrowse {
+		t.Fatalf("rename to own name rejected: %q", m.inputErr)
+	}
+}
+
+func TestEditorDuplicate(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // webfarm
+	m = edRunes(t, m, "y")
+	if m.mode != modeInput || m.inputPurpose != inputDuplicate {
+		t.Fatal("y did not open the duplicate prompt")
+	}
+	m = edRunes(t, m, "webfarm2")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeBrowse {
+		t.Fatalf("duplicate did not finish: err=%q", m.inputErr)
+	}
+	if m.draft == nil || !m.draft.added || m.draft.name != "webfarm2" {
+		t.Fatalf("duplicate draft = %+v", m.draft)
+	}
+	if got := m.draft.sess.Hosts; len(got) != 2 {
+		t.Fatalf("duplicate did not clone hosts: %v", got)
+	}
+	// the new name shows up in the list and is selected
+	if m.selectedName() != "webfarm2" {
+		t.Fatalf("selected %q, want webfarm2", m.selectedName())
+	}
+	// mutating the copy must not touch the source session
+	m.draft.sess.Hosts[0] = "changed"
+	if m.st.cfg.Sessions["webfarm"].Hosts[0] != "web1" {
+		t.Fatal("duplicate shares memory with the source session")
+	}
+}
+
+func TestEditorDuplicateRejectsExistingNames(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // webfarm
+	m = edRunes(t, m, "y")
+	m = edRunes(t, m, "webfarm") // its own name — still a collision for a copy
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeInput || m.inputErr == "" {
+		t.Fatal("duplicate accepted an existing name")
+	}
+}
+
+func TestEditorDuplicateRequiresCleanDraft(t *testing.T) {
+	m := testEditorModel(t)
+	m = focusField(t, m, "sync")
+	m = edType(t, m, tea.KeySpace) // dirty now
+	m = edRunes(t, m, "y")
+	if m.mode == modeInput {
+		t.Fatal("duplicate opened despite a dirty draft")
+	}
+	if !m.statusErr {
+		t.Fatal("no error status about the dirty draft")
+	}
+}
+
+func TestEditorDelete(t *testing.T) {
+	m := testEditorModel(t) // solo selected; two sessions exist
+	m = edRunes(t, m, "D")
+	if m.mode != modeConfirmDelete {
+		t.Fatal("D did not ask for confirmation")
+	}
+	m = edRunes(t, m, "y")
+	if m.mode != modeBrowse || !m.draft.deleted {
+		t.Fatalf("delete not marked: %+v", m.draft)
+	}
+	// D again undoes the pending delete
+	m = edRunes(t, m, "D")
+	if m.draft.deleted {
+		t.Fatal("second D did not undo the pending delete")
+	}
+}
+
+func TestEditorDeleteLastSessionBlocked(t *testing.T) {
+	st := testEditorState(t, "sessions:\n    only:\n        root: /tmp\n")
+	m := newEditorModel(st, nil, nil, "")
+	m = edRunes(t, m, "D")
+	if m.mode == modeConfirmDelete {
+		t.Fatal("delete offered on the last remaining session")
+	}
+	if !m.statusErr {
+		t.Fatal("no error status for last-session delete")
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
 
+	"github.com/bthall/mox/internal/config"
 	"github.com/bthall/mox/internal/session"
 )
 
@@ -46,11 +47,11 @@ const (
 	paneForm
 )
 
-type inputPurpose int //nolint:unused // wired in by Task 8
+type inputPurpose int
 
 const (
-	inputRename    inputPurpose = iota //nolint:unused // wired in by Task 8
-	inputDuplicate                     //nolint:unused // wired in by Task 8
+	inputRename inputPurpose = iota
+	inputDuplicate
 )
 
 // pendingAction is what a guard resolution continues with.
@@ -93,8 +94,8 @@ type editorModel struct {
 	pane     editorPane
 
 	mode         editorMode
-	input        []rune       // shared buffer for modeFieldEdit / modeInput
-	inputPurpose inputPurpose //nolint:unused // wired in by Task 8
+	input        []rune // shared buffer for modeFieldEdit / modeInput
+	inputPurpose inputPurpose
 	inputErr     string
 
 	listEd  listEditState
@@ -208,6 +209,10 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateFieldEdit(msg)
 		case modeListEdit:
 			return m.updateListEdit(msg)
+		case modeInput:
+			return m.updateInput(msg)
+		case modeConfirmDelete:
+			return m.updateConfirmDelete(msg)
 		}
 		// remaining modes are wired in by later tasks
 	}
@@ -260,6 +265,53 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.pane == paneList {
 			m.mode = modeFilter
 		}
+		return m, nil
+	case "r":
+		if m.draft != nil && !m.draft.deleted {
+			m.mode = modeInput
+			m.inputPurpose = inputRename
+			m.input = []rune(m.draft.name)
+			m.inputErr = ""
+		}
+		return m, nil
+	case "y":
+		if m.draft == nil {
+			return m, nil
+		}
+		if m.isDirty() {
+			m.status = "unsaved changes — save (s) or discard them before duplicating"
+			m.statusErr = true
+			return m, nil
+		}
+		m.mode = modeInput
+		m.inputPurpose = inputDuplicate
+		m.input = nil
+		m.inputErr = ""
+		return m, nil
+	case "D":
+		if m.draft == nil {
+			return m, nil
+		}
+		if m.draft.deleted {
+			m.draft.deleted = false // undo pending delete
+			m.status = ""
+			return m, nil
+		}
+		if m.draft.added {
+			// a never-saved draft just disappears
+			m.draft = nil
+			m.refilter()
+			m.resetDraft()
+			m.status = "discarded unsaved session"
+			m.statusErr = false
+			return m, nil
+		}
+		if len(m.st.cfg.Sessions) == 1 {
+			m.status = "cannot delete the last session (a config needs at least one)"
+			m.statusErr = true
+			return m, nil
+		}
+		m.mode = modeConfirmDelete
 		return m, nil
 	}
 	return m, nil
@@ -409,6 +461,125 @@ func (m editorModel) updateFieldEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// validateSessionName applies the real config name rules plus uniqueness
+// among configured sessions. allowSelf permits one existing name — the
+// draft's own original — so a rename can keep (or restore) its name; a
+// duplicate passes "" and collides with everything.
+func (m *editorModel) validateSessionName(name, allowSelf string) error {
+	if err := (&config.Session{}).Validate(name); err != nil {
+		return err
+	}
+	if _, exists := m.st.cfg.Sessions[name]; exists && name != allowSelf {
+		return fmt.Errorf("session %q already exists", name)
+	}
+	return nil
+}
+
+// updateInput is the one-line prompt for rename and duplicate.
+func (m editorModel) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc:
+		m.mode = modeBrowse
+		m.inputErr = ""
+		return m, nil
+	case tea.KeyEnter:
+		name := strings.TrimSpace(string(m.input))
+		allowSelf := m.draft.orig
+		if m.inputPurpose == inputDuplicate {
+			allowSelf = "" // a copy may not reuse any existing name
+		}
+		if err := m.validateSessionName(name, allowSelf); err != nil {
+			m.inputErr = err.Error()
+			return m, nil
+		}
+		switch m.inputPurpose {
+		case inputRename:
+			m.draft.name = name
+		case inputDuplicate:
+			src := m.st.cfg.Sessions[m.selectedName()]
+			m.draft = &sessionDraft{name: name, added: true, sess: cloneSession(src)}
+			m.refilter()
+			for i, n := range m.visible {
+				if n == name {
+					m.sel = i
+					break
+				}
+			}
+			m.keepVisible()
+			m.fields = sessionFields(m.draft.sess)
+			m.fieldSel = 0
+			m.pane = paneForm
+		}
+		m.mode = modeBrowse
+		m.inputErr = ""
+		m.status = ""
+		return m, nil
+	case tea.KeyCtrlU:
+		m.input, m.inputErr = nil, ""
+		return m, nil
+	case tea.KeyBackspace:
+		if len(m.input) > 0 {
+			m.input = m.input[:len(m.input)-1]
+		}
+		m.inputErr = ""
+		return m, nil
+	case tea.KeyRunes:
+		for _, r := range msg.Runes {
+			if unicode.IsPrint(r) {
+				m.input = append(m.input, r)
+			}
+		}
+		m.inputErr = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	if msg.Type == tea.KeyEsc {
+		m.mode = modeBrowse
+		return m, nil
+	}
+	if string(msg.Runes) == "y" || msg.Type == tea.KeyEnter {
+		m.draft.deleted = true
+		m.mode = modeBrowse
+		m.status = "delete pending — press s to save, D to undo"
+		m.statusErr = false
+	}
+	return m, nil
+}
+
+// inputLines renders the rename/duplicate prompt in the right pane.
+func (m editorModel) inputLines(w int) []string {
+	label := "rename to:"
+	if m.inputPurpose == inputDuplicate {
+		label = "duplicate " + m.selectedName() + " as:"
+	}
+	lines := []string{
+		pkDim.Render(truncate(label, w)),
+		"",
+		pkAccent.Render("▸ ") + string(m.input) + pkAccent.Render("█"),
+	}
+	if m.inputErr != "" {
+		lines = append(lines, "", pkErr.Render(truncate(m.inputErr, w)))
+	}
+	return lines
+}
+
+// confirmDeleteLines renders the delete confirmation in the right pane.
+func (m editorModel) confirmDeleteLines(w int) []string {
+	return []string{
+		pkErr.Render(truncate(fmt.Sprintf("delete session %q from the config?", m.draft.name), w)),
+		"",
+		pkDim.Render("The change is buffered — the file is only touched on save (s)."),
+	}
 }
 
 func (m *editorModel) keepVisible() {
@@ -574,8 +745,13 @@ func (m editorModel) listLines(w, h int) []string {
 
 // rightLines picks the right pane's content by mode. Later tasks add cases.
 func (m editorModel) rightLines(w, h int) []string {
-	if m.mode == modeListEdit {
+	switch m.mode {
+	case modeListEdit:
 		return m.listEditLines(w, h)
+	case modeInput:
+		return m.inputLines(w)
+	case modeConfirmDelete:
+		return m.confirmDeleteLines(w)
 	}
 	return m.formLines(w, h)
 }
@@ -587,7 +763,7 @@ func (m editorModel) formLines(w, h int) []string {
 	}
 	var lines []string
 	if m.draft.deleted {
-		lines = append(lines, pkErr.Render("delete pending — press s to save it, esc to keep the session"), "")
+		lines = append(lines, pkErr.Render("delete pending — press s to save, D to undo"), "")
 	}
 	for i, f := range m.fields {
 		label := fmt.Sprintf("%-9s", f.key)
