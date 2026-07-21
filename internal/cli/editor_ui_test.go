@@ -233,3 +233,100 @@ func TestEditorSelectionAlwaysVisible(t *testing.T) {
 		}
 	}
 }
+
+// focusField moves the form cursor onto the field with the given key.
+func focusField(t *testing.T, m editorModel, key string) editorModel {
+	t.Helper()
+	m.pane = paneForm
+	for i, f := range m.fields {
+		if f.key == key {
+			m.fieldSel = i
+			return m
+		}
+	}
+	t.Fatalf("no field %q on %q", key, m.draft.name)
+	return m
+}
+
+func TestEditorCycleField(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // select webfarm (sync: true)
+	m = focusField(t, m, "sync")
+	m = edType(t, m, tea.KeySpace)
+	if m.draft.sess.Sync {
+		t.Fatal("space did not toggle sync off")
+	}
+	if !m.isDirty() {
+		t.Fatal("cycle edit did not mark draft dirty")
+	}
+	if !strings.Contains(m.statusLine(), "unsaved") {
+		t.Fatal("status line missing unsaved marker")
+	}
+}
+
+func TestEditorTextFieldEdit(t *testing.T) {
+	m := testEditorModel(t)
+	m = focusField(t, m, "connect")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeFieldEdit {
+		t.Fatal("enter did not start field edit")
+	}
+	m = edRunes(t, m, "ssh -A {{host}}")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeBrowse {
+		t.Fatal("commit did not return to browse")
+	}
+	if m.draft.sess.Connect != "ssh -A {{host}}" {
+		t.Fatalf("connect = %q", m.draft.sess.Connect)
+	}
+}
+
+func TestEditorTextFieldCancel(t *testing.T) {
+	m := testEditorModel(t)
+	m = focusField(t, m, "root")
+	orig := m.draft.sess.Root
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "/changed")
+	m = edType(t, m, tea.KeyEsc)
+	if m.mode != modeBrowse || m.draft.sess.Root != orig {
+		t.Fatalf("esc did not cancel edit: root = %q", m.draft.sess.Root)
+	}
+}
+
+func TestEditorNumberFieldValidation(t *testing.T) {
+	m := testEditorModel(t)
+	m = focusField(t, m, "retry")
+	m = edType(t, m, tea.KeyEnter)
+	// seed is "0"; clear it, type garbage
+	m = edType(t, m, tea.KeyBackspace)
+	m = edRunes(t, m, "banana")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeFieldEdit {
+		t.Fatal("invalid retry was accepted")
+	}
+	if m.inputErr == "" {
+		t.Fatal("no inline error for invalid retry")
+	}
+	// fix it
+	m.input = nil
+	m = edRunes(t, m, "5")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeBrowse || m.draft.sess.Retry != 5 {
+		t.Fatalf("retry = %d, mode = %v", m.draft.sess.Retry, m.mode)
+	}
+}
+
+func TestEditorStructureFieldHint(t *testing.T) {
+	yml := editorFixtureYAML + `    layered:
+        windows:
+            - name: main
+              hosts: [a1]
+`
+	st := testEditorState(t, yml)
+	m := newEditorModel(st, nil, nil, "layered")
+	m = focusField(t, m, "windows")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeBrowse || m.status == "" {
+		t.Fatal("structure row should stay in browse and hint at 'o'")
+	}
+}

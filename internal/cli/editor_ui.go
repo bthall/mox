@@ -93,9 +93,9 @@ type editorModel struct {
 	pane     editorPane
 
 	mode         editorMode
-	input        []rune       //nolint:unused // wired in by Task 6 (shared buffer for modeFieldEdit / modeInput)
+	input        []rune       // shared buffer for modeFieldEdit / modeInput
 	inputPurpose inputPurpose //nolint:unused // wired in by Task 8
-	inputErr     string       //nolint:unused // wired in by Task 6
+	inputErr     string
 
 	listEd  listEditState
 	diff    []diffLine    //nolint:unused // wired in by Task 10
@@ -204,6 +204,8 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateBrowse(msg)
 		case modeFilter:
 			return m.updateFilter(msg)
+		case modeFieldEdit:
+			return m.updateFieldEdit(msg)
 		}
 		// remaining modes are wired in by later tasks
 	}
@@ -230,7 +232,12 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.pane = paneForm
 			return m, nil
 		}
-		return m, nil // Task 6 replaces this with enterField()
+		return m.enterField()
+	case tea.KeySpace:
+		if m.pane == paneForm {
+			return m.cycleField()
+		}
+		return m, nil
 	case tea.KeyEsc:
 		if len(m.filter) > 0 {
 			m.filter = nil
@@ -315,6 +322,85 @@ func (m editorModel) selectIndex(idx int) (tea.Model, tea.Cmd) {
 	m.resetDraft()
 	m.status = ""
 	m.statusErr = false
+	return m, nil
+}
+
+// enterField acts on the focused form row: cycle fields advance, text and
+// number fields open the inline input, list fields open the sub-editor
+// (Task 7), the structure row points at 'o'.
+func (m editorModel) enterField() (tea.Model, tea.Cmd) {
+	if m.draft == nil || m.draft.deleted || len(m.fields) == 0 {
+		return m, nil
+	}
+	f := m.fields[m.fieldSel]
+	switch f.kind {
+	case fieldCycle:
+		return m.cycleField()
+	case fieldText, fieldNumber:
+		m.mode = modeFieldEdit
+		m.input = []rune(f.text(m.draft.sess))
+		m.inputErr = ""
+		return m, nil
+	case fieldStructure:
+		m.status = "window/pane structure is YAML-only — press o to open $EDITOR"
+		m.statusErr = false
+		return m, nil
+	}
+	return m, nil // fieldList: Task 7
+}
+
+// cycleField advances a cycle field (bool / tri-state / enum) in place.
+func (m editorModel) cycleField() (tea.Model, tea.Cmd) {
+	if m.draft == nil || m.draft.deleted || len(m.fields) == 0 {
+		return m, nil
+	}
+	if f := m.fields[m.fieldSel]; f.kind == fieldCycle {
+		f.cycle(m.draft.sess)
+		m.status = ""
+	}
+	return m, nil
+}
+
+// updateFieldEdit is the inline input for text/number fields.
+func (m editorModel) updateFieldEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc:
+		m.mode = modeBrowse
+		m.inputErr = ""
+		return m, nil
+	case tea.KeyEnter:
+		f := m.fields[m.fieldSel]
+		if err := f.set(m.draft.sess, strings.TrimSpace(string(m.input))); err != nil {
+			m.inputErr = err.Error()
+			return m, nil
+		}
+		m.mode = modeBrowse
+		m.inputErr = ""
+		return m, nil
+	case tea.KeyCtrlU:
+		m.input = nil
+		m.inputErr = ""
+		return m, nil
+	case tea.KeyBackspace:
+		if len(m.input) > 0 {
+			m.input = m.input[:len(m.input)-1]
+		}
+		m.inputErr = ""
+		return m, nil
+	case tea.KeySpace:
+		m.input = append(m.input, ' ')
+		return m, nil
+	case tea.KeyRunes:
+		for _, r := range msg.Runes {
+			if unicode.IsPrint(r) {
+				m.input = append(m.input, r)
+			}
+		}
+		m.inputErr = ""
+		return m, nil
+	}
 	return m, nil
 }
 
@@ -496,11 +582,18 @@ func (m editorModel) formLines(w, h int) []string {
 	for i, f := range m.fields {
 		label := fmt.Sprintf("%-9s", f.key)
 		val := truncate(f.display(m.draft.sess), w-13)
-		if i == m.fieldSel && m.pane == paneForm && m.mode != modeListEdit {
+		switch {
+		case i == m.fieldSel && m.mode == modeFieldEdit:
+			in := truncate(string(m.input), w-14)
+			lines = append(lines, pkAccent.Render("▸ ")+pkSelected.Render(label)+" "+in+pkAccent.Render("█"))
+		case i == m.fieldSel && m.pane == paneForm && m.mode != modeListEdit:
 			lines = append(lines, pkAccent.Render("▸ ")+pkSelected.Render(label)+" "+val)
-		} else {
+		default:
 			lines = append(lines, "  "+pkDim.Render(label)+" "+val)
 		}
+	}
+	if m.mode == modeFieldEdit && m.inputErr != "" {
+		lines = append(lines, "", pkErr.Render(truncate(m.inputErr, w)))
 	}
 	lines = append(lines, "")
 	if m.pane == paneForm && len(m.fields) > 0 && m.fieldSel < len(m.fields) {
