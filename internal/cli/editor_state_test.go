@@ -200,11 +200,11 @@ func TestApplyDraftRollbackOnWriteFailure(t *testing.T) {
 
 	// Make the directory read-only to force the write to fail.
 	dir := filepath.Dir(st.path)
-	if err := os.Chmod(dir, 0o500); err != nil {
+	if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // deliberately unwritable to force the save to fail
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := os.Chmod(dir, 0o700); err != nil {
+		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // restore the temp dir so cleanup can remove it
 			t.Errorf("cleanup chmod: %v", err)
 		}
 	})
@@ -215,7 +215,7 @@ func TestApplyDraftRollbackOnWriteFailure(t *testing.T) {
 	}
 
 	// Restore permissions to verify the file is unchanged.
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // restore the temp dir for the assertions below
 		t.Fatal(err)
 	}
 

@@ -139,7 +139,7 @@ func TestWriteYAMLNodeAtomic(t *testing.T) {
 	// Symlink case: create real file with 0644, symlink to it, writeYAMLNode through symlink
 	realPath := filepath.Join(dir, "real.yml")
 	linkPath := filepath.Join(dir, "link.yml")
-	if err := os.WriteFile(realPath, []byte("# original\n"), 0o644); err != nil {
+	if err := os.WriteFile(realPath, []byte("# original\n"), 0o644); err != nil { //nolint:gosec // 0644 on purpose: the test asserts this mode survives
 		t.Fatalf("write real file: %v", err)
 	}
 	if err := os.Symlink("real.yml", linkPath); err != nil {
