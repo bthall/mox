@@ -6,6 +6,7 @@ package cli
 // → staleness check → node-surgery write). Runs in the alt screen.
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -55,15 +56,15 @@ const (
 )
 
 // pendingAction is what a guard resolution continues with.
-type pendingKind int //nolint:unused // wired in by Task 9
+type pendingKind int
 
 const (
-	pendingNone   pendingKind = iota //nolint:unused // wired in by Task 9
-	pendingSelect                    //nolint:unused // wired in by Task 9 (move list selection to target)
-	pendingQuit                      //nolint:unused // wired in by Task 9
+	pendingNone   pendingKind = iota
+	pendingSelect             // move list selection to target
+	pendingQuit
 )
 
-type pendingAction struct { //nolint:unused // wired in by Task 9
+type pendingAction struct {
 	kind   pendingKind
 	target int
 }
@@ -99,9 +100,9 @@ type editorModel struct {
 	inputErr     string
 
 	listEd  listEditState
-	diff    []diffLine    //nolint:unused // wired in by Task 10
-	diffOff int           //nolint:unused // wired in by Task 10
-	pending pendingAction //nolint:unused // wired in by Task 9
+	diff    []diffLine //nolint:unused // wired in by Task 10
+	diffOff int        //nolint:unused // wired in by Task 10
+	pending pendingAction
 	wizard  *addModel
 
 	status    string
@@ -213,6 +214,8 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateInput(msg)
 		case modeConfirmDelete:
 			return m.updateConfirmDelete(msg)
+		case modeGuard:
+			return m.updateGuard(msg)
 		}
 		// remaining modes are wired in by later tasks
 	}
@@ -252,17 +255,22 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.resetDraft()
 			return m, nil
 		}
-		return m, tea.Quit // Task 9 routes this through the guard
+		return m.requestQuit()
 	}
 	switch string(msg.Runes) {
 	case "q":
-		return m, tea.Quit // Task 9 routes this through the guard
+		return m.requestQuit()
 	case "j":
 		return m.moveCursor(1)
 	case "k":
 		return m.moveCursor(-1)
 	case "/":
 		if m.pane == paneList {
+			if m.isDirty() {
+				m.status = "unsaved changes — save (s) or discard (D) before filtering"
+				m.statusErr = true
+				return m, nil
+			}
 			m.mode = modeFilter
 		}
 		return m, nil
@@ -360,7 +368,7 @@ func (m editorModel) moveCursor(delta int) (tea.Model, tea.Cmd) {
 		if next == m.sel {
 			return m, nil
 		}
-		return m.selectIndex(next)
+		return m.requestSelect(next)
 	}
 	if len(m.fields) > 0 {
 		m.fieldSel = clampChoice(m.fieldSel+delta, len(m.fields))
@@ -368,8 +376,8 @@ func (m editorModel) moveCursor(delta int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// selectIndex moves the list selection and resets the draft. Task 9 adds
-// the unsaved-changes guard in front of this.
+// selectIndex moves the list selection and resets the draft. The guard
+// interposition is done by requestSelect.
 func (m editorModel) selectIndex(idx int) (tea.Model, tea.Cmd) {
 	m.sel = idx
 	m.keepVisible()
@@ -564,6 +572,134 @@ func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// requestSelect moves the list selection, interposing the guard when the
+// active draft has unsaved changes.
+func (m editorModel) requestSelect(idx int) (tea.Model, tea.Cmd) {
+	if m.isDirty() {
+		m.mode = modeGuard
+		m.pending = pendingAction{kind: pendingSelect, target: idx}
+		return m, nil
+	}
+	return m.selectIndex(idx)
+}
+
+// requestQuit quits, interposing the guard when the draft is dirty.
+func (m editorModel) requestQuit() (tea.Model, tea.Cmd) {
+	if m.isDirty() {
+		m.mode = modeGuard
+		m.pending = pendingAction{kind: pendingQuit}
+		return m, nil
+	}
+	return m, tea.Quit
+}
+
+// updateGuard resolves the save/discard/stay prompt, then continues the
+// pending action. Guard-save skips the diff preview — choosing "save" is
+// the confirmation.
+func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	if msg.Type == tea.KeyEsc {
+		m.mode = modeBrowse
+		m.pending = pendingAction{}
+		return m, nil
+	}
+	switch string(msg.Runes) {
+	case "s":
+		var ok bool
+		m, ok = m.finishSave()
+		if !ok {
+			m.pending = pendingAction{}
+			return m, nil // finishSave set mode/status
+		}
+		return m.continuePending()
+	case "d":
+		m.draft = nil // drop an added draft entirely; resetDraft rebuilds others
+		m.refilter()
+		m.resetDraft()
+		m.mode = modeBrowse
+		return m.continuePending()
+	}
+	return m, nil
+}
+
+// continuePending performs the action the guard was protecting.
+func (m editorModel) continuePending() (tea.Model, tea.Cmd) {
+	p := m.pending
+	m.pending = pendingAction{}
+	m.mode = modeBrowse
+	switch p.kind {
+	case pendingQuit:
+		return m, tea.Quit
+	case pendingSelect:
+		idx := p.target
+		if idx > len(m.visible)-1 {
+			idx = len(m.visible) - 1
+		}
+		if idx < 0 {
+			return m, nil
+		}
+		return m.selectIndex(idx)
+	}
+	return m, nil
+}
+
+// finishSave applies the active draft: validate → staleness → write. It
+// refreshes the model on success and reports ok=false when the save did
+// not happen (validation error or stale file — mode/status already set).
+// Task 10 also calls this from the diff preview.
+func (m editorModel) finishSave() (editorModel, bool) {
+	d := m.draft
+	err := m.st.applyDraft(d)
+	switch {
+	case errors.Is(err, errStaleConfig):
+		m.mode = modeStale
+		return m, false
+	case err != nil:
+		m.mode = modeBrowse
+		m.status = err.Error()
+		m.statusErr = true
+		m.jumpToErrorField(err)
+		return m, false
+	}
+	m.draft = nil
+	m.refilter()
+	if !d.deleted {
+		for i, n := range m.visible {
+			if n == d.name {
+				m.sel = i
+				break
+			}
+		}
+	}
+	if m.sel > len(m.visible)-1 {
+		m.sel = len(m.visible) - 1
+	}
+	m.keepVisible()
+	m.resetDraft()
+	m.mode = modeBrowse
+	m.status = "saved " + d.name + " ✓"
+	if info, ok := m.running[d.name]; ok && info.Running {
+		m.status += " — session is running; changes apply on next build"
+	}
+	m.statusErr = false
+	return m, true
+}
+
+// jumpToErrorField moves the form cursor to the field a validation error
+// names, when one matches (best-effort substring match on field keys).
+func (m *editorModel) jumpToErrorField(err error) {
+	msg := err.Error()
+	for i, f := range m.fields {
+		if strings.Contains(msg, f.key) {
+			m.fieldSel = i
+			m.pane = paneForm
+			return
+		}
+	}
+}
+
 // inputLines renders the rename/duplicate prompt in the right pane.
 func (m editorModel) inputLines(w int) []string {
 	label := "rename to:"
@@ -587,6 +723,17 @@ func (m editorModel) confirmDeleteLines(w int) []string {
 		pkErr.Render(truncate(fmt.Sprintf("delete session %q from the config?", m.draft.name), w)),
 		"",
 		pkDim.Render("The change is buffered — the file is only touched on save (s)."),
+	}
+}
+
+// guardLines renders the unsaved-changes prompt in the right pane.
+func (m editorModel) guardLines(w int) []string {
+	return []string{
+		pkForeign.Render(truncate(fmt.Sprintf("%q has unsaved changes", m.draft.name), w)),
+		"",
+		"  " + pkSelected.Render("s") + pkDim.Render("  save them, then continue"),
+		"  " + pkSelected.Render("d") + pkDim.Render("  discard them, then continue"),
+		"  " + pkSelected.Render("esc") + pkDim.Render("  stay here"),
 	}
 }
 
@@ -760,6 +907,8 @@ func (m editorModel) rightLines(w, h int) []string {
 		return m.inputLines(w)
 	case modeConfirmDelete:
 		return m.confirmDeleteLines(w)
+	case modeGuard:
+		return m.guardLines(w)
 	}
 	return m.formLines(w, h)
 }

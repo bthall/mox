@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -575,5 +576,110 @@ func TestEditorDuplicateThenRename(t *testing.T) {
 	// but we must not panic and the draft must be properly initialized
 	if m.draft == nil {
 		t.Fatal("draft became nil after navigation")
+	}
+}
+
+func dirtyModel(t *testing.T) editorModel {
+	t.Helper()
+	m := testEditorModel(t) // solo selected
+	m = focusField(t, m, "root")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "x")
+	m = edType(t, m, tea.KeyEnter) // root = "/tmp/solox" — dirty
+	return m
+}
+
+func TestEditorGuardOnSwitch(t *testing.T) {
+	m := dirtyModel(t)
+	m.pane = paneList
+	m = edRunes(t, m, "j")
+	if m.mode != modeGuard {
+		t.Fatal("switching away from a dirty draft did not guard")
+	}
+	if m.selectedName() != "solo" {
+		t.Fatal("selection moved before the guard resolved")
+	}
+	// esc: stay put, draft intact
+	m = edType(t, m, tea.KeyEsc)
+	if m.mode != modeBrowse || m.selectedName() != "solo" || !m.isDirty() {
+		t.Fatal("esc did not cancel the guard cleanly")
+	}
+}
+
+func TestEditorGuardDiscard(t *testing.T) {
+	m := dirtyModel(t)
+	m.pane = paneList
+	m = edRunes(t, m, "j")
+	m = edRunes(t, m, "d")
+	if m.mode != modeBrowse || m.selectedName() != "webfarm" {
+		t.Fatalf("guard discard: mode=%v sel=%q", m.mode, m.selectedName())
+	}
+	if m.isDirty() {
+		t.Fatal("draft still dirty after discard")
+	}
+	// the config was never written
+	if m.st.cfg.Sessions["solo"].Root != "/tmp/solo" {
+		t.Fatal("discard leaked into the config")
+	}
+}
+
+func TestEditorGuardSave(t *testing.T) {
+	m := dirtyModel(t)
+	m.pane = paneList
+	m = edRunes(t, m, "j")
+	m = edRunes(t, m, "s")
+	if m.mode != modeBrowse || m.selectedName() != "webfarm" {
+		t.Fatalf("guard save: mode=%v sel=%q", m.mode, m.selectedName())
+	}
+	data, _ := os.ReadFile(m.st.path)
+	if !strings.Contains(string(data), "/tmp/solox") {
+		t.Fatalf("guard save did not write the file:\n%s", data)
+	}
+}
+
+func TestEditorGuardOnQuit(t *testing.T) {
+	m := dirtyModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m = nm.(editorModel)
+	if cmd != nil || m.mode != modeGuard {
+		t.Fatal("q with a dirty draft did not guard")
+	}
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	if !isQuit(cmd) {
+		t.Fatal("guard discard on quit did not quit")
+	}
+	_ = nm
+}
+
+func TestEditorFilterBlockedWhenDirty(t *testing.T) {
+	m := dirtyModel(t)
+	m.pane = paneList
+	m = edRunes(t, m, "/")
+	if m.mode == modeFilter {
+		t.Fatal("filter opened despite a dirty draft")
+	}
+	if !m.statusErr {
+		t.Fatal("no error status about the dirty draft")
+	}
+}
+
+func TestEditorGuardProtectsAddedDraft(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // webfarm
+	m = edRunes(t, m, "y")
+	m = edRunes(t, m, "copy1")
+	m = edType(t, m, tea.KeyEnter) // added draft, inherently dirty
+	m.pane = paneList
+	m = edRunes(t, m, "k") // navigate away → must guard, not silently discard
+	if m.mode != modeGuard {
+		t.Fatal("navigating away from an added draft did not guard")
+	}
+	m = edRunes(t, m, "s") // save it
+	if _, ok := m.st.cfg.Sessions["copy1"]; !ok {
+		t.Fatal("guard save did not persist the added draft")
+	}
+	data, _ := os.ReadFile(m.st.path)
+	if !strings.Contains(string(data), "copy1") {
+		t.Fatal("added draft not in the file after guard save")
 	}
 }
