@@ -79,8 +79,9 @@ type addModel struct {
 	confirmIdx int
 	preview    []string // rendered YAML for the confirm step
 
-	width int
-	done  addResult
+	width    int
+	done     addResult
+	finished bool // set exactly when done is populated and the wizard quits
 }
 
 func newAddModel(cfg *config.Config, clusters map[string][]string, prefillName string) addModel {
@@ -107,6 +108,7 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			m.done = addResult{action: addActionCancel}
+			m.finished = true
 			return m, tea.Quit
 		case tea.KeyEsc:
 			return m.back()
@@ -284,6 +286,7 @@ func (m addModel) advance() (tea.Model, tea.Cmd) {
 		} else {
 			m.done = addResult{action: action, name: m.name, sess: m.buildSession(), overwrite: m.overwrite}
 		}
+		m.finished = true
 		return m, tea.Quit
 	}
 	return m, nil
@@ -320,6 +323,7 @@ func (m addModel) back() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepName:
 		m.done = addResult{action: addActionCancel}
+		m.finished = true
 		return m, tea.Quit
 	case stepHosts:
 		return m.goTo(stepName), nil

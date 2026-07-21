@@ -199,6 +199,12 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.mode == modeWizard && m.wizard != nil {
+			nm, _ := m.wizard.Update(msg)
+			if aw, ok := nm.(addModel); ok {
+				m.wizard = &aw
+			}
+		}
 		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
@@ -220,6 +226,8 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateStale(msg)
 		case modeGuard:
 			return m.updateGuard(msg)
+		case modeWizard:
+			return m.updateWizard(msg)
 		}
 		// remaining modes are wired in by later tasks
 	}
@@ -277,6 +285,16 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.mode = modeFilter
 		}
+		return m, nil
+	case "a":
+		if m.isDirty() {
+			m.status = "unsaved changes — save (s) or discard (D) before adding"
+			m.statusErr = true
+			return m, nil
+		}
+		w := newAddModel(m.st.cfg, m.clusters, "")
+		m.wizard = &w
+		m.mode = modeWizard
 		return m, nil
 	case "r":
 		if m.draft != nil && !m.draft.deleted {
@@ -726,6 +744,50 @@ func (m editorModel) continuePending() (tea.Model, tea.Cmd) {
 		}
 		return m.selectIndex(idx)
 	}
+	return m, nil
+}
+
+// updateWizard forwards input to the embedded 'mox add' wizard and, when it
+// finishes, converts its result into the active draft. The wizard's file
+// write never runs here — the editor's save pipeline is the only writer.
+// Its "save + start now" choice behaves like "save to config" in embedded
+// mode (the draft still goes through s → diff → write).
+func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	nm, _ := m.wizard.Update(msg) // swallow the wizard's tea.Quit
+	aw, ok := nm.(addModel)
+	if !ok {
+		return m, nil
+	}
+	m.wizard = &aw
+	if !aw.finished {
+		return m, nil
+	}
+	res := aw.done
+	m.wizard = nil
+	m.mode = modeBrowse
+	if res.action == addActionCancel {
+		return m, nil
+	}
+	d := &sessionDraft{name: res.name, sess: res.sess}
+	if _, exists := m.st.cfg.Sessions[res.name]; exists {
+		d.orig = res.name // wizard-confirmed overwrite of an existing session
+	} else {
+		d.added = true
+	}
+	m.draft = d
+	m.refilter()
+	for i, n := range m.visible {
+		if n == res.name {
+			m.sel = i
+			break
+		}
+	}
+	m.keepVisible()
+	m.fields = sessionFields(d.sess)
+	m.fieldSel = 0
+	m.pane = paneForm
+	m.status = "new session drafted — press s to save it"
+	m.statusErr = false
 	return m, nil
 }
 

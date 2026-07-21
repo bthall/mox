@@ -856,3 +856,94 @@ func TestEditorErrorJumpPaneErrorsTargetWindows(t *testing.T) {
 		t.Fatalf("cursor on %q, want root", m2.fields[m2.fieldSel].key)
 	}
 }
+
+func TestEditorWizardAdd(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "a")
+	if m.mode != modeWizard || m.wizard == nil {
+		t.Fatal("a did not start the wizard")
+	}
+	if !strings.Contains(m.View(), "add session") {
+		t.Fatal("wizard view not rendered")
+	}
+
+	// drive the wizard: name → hosts(empty→root) → root → commands(empty→confirm) → save
+	m = edRunes(t, m, "brandnew")
+	m = edType(t, m, tea.KeyEnter) // name committed
+	m = edType(t, m, tea.KeyEnter) // hosts: empty → skips to root
+	m = edType(t, m, tea.KeyEnter) // root: empty
+	m = edType(t, m, tea.KeyEnter) // commands: empty line → confirm
+	m = edType(t, m, tea.KeyEnter) // confirm: "save to config"
+
+	if m.mode != modeBrowse || m.wizard != nil {
+		t.Fatalf("wizard did not hand back: mode=%v", m.mode)
+	}
+	if m.draft == nil || !m.draft.added || m.draft.name != "brandnew" {
+		t.Fatalf("draft = %+v, want added brandnew", m.draft)
+	}
+	if m.selectedName() != "brandnew" {
+		t.Fatalf("selected %q, want brandnew", m.selectedName())
+	}
+	if !m.isDirty() {
+		t.Fatal("wizard result should be an unsaved draft")
+	}
+	// nothing hit the disk yet
+	data, _ := os.ReadFile(m.st.path)
+	if strings.Contains(string(data), "brandnew") {
+		t.Fatal("wizard wrote to disk in embedded mode")
+	}
+
+	// and the normal save pipeline persists it
+	m = edRunes(t, m, "s")
+	m = edType(t, m, tea.KeyEnter)
+	data, _ = os.ReadFile(m.st.path)
+	if !strings.Contains(string(data), "brandnew") {
+		t.Fatalf("save after wizard did not write:\n%s", data)
+	}
+}
+
+func TestEditorWizardCancel(t *testing.T) {
+	m := testEditorModel(t)
+	before := m.selectedName()
+	m = edRunes(t, m, "a")
+	m = edType(t, m, tea.KeyEsc) // esc on the name step cancels the wizard
+	if m.mode != modeBrowse || m.wizard != nil {
+		t.Fatal("cancel did not return to browse")
+	}
+	if m.isDirty() || m.selectedName() != before {
+		t.Fatal("cancel left residue")
+	}
+}
+
+func TestEditorWizardBlockedWhenDirty(t *testing.T) {
+	m := dirtyModel(t)
+	m = edRunes(t, m, "a")
+	if m.mode == modeWizard {
+		t.Fatal("wizard opened despite a dirty draft")
+	}
+	if !m.statusErr {
+		t.Fatal("no error status about the dirty draft")
+	}
+}
+
+func TestEditorWizardOverwriteExisting(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "webfarm")   // existing name
+	m = edType(t, m, tea.KeyEnter) // collision warning
+	m = edType(t, m, tea.KeyEnter) // confirm overwrite
+	m = edType(t, m, tea.KeyEnter) // hosts empty → root
+	m = edType(t, m, tea.KeyEnter) // root
+	m = edType(t, m, tea.KeyEnter) // commands → confirm
+	m = edType(t, m, tea.KeyEnter) // save to config
+	if m.mode != modeBrowse || m.draft == nil {
+		t.Fatalf("overwrite flow: mode=%v draft=%+v", m.mode, m.draft)
+	}
+	// overwrite of an existing session: draft replaces it (orig set, not added)
+	if m.draft.added || m.draft.orig != "webfarm" || m.draft.name != "webfarm" {
+		t.Fatalf("draft = %+v, want overwrite draft for webfarm", m.draft)
+	}
+	if !m.isDirty() {
+		t.Fatal("overwrite draft should be dirty (empty session != original)")
+	}
+}
