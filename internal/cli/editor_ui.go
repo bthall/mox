@@ -319,13 +319,28 @@ func (m editorModel) selectIndex(idx int) (tea.Model, tea.Cmd) {
 }
 
 func (m *editorModel) keepVisible() {
-	rows := m.listRows()
+	rows := m.effectiveListRows()
 	if m.sel < m.offset {
 		m.offset = m.sel
 	}
 	if m.sel >= m.offset+rows {
 		m.offset = m.sel - rows + 1
 	}
+}
+
+// effectiveListRows is listRows minus the line reserved for the overflow
+// indicator when the list doesn't fit. It is the single source of truth
+// for both scrolling (keepVisible) and rendering (listLines) — the two
+// went out of sync once and hid the selection behind the reserved row.
+func (m editorModel) effectiveListRows() int {
+	rows := m.listRows()
+	if len(m.visible) > rows {
+		rows--
+		if rows < 1 {
+			rows = 1
+		}
+	}
+	return rows
 }
 
 // --- view ---
@@ -437,16 +452,7 @@ func (m editorModel) listLines(w, h int) []string {
 	if len(m.visible) == 0 {
 		return append(lines, pkDim.Render("  (no match)"))
 	}
-	rows := h - 2
-	if rows < 1 {
-		rows = 1
-	}
-	if len(m.visible) > m.offset+rows {
-		rows-- // reserve the last line for the "… N more" indicator
-		if rows < 1 {
-			rows = 1
-		}
-	}
+	rows := m.effectiveListRows()
 	end := m.offset + rows
 	if end > len(m.visible) {
 		end = len(m.visible)

@@ -205,3 +205,31 @@ func TestEditorOverflowIndicator(t *testing.T) {
 		t.Fatal("overflow indicator not rendered with 40 sessions in a 20-row terminal")
 	}
 }
+
+// TestEditorSelectionAlwaysVisible walks the cursor through a list that
+// overflows the pane and asserts the selected row is rendered at every
+// position — pinning the scroll math shared by keepVisible and listLines
+// (the reserved overflow-indicator row once hid the selection).
+func TestEditorSelectionAlwaysVisible(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("sessions:\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "    sess%02d:\n        root: /tmp/x\n", i)
+	}
+	st := testEditorState(t, b.String())
+	m := newEditorModel(st, nil, nil, "")
+	m.width, m.height = 100, 20
+	for i := 0; i < 39; i++ {
+		m = edRunes(t, m, "j")
+		if !strings.Contains(m.View(), "▌ ○ "+m.selectedName()) {
+			t.Fatalf("step %d: selected %q hidden (sel=%d offset=%d)", i, m.selectedName(), m.sel, m.offset)
+		}
+	}
+	// and back up
+	for i := 0; i < 39; i++ {
+		m = edRunes(t, m, "k")
+		if !strings.Contains(m.View(), "▌ ○ "+m.selectedName()) {
+			t.Fatalf("up step %d: selected %q hidden (sel=%d offset=%d)", i, m.selectedName(), m.sel, m.offset)
+		}
+	}
+}
