@@ -19,17 +19,18 @@ func newEditCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "edit [session]",
 		GroupID: groupConfig,
-		Short:   "Edit the config: a session in the TUI editor, or the file in $EDITOR",
-		Long: `Without an argument, open the configuration file in $VISUAL (falling back
-to $EDITOR, then vi) and validate it after the editor exits. Validation
-errors are reported with line numbers but never block the save.
+		Short:   "Edit the config in the full-screen editor (or $EDITOR)",
+		Long: `Open the full-screen session editor: navigate sessions and their fields,
+edit hosts and hooks, rename/duplicate/delete — and save through a
+validated diff preview. With a session name, that session is selected on
+launch. The same editor is available from the bare 'mox' picker via ctrl+e.
 
-With a session name, open the full-screen editor on that session instead:
-navigate its fields, edit hosts and hooks, rename/duplicate/delete — and
-save through a validated diff preview. The same editor is available from
-the bare 'mox' picker via ctrl+e.`,
-		Example: `  mox edit               open the whole file in $EDITOR
-  mox edit webfarm       edit one session in the TUI
+The raw file is never far away: press 'o' inside the editor to open the
+config in $VISUAL (falling back to $EDITOR, then vi). Invalid configs and
+non-terminal invocations skip the editor and go straight to $EDITOR, which
+validates the file after the editor exits.`,
+		Example: `  mox edit               open the session editor
+  mox edit webfarm       open it with a session selected
   mox edit -c ~/other/config.yml`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeConfiguredSession,
@@ -63,6 +64,17 @@ func runEdit(cmd *cobra.Command, args []string) error {
 			return errors.New("the session editor is interactive and needs a terminal; run 'mox edit' (no argument) to use $EDITOR")
 		}
 		return runEditorTUI(cmd, st, args[0])
+	}
+
+	// Bare 'mox edit' on a terminal opens the full-screen editor too. A
+	// config the editor can't load (parse/validation errors) falls back to
+	// $EDITOR — fixing a broken config by hand is this command's oldest job.
+	if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
+		st, err := loadEditorState(path)
+		if err == nil {
+			return runEditorTUI(cmd, st, "")
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "mox: config has errors, opening $EDITOR instead:\n  %v\n", err)
 	}
 
 	editor := editorCommand()

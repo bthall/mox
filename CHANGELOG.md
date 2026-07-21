@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bare `mox edit` now opens the full-screen session editor (the raw file
+  is one `o` away inside it). Invalid configs and non-terminal invocations
+  still go straight to `$EDITOR` with validation on exit, so the fix-a-
+  broken-config flow is unchanged.
+
 ## [0.3.0] — 2026-07-21
 
 ### Added

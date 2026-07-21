@@ -66,8 +66,8 @@ Pre-built archives for linux/macOS × amd64/arm64 are attached to each
 ```bash
 mox init                        # scaffold a config at ~/.config/mox/config.yml
 mox add                         # interactively add a session to it
-mox edit example                # edit a session in the full-screen editor
-mox edit                        # or open the whole file in $EDITOR
+mox edit                        # full-screen session editor
+mox edit example                # same, with a session pre-selected
 mox -a example                  # build + attach to the "example" session
 mox                             # or pick a session interactively
 mox new @webfarm                # ad-hoc broadcast session on a cluster

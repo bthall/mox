@@ -102,3 +102,24 @@ func TestEditSessionArgNeedsTerminal(t *testing.T) {
 		t.Fatalf("err = %v, want terminal requirement", err)
 	}
 }
+
+// TestEditBareInvalidConfigFallsBackToEditor pins the fix-it flow: a config
+// the session editor can't load must still reach $EDITOR (which validates
+// after the editor exits) instead of erroring out.
+func TestEditBareInvalidConfigFallsBackToEditor(t *testing.T) {
+	t.Setenv("VISUAL", "true") // no-op editor
+	p := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(p, []byte("sessions:\n    x:\n        retry: -3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"edit", "-c", p})
+	cmd.SetIn(strings.NewReader("")) // not a terminal
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := cmd.Execute()
+	// $EDITOR ran (no-op), then post-edit validation reports the problem.
+	if err == nil || !strings.Contains(err.Error(), "config has errors") {
+		t.Fatalf("err = %v, want post-$EDITOR validation error", err)
+	}
+}

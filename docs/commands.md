@@ -16,8 +16,8 @@ Session lifecycle:
 Configuration:
   mox init              scaffold a default config
   mox add [name]        interactive wizard: build a session, save it to config
-  mox edit [session]    no argument: open the config in $EDITOR, validate on exit
-                        with a session: edit it in the full-screen TUI editor
+  mox edit [session]    full-screen session editor (optionally pre-selected);
+                        invalid configs and non-terminals fall back to $EDITOR
   mox validate          check config syntax
   mox config path       print resolved config path
   mox config view       print the raw config file
@@ -48,10 +48,12 @@ piped and scripted invocations print help, so scripts never hang.
 
 ## The session editor
 
-`mox edit <session>` (or `Ctrl-E` in the picker) opens a full-screen editor
-instead of `$EDITOR`: configured sessions on the left, the selected
-session's fields on the right, with the focused field's documentation
-always visible.
+`mox edit` (or `Ctrl-E` in the picker) opens a full-screen editor:
+configured sessions on the left, the selected session's fields on the
+right, with the focused field's documentation always visible. Name a
+session (`mox edit webfarm`) to open with it selected. A config the editor
+can't load, or a non-terminal invocation, falls back to `$EDITOR` with
+validation on exit — fixing a broken config by hand still works.
 
 | Key | Action |
 | --- | --- |
