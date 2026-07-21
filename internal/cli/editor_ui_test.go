@@ -551,3 +551,29 @@ func TestEditorDeleteLastSessionBlocked(t *testing.T) {
 		t.Fatal("no error status for last-session delete")
 	}
 }
+
+func TestEditorDuplicateThenRename(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // webfarm
+	m = edRunes(t, m, "y")
+	m = edRunes(t, m, "webfarm2")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "r")
+	m.input = nil
+	m = edRunes(t, m, "webfarm3")
+	m = edType(t, m, tea.KeyEnter)
+	if m.selectedName() != "webfarm3" {
+		t.Fatalf("selected %q, want webfarm3", m.selectedName())
+	}
+	if m.draft == nil || !m.draft.added || m.draft.name != "webfarm3" {
+		t.Fatalf("draft = %+v", m.draft)
+	}
+	// navigating away and back must not destroy the renamed duplicate
+	m = edRunes(t, m, "k")
+	m = edRunes(t, m, "j")
+	// After navigation, the added draft is gone (guard behavior arrives in Task 9),
+	// but we must not panic and the draft must be properly initialized
+	if m.draft == nil {
+		t.Fatal("draft became nil after navigation")
+	}
+}

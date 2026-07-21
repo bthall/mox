@@ -279,7 +279,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.isDirty() {
-			m.status = "unsaved changes — save (s) or discard them before duplicating"
+			m.status = "unsaved changes — save (s) or discard (D) before duplicating"
 			m.statusErr = true
 			return m, nil
 		}
@@ -499,6 +499,14 @@ func (m editorModel) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.inputPurpose {
 		case inputRename:
 			m.draft.name = name
+			m.refilter()
+			for i, n := range m.visible {
+				if n == name {
+					m.sel = i
+					break
+				}
+			}
+			m.keepVisible()
 		case inputDuplicate:
 			src := m.st.cfg.Sessions[m.selectedName()]
 			m.draft = &sessionDraft{name: name, added: true, sess: cloneSession(src)}
