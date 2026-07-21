@@ -23,60 +23,76 @@ import (
 func runPicker(cmd *cobra.Command) error {
 	opts := optsFromContext(cmd.Context())
 	logger := loggerFromContext(cmd.Context())
-
-	cfg, _ := tryLoadConfig(opts.configPath)
-	if cfg == nil {
-		cfg = &config.Config{Sessions: map[string]*config.Session{}}
-	}
-	mgr, err := session.NewManager(cfg, logger)
-	if err != nil {
-		return err
-	}
-	infos, err := mgr.List()
-	if err != nil {
-		return err
-	}
-	recent, err := history.Load()
-	if err != nil {
-		logger.Debug("load session history failed", "error", err)
-	}
-
-	candidates := orderPickerCandidates(infos, recent)
 	out := cmd.OutOrStdout()
-	if len(candidates) == 0 {
-		fmt.Fprintln(out, "No sessions configured or running.")
-		fmt.Fprintln(out, "Try 'mox init' to create a config, or 'mox new' for an ad-hoc session.")
-		return nil
-	}
 
-	// Interactive fuzzy picker when the terminal supports it; numbered
-	// prompt as the fallback.
-	if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
-		if name, ran := runFuzzyPicker(candidates, cfg.Sessions); ran {
-			if name == "" {
-				return nil // canceled
-			}
-			return mgr.CreateOrAttach(cmd.Context(), name, false)
+	for {
+		cfg, _ := tryLoadConfig(opts.configPath)
+		if cfg == nil {
+			cfg = &config.Config{Sessions: map[string]*config.Session{}}
 		}
-	}
+		mgr, err := session.NewManager(cfg, logger)
+		if err != nil {
+			return err
+		}
+		infos, err := mgr.List()
+		if err != nil {
+			return err
+		}
+		recent, err := history.Load()
+		if err != nil {
+			logger.Debug("load session history failed", "error", err)
+		}
 
-	renderPicker(out, candidates, time.Now())
-	fmt.Fprint(out, "\nAttach to (number or name, empty cancels): ")
+		candidates := orderPickerCandidates(infos, recent)
+		if len(candidates) == 0 {
+			fmt.Fprintln(out, "No sessions configured or running.")
+			fmt.Fprintln(out, "Try 'mox init' to create a config, or 'mox new' for an ad-hoc session.")
+			return nil
+		}
 
-	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-	if err != nil && line == "" {
-		fmt.Fprintln(out)
-		return nil // EOF (Ctrl-D) cancels like empty input
+		// Interactive fuzzy picker when the terminal supports it; numbered
+		// prompt as the fallback.
+		if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
+			if name, edit, ran := runFuzzyPicker(candidates, cfg.Sessions); ran {
+				if name == "" {
+					return nil // canceled
+				}
+				if edit {
+					path, local := config.EffectivePath(opts.configPath)
+					if local {
+						fmt.Fprintf(os.Stderr, "mox: using ./%s\n", config.LocalConfigName)
+					}
+					st, err := loadEditorState(path)
+					if err != nil {
+						return err
+					}
+					if err := runEditorTUI(cmd, st, name); err != nil {
+						return err
+					}
+					continue // fresh picker over the (possibly changed) config
+				}
+				return mgr.CreateOrAttach(cmd.Context(), name, false)
+			}
+		}
+
+		renderPicker(out, candidates, time.Now())
+		fmt.Fprint(out, "\nAttach to (number or name, empty cancels): ")
+
+		line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if err != nil && line == "" {
+			fmt.Fprintln(out)
+			return nil // EOF (Ctrl-D) cancels like empty input
+		}
+		choice := strings.TrimSpace(line)
+		if choice == "" {
+			return nil
+		}
+		name, err := resolvePickerChoice(choice, candidates)
+		if err != nil {
+			return err
+		}
+		return mgr.CreateOrAttach(cmd.Context(), name, false)
 	}
-	choice := strings.TrimSpace(line)
-	if choice == "" {
-		return nil
-	}
-	name, err := resolvePickerChoice(choice, candidates)
-	if err != nil {
-		return err
-	}
-	return mgr.CreateOrAttach(cmd.Context(), name, false)
 }
 
 // orderPickerCandidates sorts sessions the way you reach for them: running

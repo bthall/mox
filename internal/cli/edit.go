@@ -1,30 +1,41 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/bthall/mox/internal/config"
+	"github.com/bthall/mox/internal/session"
 	"github.com/spf13/cobra"
 )
 
 func newEditCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:     "edit",
+	cmd := &cobra.Command{
+		Use:     "edit [session]",
 		GroupID: groupConfig,
-		Short:   "Open the config in your editor, then validate it",
-		Long: `Open the configuration file in $VISUAL (falling back to $EDITOR, then vi)
-and validate it after the editor exits. Validation errors are reported with
-line numbers but never block the save — the file is already written; fix it
-and run 'mox edit' or 'mox validate' again.`,
-		Example: `  mox edit
+		Short:   "Edit the config: a session in the TUI editor, or the file in $EDITOR",
+		Long: `Without an argument, open the configuration file in $VISUAL (falling back
+to $EDITOR, then vi) and validate it after the editor exits. Validation
+errors are reported with line numbers but never block the save.
+
+With a session name, open the full-screen editor on that session instead:
+navigate its fields, edit hosts and hooks, rename/duplicate/delete — and
+save through a validated diff preview. The same editor is available from
+the bare 'mox' picker via ctrl+e.`,
+		Example: `  mox edit               open the whole file in $EDITOR
+  mox edit webfarm       edit one session in the TUI
   mox edit -c ~/other/config.yml`,
-		Args: cobra.NoArgs,
-		RunE: runEdit,
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeConfiguredSession,
+		RunE:              runEdit,
 	}
+	return cmd
 }
 
 func runEdit(cmd *cobra.Command, args []string) error {
@@ -36,6 +47,22 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	}
 	if !config.Exists(path) {
 		return fmt.Errorf("config file not found at %s\n\nRun 'mox init' to create a default configuration", path)
+	}
+
+	if len(args) == 1 {
+		st, err := loadEditorState(path)
+		if err != nil {
+			return err
+		}
+		if _, ok := st.cfg.Sessions[args[0]]; !ok {
+			return fmt.Errorf("no configured session %q\n\nConfigured sessions: %s",
+				args[0], strings.Join(st.cfg.ListSessionNames(), ", "))
+		}
+		stdin, ok := cmd.InOrStdin().(*os.File)
+		if !ok || !isTerminal(stdin) {
+			return errors.New("the session editor is interactive and needs a terminal; run 'mox edit' (no argument) to use $EDITOR")
+		}
+		return runEditorTUI(cmd, st, args[0])
 	}
 
 	editor := editorCommand()
@@ -81,4 +108,23 @@ func editAndValidate(path, editor string, out io.Writer) error {
 	}
 	fmt.Fprintf(out, "OK: %s is valid (%d sessions, %d layouts)\n", path, len(cfg.Sessions), len(cfg.Layouts))
 	return nil
+}
+
+// runEditorTUI starts the full-screen session editor on an already-loaded
+// state (callers validate the initial session before getting here).
+func runEditorTUI(cmd *cobra.Command, st *editorState, initial string) error {
+	clusters, _ := loadClusterssh() // missing file is fine
+
+	// Running-state dots are best-effort: no tmux, no dots.
+	running := map[string]session.SessionInfo{}
+	if mgr, err := session.NewManager(st.cfg, loggerFromContext(cmd.Context())); err == nil {
+		if infos, err := mgr.List(); err == nil {
+			for _, info := range infos {
+				running[info.Name] = info
+			}
+		}
+	}
+
+	_, err := tea.NewProgram(newEditorModel(st, clusters, running, initial), tea.WithAltScreen()).Run()
+	return err
 }

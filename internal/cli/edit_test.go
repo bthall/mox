@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,5 +60,45 @@ func TestEditorCommand_EnvPrecedence(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	if got := editorCommand(); got != "plain-editor" {
 		t.Errorf("EDITOR should be next, got %q", got)
+	}
+}
+
+func TestEditSessionArgUnknownSession(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	body := "sessions:\n    real:\n        root: /tmp\n"
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"edit", "nope", "-c", p})
+	cmd.SetIn(strings.NewReader("")) // not a terminal
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("edit accepted an unknown session")
+	}
+	if !strings.Contains(err.Error(), "no configured session") {
+		t.Fatalf("err = %v, want unknown-session message", err)
+	}
+	if !strings.Contains(err.Error(), "real") {
+		t.Fatalf("err = %v, want the configured names listed", err)
+	}
+}
+
+func TestEditSessionArgNeedsTerminal(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	body := "sessions:\n    real:\n        root: /tmp\n"
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"edit", "real", "-c", p})
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "terminal") {
+		t.Fatalf("err = %v, want terminal requirement", err)
 	}
 }
