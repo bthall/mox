@@ -779,6 +779,19 @@ func (m editorModel) finishSave() (editorModel, bool) {
 // names, when one matches (best-effort substring match on field keys).
 func (m *editorModel) jumpToErrorField(err error) {
 	msg := err.Error()
+	// Pane/window errors belong to the windows structure row, and their
+	// text often contains "split: root" — which would false-match the
+	// session-level root (working directory) field below.
+	if strings.Contains(msg, "window") || strings.Contains(msg, "pane") {
+		for i, f := range m.fields {
+			if f.key == "windows" {
+				m.fieldSel = i
+				m.pane = paneForm
+				return
+			}
+		}
+		return // structural error on a session with no windows row: no jump
+	}
 	bestIdx := -1
 	bestPos := len(msg)
 	for i, f := range m.fields {

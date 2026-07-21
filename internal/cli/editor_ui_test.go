@@ -835,3 +835,24 @@ func TestEditorSaveRenameAndDelete(t *testing.T) {
 		t.Fatalf("delete save status = %q, want deleted wording", m.status)
 	}
 }
+
+func TestEditorErrorJumpPaneErrorsTargetWindows(t *testing.T) {
+	yml := editorFixtureYAML + `    layered:
+        windows:
+            - name: main
+              hosts: [a1]
+`
+	st := testEditorState(t, yml)
+	m := newEditorModel(st, nil, nil, "layered")
+	m.jumpToErrorField(fmt.Errorf(`session "layered": window 0 ("main"): first pane must have split: root`))
+	if m.fields[m.fieldSel].key != "windows" {
+		t.Fatalf("cursor on %q, want windows", m.fields[m.fieldSel].key)
+	}
+	// and a plain root error still jumps to root
+	m2 := testEditorModel(t)
+	m2.pane = paneForm
+	m2.jumpToErrorField(fmt.Errorf("root directory does not exist"))
+	if m2.fields[m2.fieldSel].key != "root" {
+		t.Fatalf("cursor on %q, want root", m2.fields[m2.fieldSel].key)
+	}
+}
