@@ -188,7 +188,9 @@ func (m *editorModel) resetDraft() {
 		m.fields = nil
 		return
 	}
-	if m.draft == nil || !m.draft.added || m.draft.name != name {
+	keep := m.draft != nil &&
+		((m.draft.added && m.draft.name == name) || (!m.draft.added && m.draft.orig == name))
+	if !keep {
 		m.draft = newDraft(m.st.cfg, name)
 	}
 	m.fields = sessionFields(m.draft.sess)
@@ -256,7 +258,6 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modeWizard:
 			return m.updateWizard(msg)
 		}
-		// remaining modes are wired in by later tasks
 	}
 	return m, nil
 }
@@ -289,8 +290,25 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyEsc:
 		if len(m.filter) > 0 {
+			// Clearing the filter re-derives the visible list; put the
+			// selection back on the active draft's session first so a
+			// dirty draft is never silently replaced.
+			draftName := ""
+			if m.draft != nil {
+				draftName = m.draft.orig
+				if m.draft.added {
+					draftName = m.draft.name
+				}
+			}
 			m.filter = nil
 			m.refilter()
+			for i, n := range m.visible {
+				if n == draftName {
+					m.sel = i
+					break
+				}
+			}
+			m.keepVisible()
 			m.resetDraft()
 			return m, nil
 		}
@@ -320,6 +338,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		w := newAddModel(m.st.cfg, m.clusters, "")
+		w.width = m.width // embedded: no initial WindowSizeMsg arrives
 		m.wizard = &w
 		m.mode = modeWizard
 		return m, nil
@@ -841,7 +860,7 @@ func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // finishSave applies the active draft: validate → staleness → write. It
 // refreshes the model on success and reports ok=false when the save did
 // not happen (validation error or stale file — mode/status already set).
-// Task 10 also calls this from the diff preview.
+// The diff preview's confirm (updateDiff) calls this too.
 func (m editorModel) finishSave() (editorModel, bool) {
 	d := m.draft
 	err := m.st.applyDraft(d)
@@ -1159,7 +1178,7 @@ func (m editorModel) listLines(w, h int) []string {
 	return lines
 }
 
-// rightLines picks the right pane's content by mode. Later tasks add cases.
+// rightLines picks the right pane's content by mode.
 func (m editorModel) rightLines(w, h int) []string {
 	switch m.mode {
 	case modeListEdit:

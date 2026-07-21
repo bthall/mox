@@ -570,13 +570,15 @@ func TestEditorDuplicateThenRename(t *testing.T) {
 	if m.draft == nil || !m.draft.added || m.draft.name != "webfarm3" {
 		t.Fatalf("draft = %+v", m.draft)
 	}
-	// navigating away and back must not destroy the renamed duplicate
+	// navigating away from the (inherently dirty) added draft must guard
+	m.pane = paneList
 	m = edRunes(t, m, "k")
-	m = edRunes(t, m, "j")
-	// After navigation, the added draft is gone (guard behavior arrives in Task 9),
-	// but we must not panic and the draft must be properly initialized
-	if m.draft == nil {
-		t.Fatal("draft became nil after navigation")
+	if m.mode != modeGuard {
+		t.Fatalf("navigation away from added draft: mode=%v, want guard", m.mode)
+	}
+	m = edType(t, m, tea.KeyEsc) // stay: the renamed duplicate survives
+	if m.draft == nil || m.draft.name != "webfarm3" {
+		t.Fatalf("draft after guard-stay = %+v", m.draft)
 	}
 }
 
@@ -1029,5 +1031,27 @@ func TestEditorReloadSurvivesBrokenExternalEdit(t *testing.T) {
 	// old in-memory state survives so the user isn't stranded
 	if len(m.st.cfg.Sessions) != 2 {
 		t.Fatal("editor lost its last-good state")
+	}
+}
+
+// TestEditorFilterEscKeepsDirtyDraft pins that clearing an active filter
+// with esc never silently replaces a dirty draft — the selection is put
+// back on the draft's session before the list is re-derived.
+func TestEditorFilterEscKeepsDirtyDraft(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "/")
+	m = edRunes(t, m, "web")
+	m = edType(t, m, tea.KeyEnter) // keep the filter, back to browse
+	m = focusField(t, m, "connect")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "ssh -A {{host}}")
+	m = edType(t, m, tea.KeyEnter) // dirty webfarm draft
+	m.pane = paneList
+	m = edType(t, m, tea.KeyEsc) // clear the filter
+	if m.selectedName() != "webfarm" {
+		t.Fatalf("selection after filter clear = %q, want webfarm", m.selectedName())
+	}
+	if !m.isDirty() || m.draft.sess.Connect != "ssh -A {{host}}" {
+		t.Fatal("clearing the filter discarded the dirty draft")
 	}
 }
