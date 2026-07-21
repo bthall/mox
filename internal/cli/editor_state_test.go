@@ -48,7 +48,9 @@ func TestLoadEditorState(t *testing.T) {
 
 	// invalid config refuses to load
 	p := filepath.Join(t.TempDir(), "bad.yml")
-	os.WriteFile(p, []byte("sessions:\n    x:\n        retry: -3\n"), 0o600)
+	if err := os.WriteFile(p, []byte("sessions:\n    x:\n        retry: -3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := loadEditorState(p); err == nil {
 		t.Fatal("loadEditorState accepted an invalid config")
 	}
@@ -186,5 +188,158 @@ func TestApplyDraftStaleBlocksWrite(t *testing.T) {
 	err := st.applyDraft(d)
 	if err == nil || !strings.Contains(err.Error(), "changed on disk") {
 		t.Fatalf("applyDraft = %v, want stale-config error", err)
+	}
+}
+
+// Regression test for C1: rollback on failed writes.
+func TestApplyDraftRollbackOnWriteFailure(t *testing.T) {
+	st := testEditorState(t, editorFixtureYAML)
+	d := newDraft(st.cfg, "webfarm")
+	d.name = "renamed"
+	d.sess.Sync = false
+
+	// Make the directory read-only to force the write to fail.
+	dir := filepath.Dir(st.path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			t.Errorf("cleanup chmod: %v", err)
+		}
+	})
+
+	// Write should fail; the failed rename should not be in the node tree.
+	if err := st.applyDraft(d); err == nil {
+		t.Fatal("expected write to fail with read-only dir")
+	}
+
+	// Restore permissions to verify the file is unchanged.
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Save a clean draft; the failed rename should not appear.
+	d2 := newDraft(st.cfg, "webfarm")
+	if err := st.applyDraft(d2); err != nil {
+		t.Fatalf("clean save failed: %v", err)
+	}
+	data, _ := os.ReadFile(st.path)
+	if strings.Contains(string(data), "renamed:") {
+		t.Fatalf("failed rename leaked into file:\n%s", data)
+	}
+
+	// Verify the file loads cleanly (no duplicate keys).
+	if _, err := config.Load(st.path); err != nil {
+		t.Fatalf("file not valid after rollback: %v", err)
+	}
+
+	// Retry the original rename draft; it should succeed now.
+	d3 := newDraft(st.cfg, "webfarm")
+	d3.name = "renamed"
+	d3.sess.Sync = false
+	if err := st.applyDraft(d3); err != nil {
+		t.Fatalf("retry rename: %v", err)
+	}
+	data, _ = os.ReadFile(st.path)
+	if !strings.Contains(string(data), "renamed:") {
+		t.Fatalf("retry rename not applied:\n%s", data)
+	}
+}
+
+// Regression test for I1: collision guard.
+func TestApplyDraftRejectsDuplicateNames(t *testing.T) {
+	st := testEditorState(t, editorFixtureYAML)
+
+	// Rename webfarm to solo (collides with existing).
+	d := newDraft(st.cfg, "webfarm")
+	d.name = "solo"
+	err := st.applyDraft(d)
+	if err == nil {
+		t.Fatal("should reject rename that collides with existing session")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("wrong error: %v", err)
+	}
+
+	// File should be unchanged.
+	data, _ := os.ReadFile(st.path)
+	if !strings.Contains(string(data), "webfarm:") {
+		t.Fatalf("file was modified despite collision error:\n%s", data)
+	}
+
+	// Added draft with duplicate name should also be rejected.
+	add := &sessionDraft{name: "solo", added: true, sess: &config.Session{Hosts: []string{"h1"}}}
+	if err := st.applyDraft(add); err == nil {
+		t.Fatal("should reject added session with existing name")
+	}
+
+	// File should still be unchanged.
+	data, _ = os.ReadFile(st.path)
+	if !strings.Contains(string(data), "webfarm:") {
+		t.Fatalf("file was modified despite added collision error:\n%s", data)
+	}
+}
+
+// Regression test for I3: draft mutations don't leak into st.cfg.
+func TestApplyDraftNoAliasAfterSave(t *testing.T) {
+	st := testEditorState(t, editorFixtureYAML)
+	d := newDraft(st.cfg, "webfarm")
+	d.sess.Sync = false
+
+	if err := st.applyDraft(d); err != nil {
+		t.Fatalf("applyDraft: %v", err)
+	}
+
+	// After save, st.cfg.Sessions[d.name] should be a separate object.
+	if st.cfg.Sessions["webfarm"] == d.sess {
+		t.Fatal("post-save aliasing: st.cfg.Sessions[d.name] is d.sess")
+	}
+
+	// Mutating d.sess should not affect st.cfg.
+	d.sess.Hosts = append(d.sess.Hosts, "extra-host")
+	if sameSessionYAML(d.sess, st.cfg.Sessions["webfarm"]) {
+		t.Fatal("draft mutation leaked into st.cfg after save")
+	}
+
+	// dirty() should now report true since d has diverged from st.cfg.
+	if !d.dirty(st.cfg) {
+		t.Fatal("d.dirty() should be true after mutating d.sess post-save")
+	}
+}
+
+// Regression test for M1: pure rename preserves flow-style and comments.
+func TestApplyDraftPureRenamePreservesFormat(t *testing.T) {
+	st := testEditorState(t, editorFixtureYAML)
+
+	// Pure rename (no content changes).
+	d := newDraft(st.cfg, "webfarm")
+	d.name = "farm"
+
+	if err := st.applyDraft(d); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+
+	data, _ := os.ReadFile(st.path)
+	out := string(data)
+
+	// Key name should be updated.
+	if !strings.Contains(out, "farm:") || strings.Contains(out, "webfarm:") {
+		t.Fatalf("rename not applied:\n%s", out)
+	}
+
+	// Flow-style hosts should be preserved.
+	if !strings.Contains(out, "[web1, web2]") {
+		t.Errorf("flow-style hosts not preserved:\n%s", out)
+	}
+
+	// Key comment should survive.
+	if !strings.Contains(out, "# webfarm comment") {
+		t.Errorf("key comment lost:\n%s", out)
+	}
+
+	// File should still load.
+	if _, err := config.Load(st.path); err != nil {
+		t.Fatalf("saved config invalid: %v", err)
 	}
 }

@@ -32,13 +32,13 @@ type editorState struct {
 // loadEditorState reads, parses (strictly), and validates the config at
 // path, keeping both the typed form and the raw node tree.
 func loadEditorState(path string) (*editorState, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // user-supplied config path is intentional
-	if err != nil {
-		return nil, fmt.Errorf("read config %s: %w", path, err)
-	}
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, err
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // user-supplied config path is intentional
+	if err != nil {
+		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 
 	var root yaml.Node
@@ -123,7 +123,7 @@ func (st *editorState) nextConfig(d *sessionDraft) *config.Config {
 	if d.orig != "" {
 		delete(next.Sessions, d.orig)
 	}
-	next.Sessions[d.name] = d.sess
+	next.Sessions[d.name] = cloneSession(d.sess)
 	return next
 }
 
@@ -152,25 +152,54 @@ func (st *editorState) applyDraft(d *sessionDraft) error {
 	}
 
 	sessMap := findOrCreateMapKey(st.root.Content[0], "sessions")
+
+	// Guard against name collisions (I1: prevents duplicate keys in the map).
+	if !d.deleted && (d.orig == "" || d.name != d.orig) {
+		if findMapKey(sessMap, d.name) != nil {
+			return fmt.Errorf("session %q already exists", d.name)
+		}
+	}
+
+	// Snapshot the Content slice for rollback on write failure (C1).
+	snapshot := make([]*yaml.Node, len(sessMap.Content))
+	copy(snapshot, sessMap.Content)
+	var didRename bool
+	var origName string
+
 	switch {
 	case d.deleted:
 		removeMapKey(sessMap, d.orig)
 	default:
-		var sn yaml.Node
-		if err := sn.Encode(d.sess); err != nil {
-			return fmt.Errorf("encode session: %w", err)
-		}
-		if d.orig == "" || !setMapValue(sessMap, d.orig, &sn) {
-			sessMap.Content = append(sessMap.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Value: d.name},
-				&sn,
-			)
-		} else if d.name != d.orig {
+		// M1: pure rename — only rename the key, don't re-encode the session body.
+		if d.orig != "" && d.name != d.orig && sameSessionYAML(d.sess, st.cfg.Sessions[d.orig]) {
+			didRename = true
+			origName = d.orig
 			renameMapKey(sessMap, d.orig, d.name)
+		} else {
+			// New session, or content changed, or just renaming with content changes.
+			var sn yaml.Node
+			if err := sn.Encode(d.sess); err != nil {
+				return fmt.Errorf("encode session: %w", err)
+			}
+			if d.orig == "" || !setMapValue(sessMap, d.orig, &sn) {
+				sessMap.Content = append(sessMap.Content,
+					&yaml.Node{Kind: yaml.ScalarNode, Value: d.name},
+					&sn,
+				)
+			} else if d.name != d.orig {
+				didRename = true
+				origName = d.orig
+				renameMapKey(sessMap, d.orig, d.name)
+			}
 		}
 	}
 
 	if err := writeYAMLNode(st.path, st.root, false); err != nil {
+		// Rollback: restore the Content slice and undo the rename if it happened.
+		sessMap.Content = snapshot
+		if didRename {
+			renameMapKey(sessMap, d.name, origName)
+		}
 		return err
 	}
 	st.cfg = next
