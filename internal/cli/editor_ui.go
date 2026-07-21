@@ -911,6 +911,17 @@ func (m *editorModel) jumpToErrorField(err error) {
 	// text often contains "split: root" — which would false-match the
 	// session-level root (working directory) field below.
 	if strings.Contains(msg, "window") || strings.Contains(msg, "pane") {
+		// A named simple-mode window's editable hosts row beats the
+		// read-only structure row when the error is about its hosts.
+		if strings.Contains(msg, "hosts") {
+			for i, f := range m.fields {
+				if name, ok := strings.CutSuffix(f.key, " hosts"); ok && strings.Contains(msg, "\""+name+"\"") {
+					m.fieldSel = i
+					m.pane = paneForm
+					return
+				}
+			}
+		}
 		for i, f := range m.fields {
 			if f.key == "windows" {
 				m.fieldSel = i
@@ -1206,12 +1217,18 @@ func (m editorModel) formLines(w, h int) []string {
 	if m.draft.deleted {
 		lines = append(lines, pkErr.Render("delete pending — press s to save, D to undo"), "")
 	}
+	labelW := 9
+	for _, f := range m.fields {
+		if len(f.key) > labelW {
+			labelW = len(f.key)
+		}
+	}
 	for i, f := range m.fields {
-		label := fmt.Sprintf("%-9s", f.key)
-		val := truncate(f.display(m.draft.sess), w-13)
+		label := fmt.Sprintf("%-*s", labelW, f.key)
+		val := truncate(f.display(m.draft.sess), w-labelW-4)
 		switch {
 		case i == m.fieldSel && m.mode == modeFieldEdit:
-			in := truncate(string(m.input), w-14)
+			in := truncate(string(m.input), w-labelW-5)
 			lines = append(lines, pkAccent.Render("▸ ")+pkSelected.Render(label)+" "+in+pkAccent.Render("█"))
 		case i == m.fieldSel && m.pane == paneForm && m.mode != modeListEdit:
 			lines = append(lines, pkAccent.Render("▸ ")+pkSelected.Render(label)+" "+val)
@@ -1261,7 +1278,7 @@ func (m *editorModel) commitListInput() {
 		return
 	}
 	entries := []string{line}
-	if m.fields[m.listEd.field].key == "hosts" {
+	if m.fields[m.listEd.field].expand {
 		expanded, err := expandHosts(strings.Fields(line), m.st.cfg, m.clusters)
 		if err != nil {
 			m.listEd.errMsg = err.Error()
@@ -1389,7 +1406,7 @@ func (m editorModel) listEditLines(w, h int) []string {
 	if m.listEd.errMsg != "" {
 		lines = append(lines, "", pkErr.Render(truncate(m.listEd.errMsg, w)))
 	}
-	if f.key == "hosts" {
+	if f.expand {
 		lines = append(lines, "", pkDim.Render(truncate("@cluster expands on commit (config + clusterssh)", w)))
 	}
 	return lines

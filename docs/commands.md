@@ -79,7 +79,9 @@ expands the cluster into its members on the spot — config-stored hosts are
 literal, so this matches how `mox add` and `mox new --save` behave.
 
 Complex sessions (windows/panes) expose their session-level fields in the
-form; the window/pane structure itself is one `o` away in `$EDITOR`.
+form, and each *simple-mode* window (hosts, no panes) contributes editable
+`<name> hosts` / `<name> cmds` rows — so imported sessions edit like any
+other. Pane geometry itself is one `o` away in `$EDITOR`.
 Changes apply the next time the session is built — a running session is
 never touched.
 

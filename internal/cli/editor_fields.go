@@ -33,6 +33,10 @@ type fieldDef struct {
 	set     func(s *config.Session, v string) error // commit for text/number
 	cycle   func(s *config.Session)                 // advance for cycle fields
 	list    func(s *config.Session) *[]string       // backing slice for list fields
+
+	// expand marks a host list: committed entries run through expandHosts
+	// so @cluster references become their members.
+	expand bool
 }
 
 func onOff(b bool) string {
@@ -106,11 +110,39 @@ func sessionFields(s *config.Session) []fieldDef {
 
 	if !isComplex {
 		fields = append(fields, fieldDef{
-			key: "hosts", kind: fieldList,
+			key: "hosts", kind: fieldList, expand: true,
 			help:    "Hosts, one pane per host. An entry starting with @ expands the cluster into its members when committed.",
 			display: func(s *config.Session) string { return listSummary(s.Hosts) },
 			list:    func(s *config.Session) *[]string { return &s.Hosts },
 		})
+	}
+	if isComplex {
+		// Simple-mode windows (hosts, no panes) get their host and command
+		// lists surfaced as editable rows — most imported sessions are one
+		// simple window, and hiding their hosts behind 'o' buries the field
+		// people edit most. Pane-based windows stay YAML-only. Closures
+		// index into the passed session's Windows: fields are rebuilt per
+		// draft (resetDraft), so the index always matches.
+		for i, w := range s.Windows {
+			if !w.IsSimple() {
+				continue
+			}
+			i := i
+			fields = append(fields,
+				fieldDef{
+					key: w.Name + " hosts", kind: fieldList, expand: true,
+					help:    fmt.Sprintf("Hosts for window %q, one pane per host. An entry starting with @ expands the cluster when committed.", w.Name),
+					display: func(s *config.Session) string { return listSummary(s.Windows[i].Hosts) },
+					list:    func(s *config.Session) *[]string { return &s.Windows[i].Hosts },
+				},
+				fieldDef{
+					key: w.Name + " cmds", kind: fieldList,
+					help:    fmt.Sprintf("Commands sent to each host pane of window %q after connect, in order.", w.Name),
+					display: func(s *config.Session) string { return listSummary(s.Windows[i].Commands) },
+					list:    func(s *config.Session) *[]string { return &s.Windows[i].Commands },
+				},
+			)
+		}
 	}
 	fields = append(fields,
 		fieldDef{
