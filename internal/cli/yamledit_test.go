@@ -65,6 +65,28 @@ func TestMapKeyHelpers(t *testing.T) {
 	}
 }
 
+func TestRenameMapKeyPreservesComments(t *testing.T) {
+	root, m := parseDoc(t, "# keep me\na: 1\nb: 2\n")
+
+	if !renameMapKey(m, "a", "z") {
+		t.Fatal("renameMapKey(a→z) = false, want true")
+	}
+
+	// Re-encode the document and verify comment rode along with the renamed key
+	data, err := yaml.Marshal(root)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	output := string(data)
+
+	if !strings.Contains(output, "# keep me") {
+		t.Fatalf("comment lost after rename: %q", output)
+	}
+	if !strings.Contains(output, "z:") {
+		t.Fatalf("renamed key 'z' not found: %q", output)
+	}
+}
+
 func TestWriteYAMLNodeAtomic(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yml")
