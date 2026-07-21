@@ -190,3 +190,27 @@ func TestPickerModel_ScrollKeepsSelectionVisible(t *testing.T) {
 		t.Errorf("scrolled enter should pick sess-29, got %q", m.choice)
 	}
 }
+
+func TestPickerCtrlERequestsEdit(t *testing.T) {
+	candidates := []session.SessionInfo{
+		{Name: "managed", Managed: true},
+		{Name: "foreign", Running: true, Managed: false},
+	}
+	sessions := map[string]*config.Session{"managed": {Root: "/tmp"}}
+	m := newPickerModel(candidates, sessions, time.Now())
+
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	pm := nm.(pickerModel)
+	if !isQuit(cmd) || pm.choice != "managed" || !pm.editReq {
+		t.Fatalf("ctrl+e on managed: choice=%q editReq=%v", pm.choice, pm.editReq)
+	}
+
+	// on a session with no config entry, ctrl+e is a no-op
+	m = newPickerModel(candidates, sessions, time.Now())
+	m.selected = 1
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	pm = nm.(pickerModel)
+	if cmd != nil || pm.editReq {
+		t.Fatal("ctrl+e acted on an unmanaged session")
+	}
+}

@@ -16,7 +16,8 @@ Session lifecycle:
 Configuration:
   mox init              scaffold a default config
   mox add [name]        interactive wizard: build a session, save it to config
-  mox edit              open the config in $EDITOR, validate on exit
+  mox edit [session]    no argument: open the config in $EDITOR, validate on exit
+                        with a session: edit it in the full-screen TUI editor
   mox validate          check config syntax
   mox config path       print resolved config path
   mox config view       print the raw config file
@@ -38,10 +39,47 @@ hosts, connect template) on the right.
 
 - Type to filter, arrows or `Ctrl-J`/`Ctrl-K` to move
 - `Enter` attaches (building configured sessions as needed)
+- `Ctrl-E` opens the highlighted session in the config editor (below);
+  quitting the editor lands back in the picker
 - `Esc` backs out of the filter, then out of the picker
 
 Terminals that can't host the interactive UI get a numbered prompt instead;
 piped and scripted invocations print help, so scripts never hang.
+
+## The session editor
+
+`mox edit <session>` (or `Ctrl-E` in the picker) opens a full-screen editor
+instead of `$EDITOR`: configured sessions on the left, the selected
+session's fields on the right, with the focused field's documentation
+always visible.
+
+| Key | Action |
+| --- | --- |
+| `↑↓` / `j k` | move (list or form) |
+| `tab` | switch pane |
+| `/` | filter the session list |
+| `enter` | edit the focused field (text input, toggle, or list editor) |
+| `space` | cycle toggle/enum fields (`sync`, `arrange`, `hold`) |
+| `a` | add a session (runs the `mox add` wizard; result lands as a draft) |
+| `r` / `y` / `D` | rename / duplicate / delete (all buffered until save) |
+| `o` | open the config in `$EDITOR` (window/pane structure) |
+| `s` | save: validate → diff preview → write |
+| `q` / `esc` | quit (prompts if there are unsaved changes) |
+
+Edits buffer into a draft; nothing touches the file until you confirm the
+diff preview. The save rewrites only the edited session's block — comments
+and ordering elsewhere in the file are preserved (comments *inside* the
+edited session's block are re-generated). If the file changed on disk while
+the editor was open, the save is refused and `R` reloads.
+
+In the `hosts` list editor, committing an entry that starts with `@`
+expands the cluster into its members on the spot — config-stored hosts are
+literal, so this matches how `mox add` and `mox new --save` behave.
+
+Complex sessions (windows/panes) expose their session-level fields in the
+form; the window/pane structure itself is one `o` away in `$EDITOR`.
+Changes apply the next time the session is built — a running session is
+never touched.
 
 ## Cluster expansion (`@name`)
 

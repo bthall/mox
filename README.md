@@ -26,13 +26,19 @@ Or see everything at a glance with `mox list`:
   <img src="assets/screenshot-list.png" alt="mox list output" width="700">
 </p>
 
+Edit any session without touching YAML — `mox edit <session>`:
+
+<p align="center">
+  <img src="assets/screenshot-editor.png" alt="mox session editor" width="850">
+</p>
+
 ## Features
 
 - **Declarative YAML config** — one window per host, full custom layouts, or anything between; project-local `.mox.yml` overrides; editor autocomplete via a published JSON Schema
 - **Cssh-style broadcast** — `sync: true` for synchronized typing; tiled layouts; `sudo -i` once for every pane
 - **Ad-hoc sessions** — `mox new @cluster` or `mox new host1 host2` without touching config; `-x` excludes hosts; `--save` keeps the definition
 - **Session picker** — bare `mox` opens a fuzzy-filterable list with a live preview pane
-- **Config without YAML** — `mox add` walks a short wizard; `mox import` captures a running session — structure, pane geometry, *and its SSH connections*
+- **Config without YAML** — `mox edit <session>` opens a full-screen editor: buffered drafts, a validated diff preview before anything is written, comment-preserving saves; `mox add` walks a short wizard; `mox import` captures a running session — structure, pane geometry, *and its SSH connections*
 - **Broadcast safety** — an ended connection holds its pane instead of dropping to a local shell; optional retry
 - **Lifecycle hooks** — `on_start`/`on_stop` run locally around a session; `pre` seeds every pane
 - **Recents** — `mox recent` remembers what you used; `mox last` is `cd -` for sessions
@@ -60,7 +66,8 @@ Pre-built archives for linux/macOS × amd64/arm64 are attached to each
 ```bash
 mox init                        # scaffold a config at ~/.config/mox/config.yml
 mox add                         # interactively add a session to it
-mox edit                        # or open it in $EDITOR, validated on save
+mox edit example                # edit a session in the full-screen editor
+mox edit                        # or open the whole file in $EDITOR
 mox -a example                  # build + attach to the "example" session
 mox                             # or pick a session interactively
 mox new @webfarm                # ad-hoc broadcast session on a cluster

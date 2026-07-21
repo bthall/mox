@@ -40,9 +40,10 @@ type pickerModel struct {
 	selected int   // index into filtered
 	offset   int   // list scroll offset
 
-	width  int
-	height int
-	choice string
+	width   int
+	height  int
+	choice  string
+	editReq bool // ctrl+e: open the chosen session in the config editor
 }
 
 func newPickerModel(candidates []session.SessionInfo, sessions map[string]*config.Session, now time.Time) pickerModel {
@@ -96,6 +97,16 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.choice = m.candidates[m.filtered[m.selected]].Name
 			}
 			return m, tea.Quit
+		case tea.KeyCtrlE:
+			if len(m.filtered) > 0 {
+				name := m.candidates[m.filtered[m.selected]].Name
+				if _, ok := m.sessions[name]; ok {
+					m.choice = name
+					m.editReq = true
+					return m, tea.Quit
+				}
+			}
+			return m, nil
 		case tea.KeyEsc:
 			if len(m.query) > 0 {
 				m.query = nil
@@ -198,7 +209,7 @@ func (m pickerModel) View() string {
 	h := m.panelHeight()
 
 	left := panel(m.listTitle(), "", m.listLines(leftW-4, h-2), leftW, h)
-	right := panel(m.previewTitle(), "↵ attach · esc quit", m.previewLines(rightW-4), rightW, h)
+	right := panel(m.previewTitle(), "↵ attach · ^e edit · esc quit", m.previewLines(rightW-4), rightW, h)
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right) + "\n"
 }
 
@@ -209,7 +220,7 @@ func (m pickerModel) viewNarrow() string {
 		w = 20
 	}
 	h := m.panelHeight()
-	return panel(m.listTitle(), "↵ attach · esc quit", m.listLines(w-4, h-2), w, h) + "\n"
+	return panel(m.listTitle(), "↵ attach · ^e edit · esc quit", m.listLines(w-4, h-2), w, h) + "\n"
 }
 
 func (m pickerModel) listTitle() string {
@@ -419,14 +430,14 @@ func panel(title, footer string, content []string, w, h int) string {
 // runFuzzyPicker runs the interactive picker inline (no alt screen). ran is
 // false when the terminal can't host it and the caller should fall back to
 // the numbered prompt.
-func runFuzzyPicker(candidates []session.SessionInfo, sessions map[string]*config.Session) (name string, ran bool) {
+func runFuzzyPicker(candidates []session.SessionInfo, sessions map[string]*config.Session) (name string, edit, ran bool) {
 	final, err := tea.NewProgram(newPickerModel(candidates, sessions, time.Now())).Run()
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
 	m, ok := final.(pickerModel)
 	if !ok {
-		return "", false
+		return "", false, false
 	}
-	return m.choice, true
+	return m.choice, m.editReq, true
 }

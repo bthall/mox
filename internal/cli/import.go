@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -392,44 +391,6 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 		&sessNode,
 	)
 	return writeYAMLNode(path, &root, fresh)
-}
-
-// findOrCreateMapKey returns the value Node for a given key in a MappingNode,
-// creating an empty MappingNode if the key doesn't exist yet.
-func findOrCreateMapKey(m *yaml.Node, key string) *yaml.Node {
-	for i := 0; i < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			return m.Content[i+1]
-		}
-	}
-	v := &yaml.Node{Kind: yaml.MappingNode}
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key},
-		v,
-	)
-	return v
-}
-
-// writeYAMLNode writes the config document; modeline prepends the
-// yaml-language-server schema comment (for brand-new files only — an
-// existing file's header is the user's).
-func writeYAMLNode(path string, node *yaml.Node, modeline bool) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	var buf bytes.Buffer
-	if modeline {
-		buf.WriteString("# yaml-language-server: $schema=" + config.SchemaURL + "\n\n")
-	}
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(4)
-	if err := enc.Encode(node); err != nil {
-		return err
-	}
-	if err := enc.Close(); err != nil {
-		return err
-	}
-	return os.WriteFile(path, buf.Bytes(), 0o600)
 }
 
 // completeRunningTmuxSessions powers tab completion for `mox import <TAB>`.

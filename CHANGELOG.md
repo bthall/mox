@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A full-screen session editor: `mox edit <session>` (and `Ctrl-E` in the
+  picker) edits a session's fields, hosts, and hooks in a TUI — buffered
+  drafts, validated saves with a diff preview, and writes that preserve
+  comments and ordering elsewhere in the file. Rename, duplicate, delete,
+  an embedded `mox add` wizard (`a`), and a one-key `$EDITOR` escape (`o`)
+  for window/pane structure are included; saves are refused (with reload
+  offered) if the config changed on disk while editing.
+- Config writes from the editor and `mox import` are now atomic (temp file
+  + rename), write through symlinked configs, and preserve the existing
+  file's permissions.
 - `mox add` — an interactive wizard that builds a simple-mode session
   (name, hosts with live `@cluster` expansion, ssh user, sync, arrangement,
   directory, commands), previews the YAML, and saves it to the config with
