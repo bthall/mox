@@ -69,12 +69,12 @@ type pendingAction struct { //nolint:unused // wired in by Task 9
 
 // listEditState is the list sub-editor (hosts, commands, pre, hooks).
 type listEditState struct {
-	field   int    //nolint:unused // wired in by Task 7
-	sel     int    //nolint:unused // wired in by Task 7
-	editing bool   // inline input active
-	adding  bool   //nolint:unused // wired in by Task 7 (editing a new entry vs replacing sel)
-	input   []rune //nolint:unused // wired in by Task 7
-	errMsg  string //nolint:unused // wired in by Task 7
+	field   int
+	sel     int
+	editing bool // inline input active
+	adding  bool // editing a new entry vs replacing sel
+	input   []rune
+	errMsg  string
 }
 
 type editorModel struct {
@@ -206,6 +206,8 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateFilter(msg)
 		case modeFieldEdit:
 			return m.updateFieldEdit(msg)
+		case modeListEdit:
+			return m.updateListEdit(msg)
 		}
 		// remaining modes are wired in by later tasks
 	}
@@ -345,8 +347,12 @@ func (m editorModel) enterField() (tea.Model, tea.Cmd) {
 		m.status = "window/pane structure is YAML-only — press o to open $EDITOR"
 		m.statusErr = false
 		return m, nil
+	case fieldList:
+		m.mode = modeListEdit
+		m.listEd = listEditState{field: m.fieldSel}
+		return m, nil
 	}
-	return m, nil // fieldList: Task 7
+	return m, nil
 }
 
 // cycleField advances a cycle field (bool / tri-state / enum) in place.
@@ -391,6 +397,7 @@ func (m editorModel) updateFieldEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeySpace:
 		m.input = append(m.input, ' ')
+		m.inputErr = ""
 		return m, nil
 	case tea.KeyRunes:
 		for _, r := range msg.Runes {
@@ -567,6 +574,9 @@ func (m editorModel) listLines(w, h int) []string {
 
 // rightLines picks the right pane's content by mode. Later tasks add cases.
 func (m editorModel) rightLines(w, h int) []string {
+	if m.mode == modeListEdit {
+		return m.listEditLines(w, h)
+	}
 	return m.formLines(w, h)
 }
 
@@ -617,4 +627,153 @@ func (m editorModel) statusLine() string {
 		parts = append(parts, style.Render(m.status))
 	}
 	return " " + truncate(strings.Join(parts, pkDim.Render(" · ")), m.width-2)
+}
+
+// listItems returns the live backing slice for the sub-editor's field.
+func (m *editorModel) listItems() *[]string {
+	return m.fields[m.listEd.field].list(m.draft.sess)
+}
+
+// commitListInput commits the sub-editor's inline input. Hosts entries go
+// through expandHosts so @cluster references become their members; other
+// list fields take the line verbatim.
+func (m *editorModel) commitListInput() {
+	line := strings.TrimSpace(string(m.listEd.input))
+	if line == "" {
+		m.listEd.errMsg = "empty entry"
+		return
+	}
+	entries := []string{line}
+	if m.fields[m.listEd.field].key == "hosts" {
+		expanded, err := expandHosts(strings.Fields(line), m.st.cfg, m.clusters)
+		if err != nil {
+			m.listEd.errMsg = err.Error()
+			return
+		}
+		entries = expanded
+	}
+	items := m.listItems()
+	if m.listEd.adding {
+		*items = append(*items, entries...)
+		m.listEd.sel = len(*items) - 1
+	} else {
+		// Replace items[sel] with entries
+		newItems := make([]string, 0, len(*items)-1+len(entries))
+		newItems = append(newItems, (*items)[:m.listEd.sel]...)
+		newItems = append(newItems, entries...)
+		newItems = append(newItems, (*items)[m.listEd.sel+1:]...)
+		*items = newItems
+	}
+	m.listEd.editing = false
+	m.listEd.input = nil
+	m.listEd.errMsg = ""
+}
+
+func (m editorModel) updateListEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	le := &m.listEd
+	if le.editing {
+		switch msg.Type {
+		case tea.KeyCtrlC:
+			return m, tea.Quit
+		case tea.KeyEsc:
+			le.editing, le.input, le.errMsg = false, nil, ""
+			return m, nil
+		case tea.KeyEnter:
+			m.commitListInput()
+			return m, nil
+		case tea.KeyCtrlU:
+			le.input, le.errMsg = nil, ""
+			return m, nil
+		case tea.KeyBackspace:
+			if len(le.input) > 0 {
+				le.input = le.input[:len(le.input)-1]
+			}
+			return m, nil
+		case tea.KeySpace:
+			le.input = append(le.input, ' ')
+			le.errMsg = ""
+			return m, nil
+		case tea.KeyRunes:
+			for _, r := range msg.Runes {
+				if unicode.IsPrint(r) {
+					le.input = append(le.input, r)
+				}
+			}
+			le.errMsg = ""
+			return m, nil
+		}
+		return m, nil
+	}
+
+	items := m.listItems()
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc:
+		m.mode = modeBrowse
+		return m, nil
+	case tea.KeyUp:
+		le.sel = clampChoice(le.sel-1, len(*items))
+		return m, nil
+	case tea.KeyDown:
+		le.sel = clampChoice(le.sel+1, len(*items))
+		return m, nil
+	}
+	switch string(msg.Runes) {
+	case "k":
+		le.sel = clampChoice(le.sel-1, len(*items))
+	case "j":
+		le.sel = clampChoice(le.sel+1, len(*items))
+	case "a":
+		le.editing, le.adding, le.input, le.errMsg = true, true, nil, ""
+	case "e":
+		if len(*items) > 0 {
+			le.editing, le.adding, le.errMsg = true, false, ""
+			le.input = []rune((*items)[le.sel])
+		}
+	case "d":
+		if len(*items) > 0 {
+			*items = append((*items)[:le.sel], (*items)[le.sel+1:]...)
+			le.sel = clampChoice(le.sel, len(*items))
+		}
+	case "J":
+		if le.sel < len(*items)-1 {
+			(*items)[le.sel], (*items)[le.sel+1] = (*items)[le.sel+1], (*items)[le.sel]
+			le.sel++
+		}
+	case "K":
+		if le.sel > 0 {
+			(*items)[le.sel], (*items)[le.sel-1] = (*items)[le.sel-1], (*items)[le.sel]
+			le.sel--
+		}
+	}
+	return m, nil
+}
+
+// listEditLines renders the sub-editor into the right pane.
+func (m editorModel) listEditLines(w, h int) []string {
+	f := m.fields[m.listEd.field]
+	lines := []string{pkTitle.Render(f.key), ""}
+	items := f.list(m.draft.sess)
+	if len(*items) == 0 && !m.listEd.editing {
+		lines = append(lines, pkDim.Render("  (empty — a to add)"))
+	}
+	for i, it := range *items {
+		row := truncate(it, w-4)
+		if i == m.listEd.sel && !m.listEd.editing {
+			lines = append(lines, pkAccent.Render("▌ ")+pkSelected.Render(row))
+		} else {
+			lines = append(lines, "  "+row)
+		}
+	}
+	if m.listEd.editing {
+		lines = append(lines, "", pkAccent.Render("▸ ")+string(m.listEd.input)+pkAccent.Render("█"))
+	}
+	if m.listEd.errMsg != "" {
+		lines = append(lines, "", pkErr.Render(truncate(m.listEd.errMsg, w)))
+	}
+	if f.key == "hosts" {
+		lines = append(lines, "", pkDim.Render(truncate("@cluster expands on commit (config + clusterssh)", w)))
+	}
+	return lines
 }

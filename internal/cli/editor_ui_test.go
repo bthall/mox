@@ -330,3 +330,99 @@ func TestEditorStructureFieldHint(t *testing.T) {
 		t.Fatal("structure row should stay in browse and hint at 'o'")
 	}
 }
+
+func TestEditorListSubEditor(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "j") // webfarm: hosts [web1 web2]
+	m = focusField(t, m, "hosts")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeListEdit {
+		t.Fatal("enter on hosts did not open the list sub-editor")
+	}
+
+	// add an entry
+	m = edRunes(t, m, "a")
+	if !m.listEd.editing || !m.listEd.adding {
+		t.Fatal("a did not start an add input")
+	}
+	m = edRunes(t, m, "web3")
+	m = edType(t, m, tea.KeyEnter)
+	if got := m.draft.sess.Hosts; len(got) != 3 || got[2] != "web3" {
+		t.Fatalf("hosts after add = %v", got)
+	}
+
+	// edit an entry (poke cursor/input directly; navigation noise isn't under test)
+	m.listEd.sel = 0
+	m = edRunes(t, m, "e")
+	m.listEd.input = []rune("web1a")
+	m = edType(t, m, tea.KeyEnter)
+	if m.draft.sess.Hosts[0] != "web1a" {
+		t.Fatalf("hosts after edit = %v", m.draft.sess.Hosts)
+	}
+
+	// reorder down, then delete
+	m.listEd.sel = 0
+	m = edRunes(t, m, "J")
+	if m.draft.sess.Hosts[1] != "web1a" {
+		t.Fatalf("hosts after J = %v", m.draft.sess.Hosts)
+	}
+	m = edRunes(t, m, "d")
+	if len(m.draft.sess.Hosts) != 2 {
+		t.Fatalf("hosts after d = %v", m.draft.sess.Hosts)
+	}
+
+	// esc returns to the form
+	m = edType(t, m, tea.KeyEsc)
+	if m.mode != modeBrowse {
+		t.Fatal("esc did not leave the sub-editor")
+	}
+	if !m.isDirty() {
+		t.Fatal("list edits did not dirty the draft")
+	}
+}
+
+func TestEditorHostsClusterExpansion(t *testing.T) {
+	st := testEditorState(t, editorFixtureYAML)
+	clusters := map[string][]string{"db": {"db1", "db2"}}
+	m := newEditorModel(st, clusters, nil, "webfarm")
+
+	m = focusField(t, m, "hosts")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "@db")
+	m = edType(t, m, tea.KeyEnter)
+	got := m.draft.sess.Hosts
+	if len(got) != 4 || got[2] != "db1" || got[3] != "db2" {
+		t.Fatalf("hosts after @db = %v, want expansion", got)
+	}
+
+	// unknown cluster: inline error, list unchanged
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "@nope")
+	m = edType(t, m, tea.KeyEnter)
+	if m.listEd.errMsg == "" {
+		t.Fatal("no error for unknown cluster")
+	}
+	if len(m.draft.sess.Hosts) != 4 {
+		t.Fatalf("hosts changed on failed expansion: %v", m.draft.sess.Hosts)
+	}
+}
+
+func TestEditorCommandsList(t *testing.T) {
+	m := testEditorModel(t)
+	m = focusField(t, m, "commands")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "sudo -i")
+	m = edType(t, m, tea.KeyEnter)
+	if got := m.draft.sess.Commands; len(got) != 1 || got[0] != "sudo -i" {
+		t.Fatalf("commands = %v", got)
+	}
+	// commands are NOT host-expanded even with an @
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "echo @db")
+	m = edType(t, m, tea.KeyEnter)
+	if got := m.draft.sess.Commands; len(got) != 2 || got[1] != "echo @db" {
+		t.Fatalf("commands = %v", got)
+	}
+}
