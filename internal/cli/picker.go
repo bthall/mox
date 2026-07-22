@@ -190,23 +190,7 @@ func isTerminal(f *os.File) bool {
 // Capture failures inside the hub degrade per session; a missing tmux
 // binary degrades every preview the same way.
 func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidates []session.SessionInfo, sessions map[string]*config.Session) (string, hubAction, error) {
-	client, clientErr := tmux.NewClient()
-	capture := func(target string) (string, error) {
-		if clientErr != nil {
-			return "", clientErr
-		}
-		return client.Run("capture-pane", "-p", "-t", "="+target)
-	}
-	windows := func(target string) (string, error) {
-		if clientErr != nil {
-			return "", clientErr
-		}
-		out, err := client.Run("list-windows", "-t", "="+target, "-F", "#{window_index}:#{window_name}#{?window_active,*,}")
-		if err != nil {
-			return "", err
-		}
-		return strings.Join(strings.Fields(out), " "), nil
-	}
+	capture, windows := hubTmuxFuncs(tmux.NewClient())
 
 	final, err := tea.NewProgram(newHubModel(ctx, mgr, order, capture, windows, candidates, sessions, time.Now()), tea.WithAltScreen()).Run()
 	if err != nil {
@@ -217,4 +201,31 @@ func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidate
 		return "", hubQuit, nil
 	}
 	return hm.choice, hm.action, nil
+}
+
+// hubTmuxFuncs builds the hub's preview functions over a shared tmux
+// client. A client construction error poisons both, degrading every
+// preview to the config summary rather than failing the hub.
+func hubTmuxFuncs(client *tmux.Client, clientErr error) (capture, windows func(string) (string, error)) {
+	capture = func(target string) (string, error) {
+		if clientErr != nil {
+			return "", clientErr
+		}
+		// "=NAME:" — exact session match, and the trailing colon ends the
+		// session part of the pane target: a bare "=NAME" is not a valid
+		// pane target (tmux says "can't find pane"), and without the colon
+		// a dot in the name would parse as a window.pane separator.
+		return client.Run("capture-pane", "-p", "-t", "="+target+":")
+	}
+	windows = func(target string) (string, error) {
+		if clientErr != nil {
+			return "", clientErr
+		}
+		out, err := client.Run("list-windows", "-t", "="+target, "-F", "#{window_index}:#{window_name}#{?window_active,*,}")
+		if err != nil {
+			return "", err
+		}
+		return strings.Join(strings.Fields(out), " "), nil
+	}
+	return capture, windows
 }
