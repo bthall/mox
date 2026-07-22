@@ -111,6 +111,7 @@ type editorModel struct {
 
 	status    string
 	statusErr bool
+	statusOK  bool // success feedback renders green
 
 	width, height int
 }
@@ -498,6 +499,7 @@ func (m editorModel) selectIndex(idx int) (tea.Model, tea.Cmd) {
 	m.resetDraft()
 	m.status = ""
 	m.statusErr = false
+	m.statusOK = false
 	return m, nil
 }
 
@@ -901,6 +903,7 @@ func (m editorModel) finishSave() (editorModel, bool) {
 		m.mode = modeBrowse
 		m.status = err.Error()
 		m.statusErr = true
+		m.statusOK = false
 		m.jumpToErrorField(err)
 		return m, false
 	}
@@ -929,6 +932,7 @@ func (m editorModel) finishSave() (editorModel, bool) {
 		m.status += " — session is running; changes apply on next build"
 	}
 	m.statusErr = false
+	m.statusOK = true
 	return m, true
 }
 
@@ -1156,29 +1160,29 @@ func (m editorModel) formTitle() string {
 func (m editorModel) footer() string {
 	switch m.mode {
 	case modeFilter:
-		return "type to filter · ↵ keep · esc clear"
+		return hints("↵", "keep", "esc", "clear")
 	case modeFieldEdit:
-		return "↵ commit · esc cancel"
+		return hints("↵", "commit", "esc", "cancel")
 	case modeListEdit:
 		if m.listEd.editing {
-			return "↵ commit · esc cancel"
+			return hints("↵", "commit", "esc", "cancel")
 		}
-		return "a add · e edit · d delete · J/K move · esc back"
+		return hints("a", "add", "e", "edit", "d", "delete", "J/K", "move", "esc", "back")
 	case modeInput:
-		return "↵ confirm · esc cancel"
+		return hints("↵", "confirm", "esc", "cancel")
 	case modeConfirmDelete:
-		return "y delete · esc cancel"
+		return hints("y", "delete", "esc", "cancel")
 	case modeDiff:
-		return "↵ write config · esc back"
+		return hints("↵", "write config", "esc", "back")
 	case modeGuard:
-		return "s save · d discard · esc stay"
+		return hints("s", "save", "d", "discard", "esc", "stay")
 	case modeStale:
-		return "R reload (discards changes) · esc back"
+		return hints("R", "reload (discards changes)", "esc", "back")
 	default:
 		if m.pane == paneList {
-			return "↵ fields · a add · r rename · y dup · D del · s save · q quit"
+			return hints("↵", "fields", "a", "add", "r", "rename", "y", "dup", "D", "del", "s", "save", "q", "quit")
 		}
-		return "↵ edit · space cycle · s save · tab sessions · q quit"
+		return hints("↵", "edit", "space", "cycle", "s", "save", "tab", "sessions", "q", "quit")
 	}
 }
 
@@ -1288,8 +1292,11 @@ func (m editorModel) statusLine() string {
 	}
 	if m.status != "" {
 		style := pkDim
-		if m.statusErr {
+		switch {
+		case m.statusErr:
 			style = pkErr
+		case m.statusOK:
+			style = pkOK
 		}
 		parts = append(parts, style.Render(m.status))
 	}

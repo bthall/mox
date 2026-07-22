@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bthall/mox/internal/config"
 	"github.com/bthall/mox/internal/session"
@@ -451,5 +452,60 @@ func TestHubRefreshKeepsOrdering(t *testing.T) {
 	first := m.candidates[0]
 	if !first.Running {
 		t.Fatalf("first candidate after refresh = %+v, want a running one", first)
+	}
+}
+
+// lipglossWidth is a test-local alias to keep assertions readable.
+func lipglossWidth(s string) int { return lipgloss.Width(s) }
+
+// TestHubColoredPreviewNoBleed pins the ANSI safety properties: colored
+// capture lines are width-clipped without breaking sequences, every body
+// line is reset-terminated, and panel rows stay aligned.
+func TestHubColoredPreviewNoBleed(t *testing.T) {
+	longRed := "\x1b[31m" + strings.Repeat("x", 200) // long colored line, no reset
+	capture := func(string) (string, error) {
+		return "\x1b[32mgreen ok\x1b[0m\n" + longRed + "\n", nil
+	}
+	candidates, sessions := hubFixture()
+	old := hubTickInterval
+	hubTickInterval = time.Millisecond
+	t.Cleanup(func() { hubTickInterval = old })
+	m := newHubModel(context.Background(), &fakeHubManager{infos: candidates}, nil,
+		capture, func(string) (string, error) { return "1:sh*", nil }, candidates, sessions, time.Now())
+	m.width, m.height = 80, 20
+	m = drain(t, m, m.Init())
+
+	out := m.View()
+	if !strings.Contains(out, "\x1b[32mgreen ok") {
+		t.Fatal("session colors stripped from the preview")
+	}
+	// every rendered line must be equally wide (borders aligned) despite
+	// embedded SGR sequences, and no line may exceed the terminal width
+	for i, line := range strings.Split(out, "\n") {
+		if lw := lipglossWidth(line); lw > m.width {
+			t.Fatalf("line %d overflows: width %d > %d:\n%q", i, lw, m.width, line)
+		}
+	}
+	// the clipped red line is reset before the border glyph that follows
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "\x1b[31m") && !strings.Contains(line, "\x1b[0m") {
+			t.Fatalf("colored line not reset-terminated:\n%q", line)
+		}
+	}
+}
+
+// TestHubStateColoredNames pins the mox-list color vocabulary in the list.
+func TestHubStateColoredNames(t *testing.T) {
+	m := testHubModel(t, nil)
+	out := m.View()
+	if !strings.Contains(out, pkRunning.Render("webfarm")) && !strings.Contains(out, pkSelected.Render(pkRunning.Render("webfarm"))) {
+		t.Fatal("running managed session not green")
+	}
+	if !strings.Contains(out, pkForeign.Render("scratch")) {
+		t.Fatal("running unmanaged session not yellow")
+	}
+	// footer keys are accent-styled
+	if !strings.Contains(out, pkAccent.Render("S")) {
+		t.Fatal("footer keys not accent-styled")
 	}
 }

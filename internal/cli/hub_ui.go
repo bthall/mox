@@ -15,6 +15,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/bthall/mox/internal/config"
@@ -100,6 +101,7 @@ type hubModel struct {
 	pending   string // non-empty while a start/kill is in flight
 	status    string
 	statusErr bool
+	statusOK  bool // success feedback renders green
 
 	action hubAction
 	choice string
@@ -287,13 +289,16 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.status = verb + " " + msg.name + ": " + msg.err.Error()
 			m.statusErr = true
+			m.statusOK = false
 			return m, cmd
 		}
 		m.status = msg.verb + " " + msg.name + " ✓"
 		m.statusErr = false
+		m.statusOK = true
 		if msg.listErr != nil {
 			m.status += " · list refresh failed: " + msg.listErr.Error()
 			m.statusErr = true
+			m.statusOK = false
 		}
 		return m, cmd
 
@@ -564,11 +569,11 @@ func (m hubModel) previewTitle() string {
 func (m hubModel) footer() string {
 	switch m.mode {
 	case hubFilter:
-		return "type to filter · ↵ keep · esc clear"
+		return hints("↵", "keep", "esc", "clear")
 	case hubConfirmKill:
-		return "y kill · esc cancel"
+		return hints("y", "kill", "esc", "cancel")
 	}
-	return "↵ attach · S start · K kill · ^e edit · q quit"
+	return hints("↵", "attach", "S", "start", "K", "kill", "^e", "edit", "q", "quit")
 }
 
 func (m hubModel) listLines(w, h int) []string {
@@ -596,7 +601,18 @@ func (m hubModel) listLines(w, h int) []string {
 		if pad < 1 {
 			pad = 1
 		}
-		row := statusDot(c) + " " + name + strings.Repeat(" ", pad) + pkDim.Render(meta)
+		// mox list's vocabulary: running green, unmanaged-running yellow.
+		styledName := name
+		switch {
+		case c.Running && !c.Managed:
+			styledName = pkForeign.Render(name)
+		case c.Running:
+			styledName = pkRunning.Render(name)
+		}
+		if i == m.sel {
+			styledName = pkSelected.Render(styledName)
+		}
+		row := statusDot(c) + " " + styledName + strings.Repeat(" ", pad) + pkDim.Render(meta)
 		if i == m.sel {
 			lines = append(lines, pkAccent.Render("▌")+" "+row)
 		} else {
@@ -654,9 +670,11 @@ func (m hubModel) previewPane(w, h int) []string {
 		body = body[len(body)-rows:]
 	}
 	for _, l := range body {
-		lines = append(lines, pkDim.Render(truncate(l, w)))
+		// The session's own colors, clipped without breaking escape
+		// sequences and reset-terminated so nothing bleeds into borders.
+		lines = append(lines, ansi.Truncate(l, w, "")+"\x1b[0m")
 	}
-	lines = append(lines, pkAccent.Render(fmt.Sprintf("live · %ds", int(hubTickInterval.Seconds()))))
+	lines = append(lines, pkOK.Render(fmt.Sprintf("live · %ds", int(hubTickInterval.Seconds()))))
 	return lines
 }
 
@@ -727,8 +745,11 @@ func (m hubModel) statusLine() string {
 	}
 	if m.status != "" {
 		style := pkDim
-		if m.statusErr {
+		switch {
+		case m.statusErr:
 			style = pkErr
+		case m.statusOK:
+			style = pkOK
 		}
 		parts = append(parts, style.Render(m.status))
 	}

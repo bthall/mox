@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bthall/mox/internal/session"
 )
@@ -21,7 +22,22 @@ var (
 	pkRunning  = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	pkStopped  = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	pkForeign  = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	pkOK       = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 )
+
+// hints renders alternating key/label pairs for a panel footer: keys in
+// the accent color, labels dim — e.g. hints("↵", "attach", "q", "quit").
+func hints(pairs ...string) string {
+	var b strings.Builder
+	for i := 0; i+1 < len(pairs); i += 2 {
+		if i > 0 {
+			b.WriteString(pkDim.Render(" · "))
+		}
+		b.WriteString(pkAccent.Render(pairs[i]))
+		b.WriteString(pkDim.Render(" " + pairs[i+1]))
+	}
+	return b.String()
+}
 
 func statusDot(c session.SessionInfo) string {
 	switch {
@@ -76,6 +92,9 @@ func panel(title, footer string, content []string, w, h int) string {
 	}
 	inner := w - 4 // "│ " + " │"
 
+	if lipgloss.Width(title) > w-5 {
+		title = ansi.Truncate(title, w-5, "…")
+	}
 	top := "╭─ " + pkTitle.Render(title) + " "
 	fill := w - lipgloss.Width(top) - 1
 	if fill < 0 {
@@ -85,11 +104,20 @@ func panel(title, footer string, content []string, w, h int) string {
 
 	var bottomLine string
 	if footer != "" {
-		fill := w - lipgloss.Width("╰─ "+footer+" ") - 1
+		styled := pkDim.Render(footer)
+		if strings.Contains(footer, "\x1b") {
+			styled = footer // pre-styled footer (key/label hints)
+		}
+		if lipgloss.Width(styled) > w-5 {
+			// Clip without breaking escape sequences; reset so a cut
+			// style can't bleed into the border.
+			styled = ansi.Truncate(styled, w-5, "…") + "\x1b[0m"
+		}
+		fill := w - lipgloss.Width("╰─ "+styled+" ") - 1
 		if fill < 0 {
 			fill = 0
 		}
-		bottomLine = pkBorder.Render("╰─ ") + pkDim.Render(footer) + pkBorder.Render(" "+strings.Repeat("─", fill)+"╯")
+		bottomLine = pkBorder.Render("╰─ ") + styled + pkBorder.Render(" "+strings.Repeat("─", fill)+"╯")
 	} else {
 		bottomLine = pkBorder.Render("╰" + strings.Repeat("─", w-2) + "╯")
 	}

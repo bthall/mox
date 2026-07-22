@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Hub previews now show the session's real colors: capture uses tmux's
+  escape passthrough and lines are clipped ANSI-aware with a per-line
+  reset, so colors render faithfully without ever bleeding into borders.
+- The full-screen UIs use `mox list`'s color vocabulary: running session
+  names green (yellow when unmanaged), success feedback green, footer
+  keys accented. Everything still draws from the terminal's own palette.
+- Panel titles and footers clip cleanly at narrow widths instead of
+  overflowing the border.
+
 ## [0.4.1] — 2026-07-22
 
 ### Fixed
