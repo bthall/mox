@@ -215,7 +215,7 @@ func hubTmuxFuncs(client *tmux.Client, clientErr error) (capture, windows func(s
 		// session part of the pane target: a bare "=NAME" is not a valid
 		// pane target (tmux says "can't find pane"), and without the colon
 		// a dot in the name would parse as a window.pane separator.
-		return client.Run("capture-pane", "-p", "-t", "="+target+":")
+		return client.Run("capture-pane", "-ep", "-t", "="+target+":")
 	}
 	windows = func(target string) (string, error) {
 		if clientErr != nil {
