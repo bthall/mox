@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bare `mox` now opens a full-screen session hub instead of the inline
+  picker. Running sessions get a live preview of their active pane
+  (refreshed every second while highlighted) plus a window summary;
+  stopped sessions keep the config summary. New actions: `S` starts a
+  configured session detached, `K` kills the highlighted session after a
+  one-line confirm (running `on_stop` hooks). Attach, filtering, `ctrl+e`
+  editor handoff, and the non-terminal numbered fallback are unchanged.
+
 ## [0.3.3] — 2026-07-22
 
 ### Fixed

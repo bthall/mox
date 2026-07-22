@@ -10,9 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"context"
+
 	"github.com/bthall/mox/internal/config"
 	"github.com/bthall/mox/internal/history"
 	"github.com/bthall/mox/internal/session"
+	"github.com/bthall/mox/internal/tmux"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -50,28 +54,34 @@ func runPicker(cmd *cobra.Command) error {
 			return nil
 		}
 
-		// Interactive fuzzy picker when the terminal supports it; numbered
+		// Full-screen session hub when the terminal supports it; numbered
 		// prompt as the fallback.
 		if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
-			if name, edit, ran := runFuzzyPicker(candidates, cfg.Sessions); ran {
-				if name == "" {
-					return nil // canceled
-				}
-				if edit {
-					path, local := config.EffectivePath(opts.configPath)
-					if local {
-						fmt.Fprintf(os.Stderr, "mox: using ./%s\n", config.LocalConfigName)
-					}
-					st, err := loadEditorState(path)
-					if err != nil {
-						return err
-					}
-					if err := runEditorTUI(cmd, st, name); err != nil {
-						return err
-					}
-					continue // fresh picker over the (possibly changed) config
-				}
+			order := func(infos []session.SessionInfo) []session.SessionInfo {
+				return orderPickerCandidates(infos, recent)
+			}
+			name, action, err := runHub(cmd.Context(), mgr, order, candidates, cfg.Sessions)
+			if err != nil {
+				return err
+			}
+			switch action {
+			case hubAttach:
 				return mgr.CreateOrAttach(cmd.Context(), name, false)
+			case hubEdit:
+				path, local := config.EffectivePath(opts.configPath)
+				if local {
+					fmt.Fprintf(os.Stderr, "mox: using ./%s\n", config.LocalConfigName)
+				}
+				st, err := loadEditorState(path)
+				if err != nil {
+					return err
+				}
+				if err := runEditorTUI(cmd, st, name); err != nil {
+					return err
+				}
+				continue // fresh hub over the (possibly changed) config
+			default:
+				return nil // quit; also covers S/K-only visits
 			}
 		}
 
@@ -174,4 +184,37 @@ func resolvePickerChoice(input string, candidates []session.SessionInfo) (string
 // device but can't host an interactive UI.
 func isTerminal(f *os.File) bool {
 	return term.IsTerminal(int(f.Fd()))
+}
+
+// runHub runs the full-screen session hub and reports the chosen exit.
+// Capture failures inside the hub degrade per session; a missing tmux
+// binary degrades every preview the same way.
+func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidates []session.SessionInfo, sessions map[string]*config.Session) (string, hubAction, error) {
+	client, clientErr := tmux.NewClient()
+	capture := func(target string) (string, error) {
+		if clientErr != nil {
+			return "", clientErr
+		}
+		return client.Run("capture-pane", "-p", "-t", "="+target)
+	}
+	windows := func(target string) (string, error) {
+		if clientErr != nil {
+			return "", clientErr
+		}
+		out, err := client.Run("list-windows", "-t", "="+target, "-F", "#{window_index}:#{window_name}#{?window_active,*,}")
+		if err != nil {
+			return "", err
+		}
+		return strings.Join(strings.Fields(out), " "), nil
+	}
+
+	final, err := tea.NewProgram(newHubModel(ctx, mgr, order, capture, windows, candidates, sessions, time.Now()), tea.WithAltScreen()).Run()
+	if err != nil {
+		return "", hubQuit, err
+	}
+	hm, ok := final.(hubModel)
+	if !ok {
+		return "", hubQuit, nil
+	}
+	return hm.choice, hm.action, nil
 }

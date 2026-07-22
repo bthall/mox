@@ -30,21 +30,28 @@ Other:
 `mox <command> --help` shows the full flag list for any command, including
 shorthands and defaults.
 
-## The session picker
+## The session hub
 
-Bare `mox` on a terminal opens an interactive two-pane picker: a
-fuzzy-filterable list of every running, configured, and recent session on
-the left, and a live preview of the highlighted session (state, windows,
-hosts, connect template) on the right.
+Bare `mox` on a terminal opens a full-screen hub: every running,
+configured, and recent session on the left; a preview of the highlighted
+one on the right. For a **running** session the preview is a live capture
+of its active pane (refreshed every second while highlighted) with a
+window summary line. For a **stopped** session it's the config summary.
 
-- Type to filter, arrows or `Ctrl-J`/`Ctrl-K` to move
-- `Enter` attaches (building configured sessions as needed)
-- `Ctrl-E` opens the highlighted session in the config editor (below);
-  quitting the editor lands back in the picker
-- `Esc` backs out of the filter, then out of the picker
+| Key | Action |
+| --- | --- |
+| `↑↓` / `j k` | move |
+| `/` | filter the list |
+| `enter` | attach (building configured sessions as needed) |
+| `S` | start the highlighted configured session detached |
+| `K` | kill the highlighted running session (confirm, runs `on_stop`) |
+| `ctrl+e` | open the session in the config editor; quitting returns here |
+| `q` / `esc` | quit (esc clears an active filter first) |
 
-Terminals that can't host the interactive UI get a numbered prompt instead;
-piped and scripted invocations print help, so scripts never hang.
+Start and kill run in the background with a status line while they work;
+the list refreshes in place when they finish. Terminals that can't host
+the UI get a numbered prompt instead; piped and scripted invocations print
+help, so scripts never hang.
 
 ## The session editor
 
