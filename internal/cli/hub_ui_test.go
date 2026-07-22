@@ -84,7 +84,7 @@ func testHubModel(t *testing.T, mgr hubManager) hubModel {
 	windows := func(name string) (string, error) {
 		return "1:servers* 2:logs", nil
 	}
-	m := newHubModel(context.Background(), mgr, capture, windows, candidates, sessions, time.Now())
+	m := newHubModel(context.Background(), mgr, nil, capture, windows, candidates, sessions, time.Now())
 	m.width, m.height = 100, 26
 	return m
 }
@@ -253,7 +253,7 @@ func TestHubStartGuards(t *testing.T) {
 
 func TestHubStartUnmanagedStopped(t *testing.T) {
 	mgr := &fakeHubManager{infos: []session.SessionInfo{{Name: "ghost"}}}
-	m := newHubModel(context.Background(), mgr, func(string) (string, error) { return "", nil }, nil,
+	m := newHubModel(context.Background(), mgr, nil, func(string) (string, error) { return "", nil }, nil,
 		mgr.infos, map[string]*config.Session{}, time.Now())
 	m, cmd := hubRunes(t, m, "S")
 	if cmd != nil || !strings.Contains(m.status, "not in the config") {
@@ -370,7 +370,7 @@ func TestHubManyOverflow(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		infos = append(infos, session.SessionInfo{Name: fmt.Sprintf("sess%02d", i), Managed: true})
 	}
-	m := newHubModel(context.Background(), &fakeHubManager{infos: infos},
+	m := newHubModel(context.Background(), &fakeHubManager{infos: infos}, nil,
 		func(string) (string, error) { return "", nil }, nil, infos, map[string]*config.Session{}, time.Now())
 	m.width, m.height = 100, 20
 	for i := 0; i < 39; i++ {
@@ -413,5 +413,35 @@ func TestHubFilterBackspaceAndQuit(t *testing.T) {
 	_, cmd = hubRunes(t, m, "q")
 	if !isQuit(cmd) {
 		t.Fatal("q did not quit")
+	}
+}
+
+// TestHubRefreshKeepsOrdering pins that the post-action listing refresh
+// goes through the same ordering as the initial candidates.
+func TestHubRefreshKeepsOrdering(t *testing.T) {
+	mgr := &fakeHubManager{}
+	mgr.infos, _ = hubFixture()
+	candidates, sessions := hubFixture()
+	ordered := 0
+	order := func(infos []session.SessionInfo) []session.SessionInfo {
+		ordered++
+		return orderPickerCandidates(infos, nil)
+	}
+	old := hubTickInterval
+	hubTickInterval = time.Millisecond
+	t.Cleanup(func() { hubTickInterval = old })
+	m := newHubModel(context.Background(), mgr, order,
+		func(string) (string, error) { return "", nil }, nil, candidates, sessions, time.Now())
+	m.width, m.height = 100, 26
+	m, _ = hubRunes(t, m, "j") // dbcluster
+	m, cmd := hubRunes(t, m, "S")
+	m = drain(t, m, cmd)
+	if ordered == 0 {
+		t.Fatal("refresh did not go through the ordering seam")
+	}
+	// running sessions sort before stopped ones after the refresh
+	first := m.candidates[0]
+	if !first.Running {
+		t.Fatalf("first candidate after refresh = %+v, want a running one", first)
 	}
 }

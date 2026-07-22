@@ -45,6 +45,10 @@ type hubManager interface {
 	List() ([]session.SessionInfo, error)
 }
 
+// hubOrder re-sorts a refreshed listing the same way the initial candidate
+// list was sorted (running by activity, stopped by recency).
+type hubOrder func([]session.SessionInfo) []session.SessionInfo
+
 // hubTickMsg drives the preview refresh cadence.
 type hubTickMsg struct{}
 
@@ -73,6 +77,7 @@ var hubTickInterval = time.Second
 type hubModel struct {
 	ctx      context.Context
 	mgr      hubManager
+	order    hubOrder
 	capture  func(target string) (string, error) // active pane buffer
 	windows  func(target string) (string, error) // window summary line
 	sessions map[string]*config.Session
@@ -102,10 +107,14 @@ type hubModel struct {
 	width, height int
 }
 
-func newHubModel(ctx context.Context, mgr hubManager, capture, windows func(string) (string, error), candidates []session.SessionInfo, sessions map[string]*config.Session, now time.Time) hubModel {
+func newHubModel(ctx context.Context, mgr hubManager, order hubOrder, capture, windows func(string) (string, error), candidates []session.SessionInfo, sessions map[string]*config.Session, now time.Time) hubModel {
+	if order == nil {
+		order = func(infos []session.SessionInfo) []session.SessionInfo { return infos }
+	}
 	m := hubModel{
 		ctx:      ctx,
 		mgr:      mgr,
+		order:    order,
 		capture:  capture,
 		windows:  windows,
 		sessions: sessions,
@@ -255,7 +264,7 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pending = ""
 		keep := msg.name
 		if msg.listErr == nil {
-			m.candidates = msg.infos
+			m.candidates = m.order(msg.infos)
 		}
 		m.refilter()
 		for i, ci := range m.visible {

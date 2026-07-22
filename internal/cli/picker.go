@@ -57,7 +57,10 @@ func runPicker(cmd *cobra.Command) error {
 		// Full-screen session hub when the terminal supports it; numbered
 		// prompt as the fallback.
 		if stdin, ok := cmd.InOrStdin().(*os.File); ok && isTerminal(stdin) {
-			name, action, err := runHub(cmd.Context(), mgr, candidates, cfg.Sessions)
+			order := func(infos []session.SessionInfo) []session.SessionInfo {
+				return orderPickerCandidates(infos, recent)
+			}
+			name, action, err := runHub(cmd.Context(), mgr, order, candidates, cfg.Sessions)
 			if err != nil {
 				return err
 			}
@@ -186,7 +189,7 @@ func isTerminal(f *os.File) bool {
 // runHub runs the full-screen session hub and reports the chosen exit.
 // Capture failures inside the hub degrade per session; a missing tmux
 // binary degrades every preview the same way.
-func runHub(ctx context.Context, mgr *session.Manager, candidates []session.SessionInfo, sessions map[string]*config.Session) (string, hubAction, error) {
+func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidates []session.SessionInfo, sessions map[string]*config.Session) (string, hubAction, error) {
 	client, clientErr := tmux.NewClient()
 	capture := func(target string) (string, error) {
 		if clientErr != nil {
@@ -205,7 +208,7 @@ func runHub(ctx context.Context, mgr *session.Manager, candidates []session.Sess
 		return strings.Join(strings.Fields(out), " "), nil
 	}
 
-	final, err := tea.NewProgram(newHubModel(ctx, mgr, capture, windows, candidates, sessions, time.Now()), tea.WithAltScreen()).Run()
+	final, err := tea.NewProgram(newHubModel(ctx, mgr, order, capture, windows, candidates, sessions, time.Now()), tea.WithAltScreen()).Run()
 	if err != nil {
 		return "", hubQuit, err
 	}
