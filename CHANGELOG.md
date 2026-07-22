@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Hub previews were broken for every session: the capture target used
+  `=NAME`, which tmux rejects as a pane target ("can't find pane"). The
+  target is now `=NAME:` (exact session match, colon-terminated), and an
+  integration test pins the syntax against a real tmux server.
+
 ## [0.4.0] — 2026-07-22
 
 ### Changed
