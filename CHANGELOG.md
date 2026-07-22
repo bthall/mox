@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Editor navigation no longer freezes under key repeat: holding `j`/`k`
+  (or any fast typing) batches keys into one event, which hotkey matching
+  previously dropped. Batches now replay one key at a time in every mode.
+- The form cursor resets to the top when a different session is selected;
+  a stale cursor could land Enter on a semantically different field.
+- The session list only shows the live filter prompt while filtering; a
+  dim `/ filter` hint replaces the always-on prompt that suggested
+  type-to-filter (which is the picker's behavior, not the editor's).
+
 ## [0.3.2] — 2026-07-22
 
 ### Added
