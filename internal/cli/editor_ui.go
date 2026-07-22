@@ -190,11 +190,21 @@ func (m *editorModel) resetDraft() {
 	}
 	keep := m.draft != nil &&
 		((m.draft.added && m.draft.name == name) || (!m.draft.added && m.draft.orig == name))
+	prev := ""
+	if m.draft != nil {
+		// The draft's list identity: renamed drafts stay listed under orig.
+		prev = m.draft.orig
+		if m.draft.added {
+			prev = m.draft.name
+		}
+	}
 	if !keep {
 		m.draft = newDraft(m.st.cfg, name)
 	}
 	m.fields = sessionFields(m.draft.sess)
-	if m.fieldSel > len(m.fields)-1 {
+	// A stale cursor on a different session lands Enter on the wrong
+	// field; keep the position only while it's the same session.
+	if name != prev || m.fieldSel > len(m.fields)-1 {
 		m.fieldSel = 0
 	}
 }
@@ -236,6 +246,25 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusErr = false
 		return m, nil
 	case tea.KeyMsg:
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
+			// Key repeat and fast typing batch runes into one message;
+			// hotkeys match single runes, so replay the batch one rune at
+			// a time. A mid-batch mode change or command (quit, save)
+			// takes effect immediately and the rest replays against it.
+			cur := m
+			for _, r := range msg.Runes {
+				nm, cmd := cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				em, ok := nm.(editorModel)
+				if !ok {
+					return nm, cmd
+				}
+				cur = em
+				if cmd != nil {
+					return cur, cmd
+				}
+			}
+			return cur, nil
+		}
 		switch m.mode {
 		case modeBrowse:
 			return m.updateBrowse(msg)
@@ -1155,8 +1184,12 @@ func (m editorModel) footer() string {
 
 // listLines renders the filter line plus the visible session rows.
 func (m editorModel) listLines(w, h int) []string {
+	header := pkDim.Render("/ filter")
+	if m.mode == modeFilter || len(m.filter) > 0 {
+		header = pkAccent.Render("▸ ") + string(m.filter) + pkAccent.Render("█")
+	}
 	lines := []string{
-		pkAccent.Render("▸ ") + string(m.filter) + pkAccent.Render("█"),
+		header,
 		"",
 	}
 	if len(m.visible) == 0 {

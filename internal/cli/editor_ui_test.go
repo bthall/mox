@@ -1108,3 +1108,53 @@ func TestEditorErrorJumpWindowHosts(t *testing.T) {
 		t.Fatalf("cursor on %q, want main hosts", m.fields[m.fieldSel].key)
 	}
 }
+
+// TestEditorBatchedKeysNavigate pins that key repeat (batched runes in one
+// KeyRunes message) still navigates — hotkeys must not require one message
+// per rune.
+func TestEditorBatchedKeysNavigate(t *testing.T) {
+	m := testEditorModel(t)
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("jjj")})
+	m = nm.(editorModel)
+	if got := m.sel; got != 1 {
+		// two sessions: jjj clamps at the last index
+		t.Fatalf("sel after batched jjj = %d, want 1", got)
+	}
+	m.pane = paneForm
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("jj")})
+	m = nm.(editorModel)
+	if m.fieldSel != 2 {
+		t.Fatalf("fieldSel after batched jj = %d, want 2", m.fieldSel)
+	}
+}
+
+// TestEditorFieldCursorResetsOnSessionSwitch pins that the form cursor
+// starts at the top when a different session is selected (a stale index
+// lands Enter on a semantically different field).
+func TestEditorFieldCursorResetsOnSessionSwitch(t *testing.T) {
+	m := testEditorModel(t)
+	m = focusField(t, m, "sync")
+	if m.fieldSel == 0 {
+		t.Fatal("test setup: expected non-zero fieldSel")
+	}
+	m.pane = paneList
+	m = edRunes(t, m, "j") // switch solo → webfarm
+	if m.fieldSel != 0 {
+		t.Fatalf("fieldSel after session switch = %d, want 0", m.fieldSel)
+	}
+}
+
+// TestEditorFilterHint pins the filter affordance: a dim hint while
+// inactive, the live prompt only while filtering.
+func TestEditorFilterHint(t *testing.T) {
+	m := testEditorModel(t)
+	if !strings.Contains(m.View(), "/ filter") {
+		t.Fatal("inactive list pane missing the / filter hint")
+	}
+	m = edRunes(t, m, "/")
+	m = edRunes(t, m, "web")
+	out := m.View()
+	if strings.Contains(out, "/ filter") || !strings.Contains(out, "web█") {
+		t.Fatal("active filter did not show the live prompt")
+	}
+}
