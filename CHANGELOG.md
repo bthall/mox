@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The session editor now surfaces each simple-mode window's `hosts` and
+  `commands` as editable rows on complex sessions (the shape `mox import`
+  produces), with the same `@cluster` expansion as session-level hosts.
+  Validation errors for a window's hosts jump to that window's row.
+
 ## [0.3.1] — 2026-07-21
 
 ### Changed

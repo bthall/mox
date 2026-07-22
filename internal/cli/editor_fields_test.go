@@ -159,3 +159,36 @@ func TestFieldKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionFieldsSimpleWindowRows(t *testing.T) {
+	s := &config.Session{Windows: []*config.Window{
+		{Name: "main", Hosts: []string{"a1", "a2"}},
+		{Name: "layout", Panes: []*config.Pane{{Split: config.SplitRoot}}},
+	}}
+	fields := sessionFields(s)
+
+	hosts := fieldByKey(t, fields, "main hosts")
+	if hosts.kind != fieldList || !hosts.expand {
+		t.Fatalf("main hosts row: kind=%v expand=%v", hosts.kind, hosts.expand)
+	}
+	cmds := fieldByKey(t, fields, "main cmds")
+	if cmds.kind != fieldList || cmds.expand {
+		t.Fatalf("main cmds row: kind=%v expand=%v", cmds.kind, cmds.expand)
+	}
+	// pane-based window contributes no rows; structure row remains
+	for _, f := range fields {
+		if f.key == "layout hosts" || f.key == "layout cmds" {
+			t.Fatalf("pane-based window got editable rows")
+		}
+	}
+	fieldByKey(t, fields, "windows")
+
+	// the list closures write through to the window of the passed session
+	*hosts.list(s) = append(*hosts.list(s), "a3")
+	if len(s.Windows[0].Hosts) != 3 {
+		t.Fatal("window hosts closure not live")
+	}
+	if got := hosts.display(s); got != "a1, a2, a3" {
+		t.Fatalf("display = %q", got)
+	}
+}

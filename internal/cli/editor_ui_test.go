@@ -1055,3 +1055,56 @@ func TestEditorFilterEscKeepsDirtyDraft(t *testing.T) {
 		t.Fatal("clearing the filter discarded the dirty draft")
 	}
 }
+
+// TestEditorWindowHostsEditing covers the imported-session shape: a complex
+// session whose single simple-mode window's hosts are edited in the form,
+// expanded from @cluster, and persisted by the save pipeline.
+func TestEditorWindowHostsEditing(t *testing.T) {
+	yml := editorFixtureYAML + `    imported:
+        windows:
+            - name: main
+              hosts: [i1]
+`
+	st := testEditorState(t, yml)
+	clusters := map[string][]string{"db": {"db1", "db2"}}
+	m := newEditorModel(st, clusters, nil, "imported")
+
+	m = focusField(t, m, "main hosts")
+	m = edType(t, m, tea.KeyEnter)
+	if m.mode != modeListEdit {
+		t.Fatal("enter on window hosts did not open the list sub-editor")
+	}
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "@db")
+	m = edType(t, m, tea.KeyEnter)
+	if got := m.draft.sess.Windows[0].Hosts; len(got) != 3 || got[1] != "db1" {
+		t.Fatalf("window hosts after @db = %v", got)
+	}
+	m = edType(t, m, tea.KeyEsc)
+
+	m = edRunes(t, m, "s")
+	m = edType(t, m, tea.KeyEnter)
+	data, err := os.ReadFile(m.st.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "db2") {
+		t.Fatalf("window hosts not persisted:\n%s", data)
+	}
+}
+
+// TestEditorErrorJumpWindowHosts pins that a window-hosts validation error
+// lands on that window's editable row, not the structure row.
+func TestEditorErrorJumpWindowHosts(t *testing.T) {
+	yml := editorFixtureYAML + `    imported:
+        windows:
+            - name: main
+              hosts: [i1]
+`
+	st := testEditorState(t, yml)
+	m := newEditorModel(st, nil, nil, "imported")
+	m.jumpToErrorField(fmt.Errorf(`session "imported": window 0 ("main"): hosts[0] = "bad host": unsafe`))
+	if m.fields[m.fieldSel].key != "main hosts" {
+		t.Fatalf("cursor on %q, want main hosts", m.fields[m.fieldSel].key)
+	}
+}

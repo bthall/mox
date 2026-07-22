@@ -107,14 +107,14 @@ func TestBuildWindow_UniformSSHFanout(t *testing.T) {
 	// The reported bug: a window of plain ssh panes must import as simple-mode
 	// hosts, not anonymous panes.
 	w, _ := buildWindow("main", "", []capturedPane{
-		{path: "/home/bthall", argv: []string{"ssh", "apisix-1.example.com"}},
-		{path: "/home/bthall", argv: []string{"ssh", "apisix-2.example.com"}},
-		{path: "/home/bthall", argv: []string{"ssh", "apisix-3.example.com"}},
+		{path: "/home/bthall", argv: []string{"ssh", "gateway-1.example.com"}},
+		{path: "/home/bthall", argv: []string{"ssh", "gateway-2.example.com"}},
+		{path: "/home/bthall", argv: []string{"ssh", "gateway-3.example.com"}},
 	})
 	if w.Panes != nil {
 		t.Fatalf("uniform ssh fan-out should not produce panes, got %+v", w.Panes)
 	}
-	want := []string{"apisix-1.example.com", "apisix-2.example.com", "apisix-3.example.com"}
+	want := []string{"gateway-1.example.com", "gateway-2.example.com", "gateway-3.example.com"}
 	if !reflect.DeepEqual(w.Hosts, want) {
 		t.Errorf("hosts = %v, want %v", w.Hosts, want)
 	}
