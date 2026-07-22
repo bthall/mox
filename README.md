@@ -14,10 +14,11 @@
 A CLI tool for creating and managing tmux sessions declaratively from YAML
 configuration files — with cssh-style multi-host broadcast built in.
 
-Run `mox` and pick a session:
+Run `mox` and you're in the session hub — live previews of running
+sessions, start/kill/edit without leaving it:
 
 <p align="center">
-  <img src="assets/screenshot-picker.png" alt="mox session picker" width="850">
+  <img src="assets/screenshot-hub.png" alt="mox session hub" width="850">
 </p>
 
 Or see everything at a glance with `mox list`:
@@ -37,7 +38,7 @@ Edit any session without touching YAML — `mox edit <session>`:
 - **Declarative YAML config** — one window per host, full custom layouts, or anything between; project-local `.mox.yml` overrides; editor autocomplete via a published JSON Schema
 - **Cssh-style broadcast** — `sync: true` for synchronized typing; tiled layouts; `sudo -i` once for every pane
 - **Ad-hoc sessions** — `mox new @cluster` or `mox new host1 host2` without touching config; `-x` excludes hosts; `--save` keeps the definition
-- **Session picker** — bare `mox` opens a fuzzy-filterable list with a live preview pane
+- **Session hub** — bare `mox` opens a full-screen hub: filterable session list, live buffer previews of running sessions, and start/kill/edit actions in place
 - **Config without YAML** — `mox edit <session>` opens a full-screen editor: buffered drafts, a validated diff preview before anything is written, comment-preserving saves; `mox add` walks a short wizard; `mox import` captures a running session — structure, pane geometry, *and its SSH connections*
 - **Broadcast safety** — an ended connection holds its pane instead of dropping to a local shell; optional retry
 - **Lifecycle hooks** — `on_start`/`on_stop` run locally around a session; `pre` seeds every pane
