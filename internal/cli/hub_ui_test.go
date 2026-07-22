@@ -509,3 +509,55 @@ func TestHubStateColoredNames(t *testing.T) {
 		t.Fatal("footer keys not accent-styled")
 	}
 }
+
+// TestSanitizeCaptureLine pins tab expansion (to real 8-column stops,
+// including after wide prefixes), SGR passthrough, and control-char
+// scrubbing.
+func TestSanitizeCaptureLine(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"a\tb", "a       b"},                                      // tab from col 1 → pad to col 8
+		{"12345678\tx", "12345678        x"},                       // tab at a stop → full 8
+		{"\x1b[32mok\x1b[0m\tdone", "\x1b[32mok\x1b[0m      done"}, // SGR kept, width 2 before tab
+		{"bad\rcr\x07bell", "badcrbell"},                           // CR and BEL dropped
+	}
+	for _, c := range cases {
+		if got := sanitizeCaptureLine(c.in); got != c.want {
+			t.Errorf("sanitize(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestHubTabbyPreviewKeepsFooter is the regression for the disappearing
+// shortcuts bar: a buffer full of tab-indented lines must not widen any
+// rendered line past the terminal (which would wrap and push the footer
+// and status line off-screen).
+func TestHubTabbyPreviewKeepsFooter(t *testing.T) {
+	capture := func(string) (string, error) {
+		var b strings.Builder
+		for i := 0; i < 30; i++ {
+			b.WriteString("func\tname\targs\treturn\tvery\tlong\ttabbed\tline\n")
+		}
+		return b.String(), nil
+	}
+	candidates, sessions := hubFixture()
+	old := hubTickInterval
+	hubTickInterval = time.Millisecond
+	t.Cleanup(func() { hubTickInterval = old })
+	m := newHubModel(context.Background(), &fakeHubManager{infos: candidates}, nil,
+		capture, func(string) (string, error) { return "1:sh*", nil }, candidates, sessions, time.Now())
+	m.width, m.height = 90, 20
+	m = drain(t, m, m.Init())
+
+	out := m.View()
+	for i, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "\t") {
+			t.Fatalf("line %d contains a raw tab", i)
+		}
+		if lw := lipglossWidth(line); lw > m.width {
+			t.Fatalf("line %d wraps: width %d > %d", i, lw, m.width)
+		}
+	}
+	if !strings.Contains(out, "attach") {
+		t.Fatal("footer (shortcuts bar) missing from the rendered view")
+	}
+}
