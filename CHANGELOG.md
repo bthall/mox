@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The hub's shortcuts bar (and status line) no longer vanish when
+  previewing sessions with tab-heavy content: `capture-pane` emits literal
+  tabs, which the width math counted as one cell but terminals render as
+  up to eight — wrapping the line and pushing everything below it
+  off-screen. Captured lines now expand tabs to real 8-column stops and
+  drop stray control characters, and the whole rendered view is hard-
+  clipped to the terminal width as a last line of defense.
+
 ## [0.5.0] — 2026-07-22
 
 ### Changed

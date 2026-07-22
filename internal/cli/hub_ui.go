@@ -9,9 +9,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -74,6 +76,54 @@ type hubActionMsg struct {
 // hubTickInterval is a var so tests can shrink it; the UI treats it as
 // constant.
 var hubTickInterval = time.Second
+
+// sgrRe matches the SGR color/attribute sequences capture-pane -e emits.
+var sgrRe = regexp.MustCompile("\x1b\\[[0-9;:]*m")
+
+// sanitizeCaptureLine makes a captured buffer line safe to lay out: tabs
+// expand to 8-column stops (capture-pane emits them literally, and a tab
+// counted as one cell but rendered as eight wraps the line and pushes the
+// panel footer off-screen), SGR sequences pass through, and every other
+// control character is dropped.
+func sanitizeCaptureLine(s string) string {
+	var b strings.Builder
+	col := 0
+	for len(s) > 0 {
+		if loc := sgrRe.FindStringIndex(s); loc != nil && loc[0] == 0 {
+			b.WriteString(s[:loc[1]])
+			s = s[loc[1]:]
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s)
+		switch {
+		case r == '\t':
+			n := 8 - col%8
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+		case r < 0x20 || r == 0x7f: // stray ESC / CR / BS etc.
+			// dropped
+		default:
+			b.WriteRune(r)
+			col += ansi.StringWidth(string(r))
+		}
+		s = s[size:]
+	}
+	return b.String()
+}
+
+// clampView hard-clips every rendered line to the terminal width as the
+// last line of defense: a line the terminal renders wider than we measured
+// (width disagreement on exotic glyphs) would wrap and push the footer and
+// status line off-screen.
+func clampView(view string, w int) string {
+	lines := strings.Split(view, "\n")
+	for i, l := range lines {
+		if lipgloss.Width(l) > w {
+			lines[i] = ansi.Truncate(l, w, "") + "\x1b[0m"
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 type hubModel struct {
 	ctx      context.Context
@@ -264,7 +314,12 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.previewErr = ""
 		m.previewWin = msg.windows
-		m.previewBody = strings.Split(strings.TrimRight(msg.body, "\n"), "\n")
+		raw := strings.Split(strings.TrimRight(msg.body, "\n"), "\n")
+		body := make([]string, len(raw))
+		for i, l := range raw {
+			body[i] = sanitizeCaptureLine(l)
+		}
+		m.previewBody = body
 		return m, nil
 
 	case hubActionMsg:
@@ -533,7 +588,7 @@ func (m hubModel) View() string {
 		if w < 24 {
 			w = 24
 		}
-		return panel(m.listTitle(), m.footer(), m.listLines(w-4, h-2), w, h) + "\n" + m.statusLine()
+		return clampView(panel(m.listTitle(), m.footer(), m.listLines(w-4, h-2), w, h)+"\n"+m.statusLine(), w)
 	}
 	leftW := m.width * 2 / 5
 	if leftW < 26 {
@@ -545,7 +600,7 @@ func (m hubModel) View() string {
 	rightW := m.width - leftW - 1
 	left := panel(m.listTitle(), "", m.listLines(leftW-4, h-2), leftW, h)
 	right := panel(m.previewTitle(), m.footer(), m.previewPane(rightW-4, h-2), rightW, h)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right) + "\n" + m.statusLine()
+	return clampView(lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right)+"\n"+m.statusLine(), m.width)
 }
 
 func (m hubModel) listTitle() string {
