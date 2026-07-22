@@ -387,3 +387,31 @@ func TestHubManyOverflow(t *testing.T) {
 		_ = nm
 	}
 }
+
+func TestHubFilterBackspaceAndQuit(t *testing.T) {
+	m := testHubModel(t, nil)
+	m, _ = hubRunes(t, m, "/")
+	m, _ = hubRunes(t, m, "dbx")
+	if len(m.visible) != 0 {
+		t.Fatalf("filter dbx matched %d", len(m.visible))
+	}
+	m, _ = hubKey(t, m, tea.KeyMsg{Type: tea.KeyBackspace})
+	if len(m.visible) != 1 {
+		t.Fatal("backspace did not refilter")
+	}
+	m, _ = hubKey(t, m, tea.KeyMsg{Type: tea.KeyEnter}) // keep filter, back to browse
+	// esc clears the kept filter first, second esc quits
+	m, cmd := hubKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if isQuit(cmd) || len(m.filter) != 0 {
+		t.Fatal("first esc should only clear the filter")
+	}
+	_, cmd = hubKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if !isQuit(cmd) {
+		t.Fatal("second esc did not quit")
+	}
+	// q quits too
+	_, cmd = hubRunes(t, m, "q")
+	if !isQuit(cmd) {
+		t.Fatal("q did not quit")
+	}
+}
