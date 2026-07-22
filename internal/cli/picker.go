@@ -195,13 +195,13 @@ func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidate
 		if clientErr != nil {
 			return "", clientErr
 		}
-		return client.Run("capture-pane", "-p", "-t", target)
+		return client.Run("capture-pane", "-p", "-t", "="+target)
 	}
 	windows := func(target string) (string, error) {
 		if clientErr != nil {
 			return "", clientErr
 		}
-		out, err := client.Run("list-windows", "-t", target, "-F", "#{window_index}:#{window_name}#{?window_active,*,}")
+		out, err := client.Run("list-windows", "-t", "="+target, "-F", "#{window_index}:#{window_name}#{?window_active,*,}")
 		if err != nil {
 			return "", err
 		}

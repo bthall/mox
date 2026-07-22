@@ -124,6 +124,11 @@ func newHubModel(ctx context.Context, mgr hubManager, order hubOrder, capture, w
 	}
 	m.candidates = candidates
 	m.refilter()
+	// Init starts the tick loop for a running initial highlight; record it
+	// here so onHighlightChange never starts a second loop.
+	if c, ok := m.selected(); ok && c.Running {
+		m.ticking = true
+	}
 	return m
 }
 
@@ -286,12 +291,17 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.status = msg.verb + " " + msg.name + " ✓"
 		m.statusErr = false
+		if msg.listErr != nil {
+			m.status += " · list refresh failed: " + msg.listErr.Error()
+			m.statusErr = true
+		}
 		return m, cmd
 
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
 			// Key repeat batches runes; replay them one at a time.
 			cur := m
+			var cmds []tea.Cmd
 			for _, r := range msg.Runes {
 				nm, cmd := cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 				hm, ok := nm.(hubModel)
@@ -300,10 +310,13 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				cur = hm
 				if cmd != nil {
-					return cur, cmd
+					cmds = append(cmds, cmd)
 				}
 			}
-			return cur, nil
+			if len(cmds) == 0 {
+				return cur, nil
+			}
+			return cur, tea.Batch(cmds...)
 		}
 		switch m.mode {
 		case hubBrowse:
@@ -347,10 +360,16 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.refilter()
 			return m, m.onHighlightChange()
 		}
+		if m.pending != "" {
+			return m, nil // let the in-flight action finish (ctrl+c overrides)
+		}
 		return m, tea.Quit
 	}
 	switch string(msg.Runes) {
 	case "q":
+		if m.pending != "" {
+			return m, nil
+		}
 		return m, tea.Quit
 	case "j":
 		return m.move(1)

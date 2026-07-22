@@ -181,7 +181,10 @@ func TestHubPreviewLifecycle(t *testing.T) {
 
 func TestHubTickLifecycle(t *testing.T) {
 	m := testHubModel(t, nil)
-	m.ticking = true
+	// the constructor records the Init-started loop for a running highlight
+	if !m.ticking {
+		t.Fatal("initial running highlight did not record the tick loop")
+	}
 	// tick while a running session is highlighted → capture + next tick
 	nm, cmd := m.Update(hubTickMsg{})
 	m = nm.(hubModel)
@@ -381,10 +384,15 @@ func TestHubManyOverflow(t *testing.T) {
 			t.Fatalf("step %d: selection %q hidden", i, m.selectedName())
 		}
 	}
+	// scroll back up one: overflow below again → indicator must render
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m = nm.(hubModel)
+	for i := 0; i < 20; i++ {
+		nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+		m = nm.(hubModel)
+	}
 	if !strings.Contains(m.View(), "more") {
-		// scrolled to the bottom: no more below — scroll back up
-		nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-		_ = nm
+		t.Fatal("overflow indicator missing after scrolling back up")
 	}
 }
 
