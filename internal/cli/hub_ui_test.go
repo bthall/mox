@@ -329,12 +329,15 @@ func TestHubAttachAndEdit(t *testing.T) {
 	if !isQuit(cmd) || m3.action != hubEdit || m3.choice != "webfarm" {
 		t.Fatalf("ctrl+e: action=%v choice=%q", m3.action, m3.choice)
 	}
-	// ctrl+e on an unmanaged session is a no-op
+	// ctrl+e on an unmanaged session stays in the hub and says why.
 	m4, _ := hubRunes(t, m, "j")
 	m4, _ = hubRunes(t, m4, "j") // scratch
 	m5, cmd := hubKey(t, m4, tea.KeyMsg{Type: tea.KeyCtrlE})
 	if cmd != nil || m5.action != hubQuit {
 		t.Fatal("ctrl+e acted on an unmanaged session")
+	}
+	if !strings.Contains(m5.status, "not in the config") || m5.statusErr {
+		t.Fatalf("ctrl+e on unmanaged session: status = %q (statusErr=%v)", m5.status, m5.statusErr)
 	}
 }
 

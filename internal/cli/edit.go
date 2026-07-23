@@ -126,17 +126,32 @@ func editAndValidate(path, editor string, out io.Writer) error {
 // state (callers validate the initial session before getting here).
 func runEditorTUI(cmd *cobra.Command, st *editorState, initial string) error {
 	clusters, _ := loadClusterssh() // missing file is fine
+	logger := loggerFromContext(cmd.Context())
+	ctx := cmd.Context()
 
-	// Running-state dots are best-effort: no tmux, no dots.
+	// Running-state dots and the post-save start hook are best-effort: no
+	// tmux, no dots, and "save + start now" degrades to save-only.
 	running := map[string]session.SessionInfo{}
-	if mgr, err := session.NewManager(st.cfg, loggerFromContext(cmd.Context())); err == nil {
+	var start func(cfg *config.Config, name string) error
+	if mgr, err := session.NewManager(st.cfg, logger); err == nil {
 		if infos, err := mgr.List(); err == nil {
 			for _, info := range infos {
 				running[info.Name] = info
 			}
 		}
+		// Saves replace st.cfg, so the start hook builds a manager over the
+		// config it is handed rather than reusing the launch-time one.
+		start = func(cfg *config.Config, name string) error {
+			m, err := session.NewManager(cfg, logger)
+			if err != nil {
+				return err
+			}
+			return m.Create(ctx, name, false)
+		}
 	}
 
-	_, err := tea.NewProgram(newEditorModel(st, clusters, running, initial), tea.WithAltScreen()).Run()
+	model := newEditorModel(st, clusters, running, initial)
+	model.startSession = start
+	_, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
 	return err
 }

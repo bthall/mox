@@ -66,11 +66,12 @@ func loadEditorState(path string) (*editorState, error) {
 // Exactly one draft is active in the editor at a time; guards force a
 // save/discard decision before it can be abandoned.
 type sessionDraft struct {
-	orig    string          // config name this draft edits; "" for brand-new sessions
-	name    string          // current name (differs from orig after a rename)
-	sess    *config.Session // working copy; ignored when deleted
-	deleted bool
-	added   bool // brand-new (wizard/duplicate): no orig entry to replace
+	orig       string          // config name this draft edits; "" for brand-new sessions
+	name       string          // current name (differs from orig after a rename)
+	sess       *config.Session // working copy; ignored when deleted
+	deleted    bool
+	added      bool // brand-new (wizard/duplicate): no orig entry to replace
+	startAfter bool // wizard's "save + start now": start detached after a successful save
 }
 
 // newDraft starts a clean draft for an existing configured session.

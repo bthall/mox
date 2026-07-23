@@ -412,6 +412,10 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.action = hubEdit
 				return m, tea.Quit
 			}
+			// Same feedback as S: a silent no-op reads as a dead key.
+			m.status = c.Name + " is not in the config"
+			m.statusErr = false
+			m.statusOK = false
 		}
 		return m, nil
 	case tea.KeyEsc:

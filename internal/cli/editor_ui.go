@@ -113,10 +113,17 @@ type editorModel struct {
 	statusErr bool
 	statusOK  bool // success feedback renders green
 
+	// startSession starts a just-saved session detached, from the post-save
+	// config. nil when tmux is unavailable (and in most tests).
+	startSession func(cfg *config.Config, name string) error
+
 	width, height int
 }
 
 func newEditorModel(st *editorState, clusters map[string][]string, running map[string]session.SessionInfo, initial string) editorModel {
+	if running == nil {
+		running = map[string]session.SessionInfo{}
+	}
 	m := editorModel{
 		st:       st,
 		clusters: clusters,
@@ -842,8 +849,8 @@ func (m editorModel) continuePending() (tea.Model, tea.Cmd) {
 // updateWizard forwards input to the embedded 'mox add' wizard and, when it
 // finishes, converts its result into the active draft. The wizard's file
 // write never runs here — the editor's save pipeline is the only writer.
-// Its "save + start now" choice behaves like "save to config" in embedded
-// mode (the draft still goes through s → diff → write).
+// "save + start now" jumps straight into that pipeline (diff → write) with
+// the draft marked to start detached once the save lands.
 func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		// Hard-quit like every other sub-mode — the wizard's own ctrl+c
@@ -865,7 +872,7 @@ func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if res.action == addActionCancel {
 		return m, nil
 	}
-	d := &sessionDraft{name: res.name, sess: res.sess}
+	d := &sessionDraft{name: res.name, sess: res.sess, startAfter: res.action == addActionSaveStart}
 	if _, exists := m.st.cfg.Sessions[res.name]; exists {
 		d.orig = res.name // wizard-confirmed overwrite of an existing session
 	} else {
@@ -883,6 +890,9 @@ func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.fields = sessionFields(d.sess)
 	m.fieldSel = 0
 	m.pane = paneForm
+	if d.startAfter {
+		return m.startSave()
+	}
 	m.status = "new session drafted — press s to save it"
 	m.statusErr = false
 	return m, nil
@@ -933,7 +943,31 @@ func (m editorModel) finishSave() (editorModel, bool) {
 	}
 	m.statusErr = false
 	m.statusOK = true
+	if d.startAfter && !d.deleted {
+		m.startSaved(d.name)
+	}
 	return m, true
+}
+
+// startSaved honors a draft's "save + start now" intent: start the session
+// detached from the freshly saved config. Synchronous — session builds are
+// tmux calls, quick enough to run on the UI thread, and this way the start
+// also happens when a guard-save quits the editor right after.
+func (m *editorModel) startSaved(name string) {
+	if m.startSession == nil {
+		m.status = "saved " + name + " ✓ — start skipped: tmux unavailable"
+		m.statusErr = true
+		m.statusOK = false
+		return
+	}
+	if err := m.startSession(m.st.cfg, name); err != nil {
+		m.status = "saved " + name + " ✓ — start failed: " + err.Error()
+		m.statusErr = true
+		m.statusOK = false
+		return
+	}
+	m.status = "saved + started " + name + " ✓ (detached)"
+	m.running[name] = session.SessionInfo{Name: name, Running: true, Managed: true}
 }
 
 // jumpToErrorField moves the form cursor to the field a validation error

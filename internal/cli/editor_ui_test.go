@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/bthall/mox/internal/config"
 )
 
 // --- key helpers shared by all editor UI tests ---
@@ -901,6 +903,99 @@ func TestEditorWizardAdd(t *testing.T) {
 	data, _ = os.ReadFile(m.st.path)
 	if !strings.Contains(string(data), "brandnew") {
 		t.Fatalf("save after wizard did not write:\n%s", data)
+	}
+}
+
+// TestEditorWizardSaveStart pins that the wizard's "save + start now"
+// choice drives the draft through the save pipeline and then actually
+// starts the session (detached) once the save lands.
+func TestEditorWizardSaveStart(t *testing.T) {
+	m := testEditorModel(t)
+	var started []string
+	m.startSession = func(cfg *config.Config, name string) error {
+		if _, ok := cfg.GetSession(name); !ok {
+			t.Errorf("start called with a config missing %q", name)
+		}
+		started = append(started, name)
+		return nil
+	}
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "brandnew")
+	m = edType(t, m, tea.KeyEnter) // name
+	m = edType(t, m, tea.KeyEnter) // hosts: empty → root
+	m = edType(t, m, tea.KeyEnter) // root
+	m = edType(t, m, tea.KeyEnter) // commands → confirm
+	m = edType(t, m, tea.KeyDown)  // select "save + start now"
+	m = edType(t, m, tea.KeyEnter)
+
+	if m.mode != modeDiff {
+		t.Fatalf("save + start did not open the save preview: mode=%v", m.mode)
+	}
+	if m.draft == nil || !m.draft.startAfter {
+		t.Fatalf("draft = %+v, want startAfter set", m.draft)
+	}
+	if len(started) != 0 {
+		t.Fatal("session started before the save was confirmed")
+	}
+
+	m = edType(t, m, tea.KeyEnter) // confirm the diff → write + start
+	if len(started) != 1 || started[0] != "brandnew" {
+		t.Fatalf("started = %v, want [brandnew]", started)
+	}
+	if !strings.Contains(m.status, "started brandnew") || m.statusErr || !m.statusOK {
+		t.Fatalf("status = %q (err=%v ok=%v)", m.status, m.statusErr, m.statusOK)
+	}
+	data, _ := os.ReadFile(m.st.path)
+	if !strings.Contains(string(data), "brandnew") {
+		t.Fatalf("save + start did not write the session:\n%s", data)
+	}
+	if info := m.running["brandnew"]; !info.Running {
+		t.Fatal("running map not updated after start")
+	}
+}
+
+// TestEditorWizardSaveStartFailure pins that a failed start reports the
+// error without hiding that the save itself succeeded.
+func TestEditorWizardSaveStartFailure(t *testing.T) {
+	m := testEditorModel(t)
+	m.startSession = func(cfg *config.Config, name string) error {
+		return fmt.Errorf("session %q already exists", name)
+	}
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "brandnew")
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyDown)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter) // confirm the diff
+
+	if !strings.Contains(m.status, "saved brandnew") || !strings.Contains(m.status, "already exists") || !m.statusErr {
+		t.Fatalf("status = %q (err=%v)", m.status, m.statusErr)
+	}
+	data, _ := os.ReadFile(m.st.path)
+	if !strings.Contains(string(data), "brandnew") {
+		t.Fatal("failed start should not roll back the save")
+	}
+}
+
+// TestEditorWizardSaveStartNoTmux pins the degraded path: no start hook
+// (tmux unavailable) still saves, and says the start was skipped.
+func TestEditorWizardSaveStartNoTmux(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "brandnew")
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyDown)
+	m = edType(t, m, tea.KeyEnter)
+	m = edType(t, m, tea.KeyEnter) // confirm the diff
+
+	if !strings.Contains(m.status, "saved brandnew") || !strings.Contains(m.status, "start skipped") {
+		t.Fatalf("status = %q", m.status)
 	}
 }
 
