@@ -4,7 +4,8 @@ package cli
 // left, a preview of the highlighted session on the right — a live buffer
 // capture for running sessions, the config summary for stopped ones. Enter
 // attaches; S starts a configured session detached; K kills after a
-// one-line confirm. ctrl+e hands off to the config editor.
+// one-line confirm. ctrl+e hands off to the config editor; i hands off to
+// the import flow for a running session that isn't in the config.
 
 import (
 	"context"
@@ -31,6 +32,7 @@ const (
 	hubQuit hubAction = iota
 	hubAttach
 	hubEdit
+	hubImport
 )
 
 type hubMode int
@@ -472,6 +474,24 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.mode = hubConfirmKill
 		return m, nil
+	case "i":
+		c, ok := m.selected()
+		if !ok || m.pending != "" {
+			return m, nil
+		}
+		if _, managed := m.sessions[c.Name]; managed {
+			m.status = c.Name + " is already in the config"
+			m.statusErr = false
+			return m, nil
+		}
+		if !c.Running {
+			m.status = c.Name + " is not running"
+			m.statusErr = false
+			return m, nil
+		}
+		m.choice = c.Name
+		m.action = hubImport
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -620,6 +640,9 @@ func (m hubModel) previewTitle() string {
 		return "mox"
 	}
 	if c.Running {
+		if !c.Managed {
+			return fmt.Sprintf("%s · tmux only · running · %s", c.Name, pluralize(c.Windows, "window"))
+		}
 		return fmt.Sprintf("%s · running · %s", c.Name, pluralize(c.Windows, "window"))
 	}
 	return c.Name + " · stopped"
@@ -632,7 +655,7 @@ func (m hubModel) footer() string {
 	case hubConfirmKill:
 		return hints("y", "kill", "esc", "cancel")
 	}
-	return hints("↵", "attach", "S", "start", "K", "kill", "^e", "edit", "q", "quit")
+	return hints("↵", "attach", "S", "start", "K", "kill", "^e", "edit", "i", "import", "q", "quit")
 }
 
 func (m hubModel) listLines(w, h int) []string {
@@ -654,6 +677,11 @@ func (m hubModel) listLines(w, h int) []string {
 		meta := ""
 		if c.Running {
 			meta = fmt.Sprintf("%dw %s", c.Windows, relativeShort(m.now, c.LastActivity))
+			if !c.Managed {
+				// mox list's ORIGIN vocabulary; color alone doesn't say why
+				// a session can't be edited or started.
+				meta += " tmux"
+			}
 		}
 		name := truncate(c.Name, w-6-len(meta))
 		pad := w - 4 - lipgloss.Width(name) - len(meta)

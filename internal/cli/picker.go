@@ -29,6 +29,10 @@ func runPicker(cmd *cobra.Command) error {
 	logger := loggerFromContext(cmd.Context())
 	out := cmd.OutOrStdout()
 
+	// note carries feedback from one hub visit into the next (import result);
+	// consumed on the iteration after it is set.
+	var note hubNote
+
 	for {
 		cfg, _ := tryLoadConfig(opts.configPath)
 		if cfg == nil {
@@ -60,7 +64,8 @@ func runPicker(cmd *cobra.Command) error {
 			order := func(infos []session.SessionInfo) []session.SessionInfo {
 				return orderPickerCandidates(infos, recent)
 			}
-			name, action, err := runHub(cmd.Context(), mgr, order, candidates, cfg.Sessions)
+			name, action, err := runHub(cmd.Context(), mgr, order, candidates, cfg.Sessions, note)
+			note = hubNote{}
 			if err != nil {
 				return err
 			}
@@ -80,6 +85,21 @@ func runPicker(cmd *cobra.Command) error {
 					return err
 				}
 				continue // fresh hub over the (possibly changed) config
+			case hubImport:
+				path, local := config.EffectivePath(opts.configPath)
+				if local {
+					fmt.Fprintf(os.Stderr, "mox: importing into ./%s\n", config.LocalConfigName)
+				}
+				warnings, err := importRunningSession(path, name)
+				switch {
+				case err != nil:
+					note = hubNote{text: "import " + name + ": " + err.Error(), isErr: true}
+				case len(warnings) > 0:
+					note = hubNote{text: "imported " + name + " ✓ · " + warnings[0]}
+				default:
+					note = hubNote{text: "imported " + name + " ✓"}
+				}
+				continue // fresh hub over the grown config
 			default:
 				return nil // quit; also covers S/K-only visits
 			}
@@ -186,13 +206,26 @@ func isTerminal(f *os.File) bool {
 	return term.IsTerminal(int(f.Fd()))
 }
 
+// hubNote is one line of feedback carried into a fresh hub visit — the
+// result of an action (import) that ran between two hub iterations.
+type hubNote struct {
+	text  string
+	isErr bool
+}
+
 // runHub runs the full-screen session hub and reports the chosen exit.
 // Capture failures inside the hub degrade per session; a missing tmux
 // binary degrades every preview the same way.
-func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidates []session.SessionInfo, sessions map[string]*config.Session) (string, hubAction, error) {
+func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidates []session.SessionInfo, sessions map[string]*config.Session, note hubNote) (string, hubAction, error) {
 	capture, windows := hubTmuxFuncs(tmux.NewClient())
 
-	final, err := tea.NewProgram(newHubModel(ctx, mgr, order, capture, windows, candidates, sessions, time.Now()), tea.WithAltScreen()).Run()
+	model := newHubModel(ctx, mgr, order, capture, windows, candidates, sessions, time.Now())
+	if note.text != "" {
+		model.status = note.text
+		model.statusErr = note.isErr
+		model.statusOK = !note.isErr
+	}
+	final, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
 	if err != nil {
 		return "", hubQuit, err
 	}

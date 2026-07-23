@@ -46,10 +46,14 @@ window summary line. For a **stopped** session it's the config summary.
 | `S` | start the highlighted configured session detached |
 | `K` | kill the highlighted running session (confirm, runs `on_stop`) |
 | `ctrl+e` | open the session in the config editor; quitting returns here |
+| `i` | import the highlighted unmanaged session into the config |
 | `q` / `esc` | quit (esc clears an active filter first) |
 
 Start and kill run in the background with a status line while they work;
-the list refreshes in place when they finish. Terminals that can't host
+the list refreshes in place when they finish. Sessions running outside
+the config carry a `tmux` marker in the list (and `tmux only` in the
+preview title): they can be attached, killed, or imported, but not
+started or edited. Terminals that can't host
 the UI get a numbered prompt instead; piped and scripted invocations print
 help, so scripts never hang.
 

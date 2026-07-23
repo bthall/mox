@@ -341,6 +341,60 @@ func TestHubAttachAndEdit(t *testing.T) {
 	}
 }
 
+// TestHubImportKey pins the import action: i on an unmanaged running
+// session hands off to the import flow; i on a configured session says so.
+func TestHubImportKey(t *testing.T) {
+	m := testHubModel(t, nil)
+	m2, _ := hubRunes(t, m, "j")
+	m2, _ = hubRunes(t, m2, "j") // scratch: running, unmanaged
+	m3, cmd := hubRunes(t, m2, "i")
+	if !isQuit(cmd) || m3.action != hubImport || m3.choice != "scratch" {
+		t.Fatalf("i on unmanaged: action=%v choice=%q", m3.action, m3.choice)
+	}
+	// i on a configured session is refused with feedback
+	m4, cmd := hubRunes(t, m, "i") // webfarm
+	if cmd != nil || m4.action != hubQuit {
+		t.Fatal("i acted on a configured session")
+	}
+	if !strings.Contains(m4.status, "already in the config") || m4.statusErr {
+		t.Fatalf("i on managed session: status = %q", m4.status)
+	}
+}
+
+// TestHubUnmanagedMarker pins that unmanaged sessions carry a visible
+// "tmux" origin marker in the list row and preview title, not just a
+// different name color.
+func TestHubUnmanagedMarker(t *testing.T) {
+	m := testHubModel(t, nil)
+	rows := m.listLines(36, 20)
+	joined := strings.Join(rows, "\n")
+	scratchRow := ""
+	for _, r := range rows {
+		if strings.Contains(r, "scratch") {
+			scratchRow = r
+		}
+	}
+	if scratchRow == "" {
+		t.Fatalf("scratch row missing:\n%s", joined)
+	}
+	if !strings.Contains(scratchRow, "tmux") {
+		t.Fatalf("scratch row has no tmux marker: %q", scratchRow)
+	}
+	for _, r := range rows {
+		if strings.Contains(r, "webfarm") && strings.Contains(r, "tmux") {
+			t.Fatalf("managed webfarm row carries the tmux marker: %q", r)
+		}
+	}
+	// preview title marks the origin too
+	m2, _ := hubRunes(t, m, "jj") // scratch
+	if title := m2.previewTitle(); !strings.Contains(title, "tmux") {
+		t.Fatalf("preview title = %q, want tmux marker", title)
+	}
+	if title := m.previewTitle(); strings.Contains(title, "tmux") {
+		t.Fatalf("managed preview title = %q, should not carry tmux marker", title)
+	}
+}
+
 func TestHubFilterAndBatchedKeys(t *testing.T) {
 	m := testHubModel(t, nil)
 	if !strings.Contains(m.View(), "/ filter") {

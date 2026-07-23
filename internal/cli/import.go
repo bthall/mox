@@ -111,6 +111,25 @@ func runImport(cmd *cobra.Command, args []string, o *importOpts) error {
 	return nil
 }
 
+// importRunningSession captures the running tmux session into the config at
+// path under its own name, never overwriting an existing entry. It returns
+// the inspect warnings. This is the hub's import action; the command flow
+// with flags (--as, --print, --force) lives in runImport.
+func importRunningSession(path, name string) ([]string, error) {
+	client, err := tmux.NewClient()
+	if err != nil {
+		return nil, err
+	}
+	imported, warnings, err := inspectSession(client, name)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %q: %w", name, err)
+	}
+	if err := imported.Validate(name); err != nil {
+		return warnings, fmt.Errorf("imported session is invalid: %w", err)
+	}
+	return warnings, appendSessionToConfig(path, name, imported, false)
+}
+
 // capturedPane is the per-pane state import recovers from tmux and the process
 // table: the pane's id (for matching against the window layout), its working
 // directory, and the argv of its foreground process (nil when none could be

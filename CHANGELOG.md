@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Hub: `i` imports the highlighted unmanaged session into the config
+  (the same capture as `mox import`), then returns to the hub with the
+  session now configured. Configured sessions get a status-line notice
+  instead.
+- Hub: sessions running outside the config are now explicitly marked —
+  a `tmux` tag on the list row and `tmux only` in the preview title —
+  instead of relying on name color alone to tell them apart from
+  configured sessions.
+
 ## [0.5.2] — 2026-07-23
 
 ### Fixed
