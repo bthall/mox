@@ -17,7 +17,7 @@ start, attach, edit, or kill it by name. Ad-hoc sessions work straight
 from the command line, no config required.
 
 Bare `mox` opens the session hub. Live previews of running sessions,
-with start, kill, and edit in place:
+with start, kill, edit, and import in place:
 
 <p align="center">
   <img src="assets/screenshot-hub.png" alt="mox session hub" width="850">

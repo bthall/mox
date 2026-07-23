@@ -28,6 +28,11 @@ func useColor(w io.Writer) bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
+	// The de facto CLICOLOR_FORCE standard: force color even when piped
+	// (`mox list | less -R`, screenshot generation). NO_COLOR still wins.
+	if os.Getenv("CLICOLOR_FORCE") == "1" {
+		return true
+	}
 	f, ok := w.(*os.File)
 	if !ok {
 		return false

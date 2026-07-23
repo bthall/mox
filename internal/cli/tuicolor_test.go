@@ -25,7 +25,12 @@ func TestTUIColorProfile(t *testing.T) {
 		t.Errorf("char device: profile = %v, want ANSI256", got)
 	}
 
-	t.Setenv("NO_COLOR", "1")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	if got := tuiColorProfile(&bytes.Buffer{}); got != termenv.ANSI256 {
+		t.Errorf("CLICOLOR_FORCE set: profile = %v, want ANSI256 even for a non-file writer", got)
+	}
+
+	t.Setenv("NO_COLOR", "1") // NO_COLOR beats CLICOLOR_FORCE
 	if got := tuiColorProfile(tty); got != termenv.Ascii {
 		t.Errorf("NO_COLOR set: profile = %v, want Ascii", got)
 	}
