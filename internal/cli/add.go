@@ -58,6 +58,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		prefill = args[0]
 	}
 
+	applyTUIColorPolicy()
 	final, err := tea.NewProgram(newAddModel(cfg, clusters, prefill)).Run()
 	if err != nil {
 		return err

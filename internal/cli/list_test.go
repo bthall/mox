@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -89,6 +90,33 @@ func TestRenderList_Empty(t *testing.T) {
 	}
 	if !strings.Contains(out, "0 configured · 0 running") {
 		t.Errorf("missing empty summary:\n%s", out)
+	}
+}
+
+// TestNameCellGlyphs pins the colored status glyphs: ● for a running mox
+// session, ◆ for a running tmux-only session, ○ stopped. /dev/null is a
+// char device, so useColor treats it as a color-capable terminal.
+func TestNameCellGlyphs(t *testing.T) {
+	tty, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tty.Close() }()
+
+	cases := []struct {
+		info  session.SessionInfo
+		glyph string
+		code  string
+	}{
+		{session.SessionInfo{Name: "m", Running: true, Managed: true}, "●", ansiGreen},
+		{session.SessionInfo{Name: "u", Running: true, Managed: false}, "◆", ansiYellow},
+		{session.SessionInfo{Name: "s", Managed: true}, "○", ansiDim},
+	}
+	for _, c := range cases {
+		got := nameCell(tty, c.info)
+		if !strings.Contains(got, c.code+c.glyph) {
+			t.Errorf("nameCell(%+v) = %q, want glyph %q in color %q", c.info, got, c.glyph, c.code)
+		}
 	}
 }
 

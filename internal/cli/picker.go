@@ -217,6 +217,7 @@ type hubNote struct {
 // Capture failures inside the hub degrade per session; a missing tmux
 // binary degrades every preview the same way.
 func runHub(ctx context.Context, mgr *session.Manager, order hubOrder, candidates []session.SessionInfo, sessions map[string]*config.Session, note hubNote) (string, hubAction, error) {
+	applyTUIColorPolicy()
 	capture, windows := hubTmuxFuncs(tmux.NewClient())
 
 	model := newHubModel(ctx, mgr, order, capture, windows, candidates, sessions, time.Now())

@@ -39,10 +39,13 @@ func hints(pairs ...string) string {
 	return b.String()
 }
 
+// statusDot is the per-session status glyph: shape carries the origin
+// (● in the config, ◆ tmux only), color carries the state — so the
+// distinction survives without color too.
 func statusDot(c session.SessionInfo) string {
 	switch {
 	case c.Running && !c.Managed:
-		return pkForeign.Render("●")
+		return pkForeign.Render("◆")
 	case c.Running:
 		return pkRunning.Render("●")
 	default:

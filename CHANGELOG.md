@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The full-screen TUIs (hub, editor, add wizard) could render entirely
+  colorless on terminals whose TERM value lipgloss's environment sniffing
+  doesn't recognize, while `mox list` colored fine on the same terminal.
+  The TUIs now follow the same color policy as `mox list` (a terminal,
+  and NO_COLOR unset) instead of delegating the decision to TERM
+  sniffing.
+
+### Changed
+
+- Sessions running outside the config are marked by glyph shape, shared
+  between the hub and `mox list`: `◆` (yellow) for tmux-only, `●` (green)
+  for a running configured session, `○` for stopped. The hub's row-level
+  `tmux` text tag from 0.6.0 is replaced by the glyph; the preview title
+  keeps `tmux only`.
+
 ## [0.6.0] — 2026-07-23
 
 ### Added
