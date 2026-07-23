@@ -50,10 +50,11 @@ window summary line. For a **stopped** session it's the config summary.
 | `q` / `esc` | quit (esc clears an active filter first) |
 
 Start and kill run in the background with a status line while they work;
-the list refreshes in place when they finish. Sessions running outside
-the config carry a `tmux` marker in the list (and `tmux only` in the
-preview title): they can be attached, killed, or imported, but not
-started or edited. Terminals that can't host
+the list refreshes in place when they finish. The status glyphs are shared
+with `mox list`: shape carries the origin, color the state — `●` green for
+a running configured session, `◆` yellow for a session running outside the
+config (`tmux only` in the preview title; it can be attached, killed, or
+imported, but not started or edited), `○` for stopped. Terminals that can't host
 the UI get a numbered prompt instead; piped and scripted invocations print
 help, so scripts never hang.
 

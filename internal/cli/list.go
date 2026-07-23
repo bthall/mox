@@ -106,8 +106,9 @@ func splitByManaged(infos []session.SessionInfo) (managed, unmanaged []session.S
 }
 
 // nameCell prefixes the session name with a colored status glyph when color is
-// enabled (● running, ○ stopped; yellow for unmanaged). Under NO_COLOR or a
-// non-TTY the glyph is omitted entirely — the STATE column carries the meaning.
+// enabled (● running, ◆ running tmux-only, ○ stopped) — the same vocabulary
+// as the hub's status dots. Under NO_COLOR or a non-TTY the glyph is omitted
+// entirely; the STATE and ORIGIN columns carry the meaning.
 func nameCell(out io.Writer, s session.SessionInfo) string {
 	if !useColor(out) {
 		return s.Name
@@ -116,7 +117,7 @@ func nameCell(out io.Writer, s session.SessionInfo) string {
 	if s.Running {
 		glyph, code = "●", ansiGreen
 		if !s.Managed {
-			code = ansiYellow
+			glyph, code = "◆", ansiYellow
 		}
 	}
 	return colorize(out, code, glyph) + " " + s.Name

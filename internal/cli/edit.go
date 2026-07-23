@@ -150,6 +150,7 @@ func runEditorTUI(cmd *cobra.Command, st *editorState, initial string) error {
 		}
 	}
 
+	applyTUIColorPolicy()
 	model := newEditorModel(st, clusters, running, initial)
 	model.startSession = start
 	_, err := tea.NewProgram(model, tea.WithAltScreen()).Run()

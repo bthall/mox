@@ -362,8 +362,8 @@ func TestHubImportKey(t *testing.T) {
 }
 
 // TestHubUnmanagedMarker pins that unmanaged sessions carry a visible
-// "tmux" origin marker in the list row and preview title, not just a
-// different name color.
+// origin marker — the ◆ glyph in the list row and "tmux only" in the
+// preview title — not just a different name color.
 func TestHubUnmanagedMarker(t *testing.T) {
 	m := testHubModel(t, nil)
 	rows := m.listLines(36, 20)
@@ -377,12 +377,12 @@ func TestHubUnmanagedMarker(t *testing.T) {
 	if scratchRow == "" {
 		t.Fatalf("scratch row missing:\n%s", joined)
 	}
-	if !strings.Contains(scratchRow, "tmux") {
-		t.Fatalf("scratch row has no tmux marker: %q", scratchRow)
+	if !strings.Contains(scratchRow, "◆") {
+		t.Fatalf("scratch row has no ◆ origin glyph: %q", scratchRow)
 	}
 	for _, r := range rows {
-		if strings.Contains(r, "webfarm") && strings.Contains(r, "tmux") {
-			t.Fatalf("managed webfarm row carries the tmux marker: %q", r)
+		if strings.Contains(r, "webfarm") && strings.Contains(r, "◆") {
+			t.Fatalf("managed webfarm row carries the ◆ glyph: %q", r)
 		}
 	}
 	// preview title marks the origin too

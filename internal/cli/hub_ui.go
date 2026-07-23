@@ -677,11 +677,6 @@ func (m hubModel) listLines(w, h int) []string {
 		meta := ""
 		if c.Running {
 			meta = fmt.Sprintf("%dw %s", c.Windows, relativeShort(m.now, c.LastActivity))
-			if !c.Managed {
-				// mox list's ORIGIN vocabulary; color alone doesn't say why
-				// a session can't be edited or started.
-				meta += " tmux"
-			}
 		}
 		name := truncate(c.Name, w-6-len(meta))
 		pad := w - 4 - lipgloss.Width(name) - len(meta)
