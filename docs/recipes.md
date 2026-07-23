@@ -61,6 +61,9 @@ mox import work -p              # preview the YAML on stdout without saving
 mox import work -F              # overwrite an existing config entry
 ```
 
+The same capture is one key away in the hub: run bare `mox`, highlight a
+`◆` tmux-only session, and press `i`.
+
 SSH connections are recovered from the OS process table: a window whose
 panes are all plain `ssh host` connections imports as a simple `hosts:`
 list, and other ssh panes keep their connection as a `commands:` entry.

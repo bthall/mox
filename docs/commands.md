@@ -2,7 +2,8 @@
 
 ```
 Session lifecycle:
-  mox                   interactive picker over running/configured/recent sessions
+  mox                   the session hub: browse, preview, and act on every
+                        running/configured/recent session
   mox -a <session>      attach to a configured session (builds it if not running)
                         also attaches to any running tmux session by name
   mox new [hosts...]    ad-hoc session or window (alias: cssh)
@@ -50,17 +51,19 @@ window summary line. For a **stopped** session it's the config summary.
 | `q` / `esc` | quit (esc clears an active filter first) |
 
 Start and kill run in the background with a status line while they work;
-the list refreshes in place when they finish. The status glyphs are shared
-with `mox list`: shape carries the origin, color the state — `●` green for
-a running configured session, `◆` yellow for a session running outside the
-config (`tmux only` in the preview title; it can be attached, killed, or
-imported, but not started or edited), `○` for stopped. Terminals that can't host
-the UI get a numbered prompt instead; piped and scripted invocations print
-help, so scripts never hang.
+the list refreshes in place when they finish. Import and edit hand off to
+their own flows and return to a fresh hub over the updated config.
+
+The status glyphs are shared with `mox list`: shape carries the origin,
+color the state. `●` green is a running configured session; `◆` yellow is
+a session running outside the config (`tmux only` in the preview title; it
+can be attached, killed, or imported, but not started or edited); `○` is
+stopped. Terminals that can't host the UI get a numbered prompt instead;
+piped and scripted invocations print help, so scripts never hang.
 
 ## The session editor
 
-`mox edit` (or `Ctrl-E` in the picker) opens a full-screen editor:
+`mox edit` (or `ctrl+e` in the hub) opens a full-screen editor:
 configured sessions on the left, the selected session's fields on the
 right, with the focused field's documentation always visible. Name a
 session (`mox edit webfarm`) to open with it selected. A config the editor
@@ -74,7 +77,7 @@ validation on exit — fixing a broken config by hand still works.
 | `/` | filter the session list |
 | `enter` | edit the focused field (text input, toggle, or list editor) |
 | `space` | cycle toggle/enum fields (`sync`, `arrange`, `hold`) |
-| `a` | add a session (runs the `mox add` wizard; result lands as a draft) |
+| `a` | add a session (runs the `mox add` wizard; *save* lands as a draft, *save + start now* opens the diff preview and starts the session detached once the save lands) |
 | `r` / `y` / `D` | rename / duplicate / delete (all buffered until save) |
 | `o` | open the config in `$EDITOR` (window/pane structure) |
 | `s` | save: validate → diff preview → write |
@@ -121,14 +124,17 @@ Three routes, by decreasing interactivity:
 
 1. **`mox add`** — a short wizard: name, hosts (with live `@cluster`
    expansion), ssh user, sync, arrangement, directory, commands, then a
-   YAML preview with *save* or *save + start*. Simple-mode sessions only.
+   YAML preview with *save to config* or *save + start now*. Simple-mode
+   sessions only.
 2. **`mox new ... --save`** — you already expressed the session in flags;
    `--save` persists that definition to the config (requires `-n`) and
    creates the session as usual. Refuses to overwrite an existing entry.
 3. **`mox import [session]`** — capture a *running* session: window/pane
    structure with real split directions and sizes, working directories,
    and SSH connections recovered from the process table. Run it with no
-   argument from inside tmux to capture the session you're in.
+   argument from inside tmux to capture the session you're in, or press
+   `i` in the hub on a highlighted `◆` tmux-only session for the same
+   capture without leaving the hub.
 
 The build-by-doing loop for custom layouts: `mox new`, split and arrange
 panes by hand until the window looks right, then `mox import` from inside
