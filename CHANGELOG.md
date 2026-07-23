@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `CLICOLOR_FORCE=1` forces color output even when piped (`mox list |
+  less -R`), following the de facto standard. `NO_COLOR` still wins.
+
 ## [0.6.1] — 2026-07-23
 
 ### Fixed

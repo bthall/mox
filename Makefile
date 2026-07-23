@@ -1,4 +1,4 @@
-.PHONY: build test test-coverage integration install install-completion clean run fmt lint vuln release-snapshot help
+.PHONY: build test test-coverage integration install install-completion clean run fmt lint vuln release-snapshot screenshots help
 
 BINARY_NAME=mox
 BUILD_DIR=./build
@@ -95,5 +95,15 @@ vuln: ## Scan for known vulnerabilities
 release-snapshot: ## Build a local snapshot release with goreleaser
 	@echo "Building snapshot release..."
 	goreleaser release --snapshot --clean
+
+screenshots: ## Regenerate README screenshots (requires charmbracelet/freeze)
+	@echo "Rendering screenshot frames..."
+	@mkdir -p build/frames
+	MOX_SCREENSHOT_DIR=$(CURDIR)/build/frames go test ./internal/cli -run TestGenerateScreenshots -v
+	@for n in hub list editor; do \
+		freeze build/frames/$$n.ans -l ansi --window --padding 25 --margin 15 \
+			--border.radius 10 --font.family "DejaVu Sans Mono" \
+			-o assets/screenshot-$$n.png; \
+	done
 
 .DEFAULT_GOAL := build
