@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The editor's embedded add wizard honors "save + start now": the choice
+  now jumps straight into the save preview, and confirming the save also
+  starts the session detached (like the hub's `S`), with the outcome
+  reported in the status line. Previously the choice silently behaved
+  like "save to config" and the session never started.
+- Hub: `ctrl+e` on a session that is not in the config now says so in the
+  status line (matching `S`) instead of doing nothing, which read as a
+  dead key when the highlighted session was tmux-only.
+
 ## [0.5.1] — 2026-07-22
 
 ### Fixed
