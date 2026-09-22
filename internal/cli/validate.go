@@ -23,30 +23,31 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	out := cmd.OutOrStdout()
 
-	fmt.Println("OK: configuration is valid")
-	fmt.Println()
-	fmt.Printf("Sessions: %d\n", len(cfg.Sessions))
-	fmt.Printf("Layouts:  %d\n", len(cfg.Layouts))
+	fmt.Fprintln(out, "OK: configuration is valid")
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "Sessions: %d\n", len(cfg.Sessions))
+	fmt.Fprintf(out, "Layouts:  %d\n", len(cfg.Layouts))
 
 	if len(cfg.Sessions) > 0 {
-		fmt.Println()
-		fmt.Println("Sessions:")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Sessions:")
 		for _, name := range cfg.ListSessionNames() {
 			s := cfg.Sessions[name]
 			if s.IsSimple() {
-				fmt.Printf("  - %s (simple: %d hosts)\n", name, len(s.Hosts))
+				fmt.Fprintf(out, "  - %s (simple: %d hosts)\n", name, len(s.Hosts))
 			} else {
-				fmt.Printf("  - %s (complex: %d windows)\n", name, len(s.Windows))
+				fmt.Fprintf(out, "  - %s (complex: %d windows)\n", name, len(s.Windows))
 			}
 		}
 	}
 
 	if len(cfg.Layouts) > 0 {
-		fmt.Println()
-		fmt.Println("Layouts:")
-		for name, layout := range cfg.Layouts {
-			fmt.Printf("  - %s (%d panes)\n", name, len(layout.Panes))
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Layouts:")
+		for _, name := range cfg.ListLayoutNames() {
+			fmt.Fprintf(out, "  - %s (%d panes)\n", name, len(cfg.Layouts[name].Panes))
 		}
 	}
 	return nil

@@ -117,6 +117,10 @@ type editorModel struct {
 	// config. nil when tmux is unavailable (and in most tests).
 	startSession func(cfg *config.Config, name string) error
 
+	// leaving is set once the editor quits or suspends for $EDITOR, so a
+	// batched rune replay stops there.
+	leaving bool
+
 	width, height int
 }
 
@@ -231,6 +235,7 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case editorReturnMsg:
+		m.leaving = false // back from $EDITOR
 		if msg.err != nil {
 			m.status = "editor: " + msg.err.Error()
 			m.statusErr = true
@@ -255,23 +260,7 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
-			// Key repeat and fast typing batch runes into one message;
-			// hotkeys match single runes, so replay the batch one rune at
-			// a time. A mid-batch mode change or command (quit, save)
-			// takes effect immediately and the rest replays against it.
-			cur := m
-			for _, r := range msg.Runes {
-				nm, cmd := cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-				em, ok := nm.(editorModel)
-				if !ok {
-					return nm, cmd
-				}
-				cur = em
-				if cmd != nil {
-					return cur, cmd
-				}
-			}
-			return cur, nil
+			return replayRunes(m, msg.Runes)
 		}
 		switch m.mode {
 		case modeBrowse:
@@ -302,7 +291,7 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyTab:
 		if m.pane == paneList {
 			m.pane = paneForm
@@ -442,6 +431,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		parts := strings.Fields(editor)
 		ed := exec.Command(parts[0], append(parts[1:], m.st.path)...) //nolint:gosec // the user's own $EDITOR choice
+		m.leaving = true
 		return m, tea.ExecProcess(ed, func(err error) tea.Msg { return editorReturnMsg{err: err} })
 	}
 	return m, nil
@@ -450,7 +440,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m editorModel) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyEsc:
 		m.filter = nil
 		m.mode = modeBrowse
@@ -497,6 +487,14 @@ func (m editorModel) moveCursor(delta int) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// quit ends the editor, marking it so a batched rune replay stops here.
+func (m editorModel) quit() (tea.Model, tea.Cmd) {
+	m.leaving = true
+	return m, tea.Quit
+}
+
+func (m editorModel) isLeaving() bool { return m.leaving }
 
 // selectIndex moves the list selection and resets the draft. The guard
 // interposition is done by requestSelect.
@@ -554,7 +552,7 @@ func (m editorModel) cycleField() (tea.Model, tea.Cmd) {
 func (m editorModel) updateFieldEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyEsc:
 		m.mode = modeBrowse
 		m.inputErr = ""
@@ -612,7 +610,7 @@ func (m *editorModel) validateSessionName(name, allowSelf string) error {
 func (m editorModel) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyEsc:
 		m.mode = modeBrowse
 		m.inputErr = ""
@@ -680,7 +678,7 @@ func (m editorModel) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return m, tea.Quit
+		return m.quit()
 	}
 	if msg.Type == tea.KeyEsc {
 		m.mode = modeBrowse
@@ -718,7 +716,7 @@ func (m editorModel) startSave() (tea.Model, tea.Cmd) {
 func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyEsc:
 		m.mode = modeBrowse
 		return m, nil
@@ -745,7 +743,7 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m editorModel) updateStale(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyEsc:
 		m.mode = modeBrowse
 		return m, nil
@@ -791,7 +789,7 @@ func (m editorModel) requestQuit() (tea.Model, tea.Cmd) {
 		m.pending = pendingAction{kind: pendingQuit}
 		return m, nil
 	}
-	return m, tea.Quit
+	return m.quit()
 }
 
 // updateGuard resolves the save/discard/stay prompt, then continues the
@@ -799,7 +797,7 @@ func (m editorModel) requestQuit() (tea.Model, tea.Cmd) {
 // the confirmation.
 func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return m, tea.Quit
+		return m.quit()
 	}
 	if msg.Type == tea.KeyEsc {
 		m.mode = modeBrowse
@@ -832,7 +830,7 @@ func (m editorModel) continuePending() (tea.Model, tea.Cmd) {
 	m.mode = modeBrowse
 	switch p.kind {
 	case pendingQuit:
-		return m, tea.Quit
+		return m.quit()
 	case pendingSelect:
 		idx := p.target
 		if idx > len(m.visible)-1 {
@@ -855,7 +853,7 @@ func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		// Hard-quit like every other sub-mode — the wizard's own ctrl+c
 		// handling would only cancel back into the editor.
-		return m, tea.Quit
+		return m.quit()
 	}
 	nm, _ := m.wizard.Update(msg) // swallow the wizard's tea.Quit
 	aw, ok := nm.(addModel)
@@ -1382,7 +1380,7 @@ func (m editorModel) updateListEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if le.editing {
 		switch msg.Type {
 		case tea.KeyCtrlC:
-			return m, tea.Quit
+			return m.quit()
 		case tea.KeyEsc:
 			le.editing, le.input, le.errMsg = false, nil, ""
 			return m, nil
@@ -1416,7 +1414,7 @@ func (m editorModel) updateListEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	items := m.listItems()
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyEsc:
 		m.mode = modeBrowse
 		return m, nil

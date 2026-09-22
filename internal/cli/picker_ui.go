@@ -3,6 +3,7 @@ package cli
 import (
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -144,4 +145,34 @@ func panel(title, footer string, content []string, w, h int) string {
 	}
 	rows = append(rows, bottomLine)
 	return strings.Join(rows, "\n")
+}
+
+// leaver is a full-screen model that can report it has handed the terminal
+// off: quit, or suspended for $EDITOR.
+type leaver interface {
+	tea.Model
+	isLeaving() bool
+}
+
+// replayRunes feeds a batched KeyRunes message (key repeat, fast typing)
+// back through the model one rune at a time, since hotkeys match single
+// runes. Commands from every rune are batched together. Replay stops at the
+// rune that hands the terminal off, so keys typed after a quit never act on
+// a model that is already leaving.
+func replayRunes[M leaver](m M, runes []rune) (tea.Model, tea.Cmd) {
+	cur := m
+	var cmds []tea.Cmd
+	for _, r := range runes {
+		nm, cmd := cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		next, ok := nm.(M)
+		if !ok {
+			return nm, tea.Batch(append(cmds, cmd)...)
+		}
+		cur = next
+		cmds = append(cmds, cmd)
+		if cur.isLeaving() {
+			break
+		}
+	}
+	return cur, tea.Batch(cmds...)
 }

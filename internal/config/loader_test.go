@@ -149,3 +149,12 @@ func TestEffectivePath_LocalDirIgnored(t *testing.T) {
 		t.Error("a directory named .mox.yml should not count as a local config")
 	}
 }
+
+func TestListLayoutNamesSorted(t *testing.T) {
+	cfg := &Config{Layouts: map[string]*Layout{"zeta": {}, "alpha": {}, "mid": {}}}
+	got := cfg.ListLayoutNames()
+	want := []string{"alpha", "mid", "zeta"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("ListLayoutNames() = %v, want %v", got, want)
+	}
+}

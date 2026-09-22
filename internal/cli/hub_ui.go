@@ -155,8 +155,9 @@ type hubModel struct {
 	statusErr bool
 	statusOK  bool // success feedback renders green
 
-	action hubAction
-	choice string
+	action  hubAction
+	choice  string
+	leaving bool // set once the hub has asked to quit
 
 	width, height int
 }
@@ -361,24 +362,7 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
-			// Key repeat batches runes; replay them one at a time.
-			cur := m
-			var cmds []tea.Cmd
-			for _, r := range msg.Runes {
-				nm, cmd := cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-				hm, ok := nm.(hubModel)
-				if !ok {
-					return nm, cmd
-				}
-				cur = hm
-				if cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-			}
-			if len(cmds) == 0 {
-				return cur, nil
-			}
-			return cur, tea.Batch(cmds...)
+			return replayRunes(m, msg.Runes)
 		}
 		switch m.mode {
 		case hubBrowse:
@@ -395,7 +379,7 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyUp, tea.KeyCtrlP, tea.KeyCtrlK:
 		return m.move(-1)
 	case tea.KeyDown, tea.KeyCtrlN, tea.KeyCtrlJ:
@@ -404,7 +388,7 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if c, ok := m.selected(); ok && m.pending == "" {
 			m.choice = c.Name
 			m.action = hubAttach
-			return m, tea.Quit
+			return m.quit()
 		}
 		return m, nil
 	case tea.KeyCtrlE:
@@ -412,7 +396,7 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if _, managed := m.sessions[c.Name]; managed {
 				m.choice = c.Name
 				m.action = hubEdit
-				return m, tea.Quit
+				return m.quit()
 			}
 			// Same feedback as S: a silent no-op reads as a dead key.
 			m.status = c.Name + " is not in the config"
@@ -429,14 +413,14 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.pending != "" {
 			return m, nil // let the in-flight action finish (ctrl+c overrides)
 		}
-		return m, tea.Quit
+		return m.quit()
 	}
 	switch string(msg.Runes) {
 	case "q":
 		if m.pending != "" {
 			return m, nil
 		}
-		return m, tea.Quit
+		return m.quit()
 	case "j":
 		return m.move(1)
 	case "k":
@@ -491,7 +475,7 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.choice = c.Name
 		m.action = hubImport
-		return m, tea.Quit
+		return m.quit()
 	}
 	return m, nil
 }
@@ -499,7 +483,7 @@ func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m hubModel) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return m, tea.Quit
+		return m.quit()
 	case tea.KeyEsc:
 		m.filter = nil
 		m.mode = hubBrowse
@@ -529,7 +513,7 @@ func (m hubModel) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m hubModel) updateConfirmKill(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return m, tea.Quit
+		return m.quit()
 	}
 	if msg.Type == tea.KeyEsc {
 		m.mode = hubBrowse
@@ -547,6 +531,14 @@ func (m hubModel) updateConfirmKill(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// quit ends the hub, marking it so a batched rune replay stops here.
+func (m hubModel) quit() (tea.Model, tea.Cmd) {
+	m.leaving = true
+	return m, tea.Quit
+}
+
+func (m hubModel) isLeaving() bool { return m.leaving }
 
 // move shifts the selection and restarts the preview cycle.
 func (m hubModel) move(delta int) (tea.Model, tea.Cmd) {

@@ -618,3 +618,19 @@ func TestHubTabbyPreviewKeepsFooter(t *testing.T) {
 		t.Fatal("footer (shortcuts bar) missing from the rendered view")
 	}
 }
+
+// TestHubBatchedKeysStopAtQuit pins that a batched rune run stops at the
+// rune that quits: fast-typed "qi" on an unmanaged session must quit, not
+// fall through to the import handoff.
+func TestHubBatchedKeysStopAtQuit(t *testing.T) {
+	m := testHubModel(t, nil)
+	m, _ = hubRunes(t, m, "jj") // scratch: running, unmanaged
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("qi")})
+	m = nm.(hubModel)
+	if !isQuit(cmd) {
+		t.Fatal("batched qi did not quit")
+	}
+	if m.action != hubQuit || m.choice != "" {
+		t.Fatalf("batched qi: action=%v choice=%q, want a plain quit", m.action, m.choice)
+	}
+}

@@ -1253,3 +1253,17 @@ func TestEditorFilterHint(t *testing.T) {
 		t.Fatal("active filter did not show the live prompt")
 	}
 }
+
+// TestEditorBatchedKeysStopAtQuit pins that runes batched after a quit are
+// dropped rather than replayed against the exiting editor.
+func TestEditorBatchedKeysStopAtQuit(t *testing.T) {
+	m := testEditorModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("qj")})
+	m = nm.(editorModel)
+	if !isQuit(cmd) {
+		t.Fatal("batched qj did not quit")
+	}
+	if m.sel != 0 {
+		t.Fatalf("sel = %d after batched qj, want 0 (j after quit must be dropped)", m.sel)
+	}
+}
