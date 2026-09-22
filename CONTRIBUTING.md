@@ -6,7 +6,8 @@ repository.
 
 ## Prerequisites
 
-- **Go 1.24+** - the module declares `go 1.24` and CI runs on 1.24.
+- **Go** - the version declared in `go.mod` (CI builds with the same
+  version).
 - **tmux 3.1+** - required at runtime and for the integration test suite.
   `mox` uses tmux 3.1 features such as `split-window -l <n>%`.
 - **golangci-lint** - used by `make lint` and by CI. Install from
