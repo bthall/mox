@@ -198,19 +198,6 @@ func (c *Client) SelectWindowByID(windowID string) error {
 	return err
 }
 
-// BaseIndex returns the global base-index option (default 0).
-func (c *Client) BaseIndex() (int, error) {
-	out, err := c.Run("show-options", "-gv", "base-index")
-	if err != nil {
-		return 0, nil
-	}
-	idx, err := strconv.Atoi(strings.TrimSpace(out))
-	if err != nil {
-		return 0, nil
-	}
-	return idx, nil
-}
-
 // SetPaneTitle sets the title of the target pane (visible in tmux's
 // pane-border-format if configured to show #{pane_title}).
 func (c *Client) SetPaneTitle(target, title string) error {
@@ -250,21 +237,6 @@ func (c *Client) SetWindowOption(windowTarget, option, value string) error {
 func (c *Client) SelectLayout(windowTarget, layoutName string) error {
 	_, err := c.Run("select-layout", "-t", windowTarget, layoutName)
 	return err
-}
-
-// NewWindowInSession creates a new window in the named session and returns
-// the new window's id. The session must already exist. Unlike CreateWindow,
-// the new window is selected (active) immediately.
-func (c *Client) NewWindowInSession(session, name, startDir string) (string, error) {
-	args := []string{"new-window", "-t", "=" + session, "-P", "-F", "#{window_id}", "-n", name}
-	if startDir != "" {
-		args = append(args, "-c", startDir)
-	}
-	out, err := c.Run(args...)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
 }
 
 // WindowInfo describes a single window for inspection / import.

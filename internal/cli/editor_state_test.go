@@ -191,7 +191,7 @@ func TestApplyDraftStaleBlocksWrite(t *testing.T) {
 	}
 }
 
-// Regression test for C1: rollback on failed writes.
+// A failed write must not leave a half-applied rename in the node tree.
 func TestApplyDraftRollbackOnWriteFailure(t *testing.T) {
 	st := testEditorState(t, editorFixtureYAML)
 	d := newDraft(st.cfg, "webfarm")
@@ -247,7 +247,7 @@ func TestApplyDraftRollbackOnWriteFailure(t *testing.T) {
 	}
 }
 
-// Regression test for I1: collision guard.
+// Renames and added sessions must not collide with an existing name.
 func TestApplyDraftRejectsDuplicateNames(t *testing.T) {
 	st := testEditorState(t, editorFixtureYAML)
 
@@ -281,7 +281,7 @@ func TestApplyDraftRejectsDuplicateNames(t *testing.T) {
 	}
 }
 
-// Regression test for I3: draft mutations don't leak into st.cfg.
+// After a save, the draft and the typed config must not share memory.
 func TestApplyDraftNoAliasAfterSave(t *testing.T) {
 	st := testEditorState(t, editorFixtureYAML)
 	d := newDraft(st.cfg, "webfarm")
@@ -308,7 +308,7 @@ func TestApplyDraftNoAliasAfterSave(t *testing.T) {
 	}
 }
 
-// Regression test for M1: pure rename preserves flow-style and comments.
+// A pure rename keeps the session body's flow style and comments.
 func TestApplyDraftPureRenamePreservesFormat(t *testing.T) {
 	st := testEditorState(t, editorFixtureYAML)
 

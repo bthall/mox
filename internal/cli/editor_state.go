@@ -154,14 +154,15 @@ func (st *editorState) applyDraft(d *sessionDraft) error {
 
 	sessMap := findOrCreateMapKey(st.root.Content[0], "sessions")
 
-	// Guard against name collisions (I1: prevents duplicate keys in the map).
+	// A new or renamed session must not land on an existing key: yaml.v3
+	// refuses to decode a mapping with duplicate keys.
 	if !d.deleted && (d.orig == "" || d.name != d.orig) {
 		if findMapKey(sessMap, d.name) != nil {
 			return fmt.Errorf("session %q already exists", d.name)
 		}
 	}
 
-	// Snapshot the Content slice for rollback on write failure (C1).
+	// Snapshot Content so a failed write can roll the node tree back.
 	snapshot := make([]*yaml.Node, len(sessMap.Content))
 	copy(snapshot, sessMap.Content)
 	var didRename bool
@@ -171,7 +172,8 @@ func (st *editorState) applyDraft(d *sessionDraft) error {
 	case d.deleted:
 		removeMapKey(sessMap, d.orig)
 	default:
-		// M1: pure rename — only rename the key, don't re-encode the session body.
+		// Pure rename: rename the key only, so the body keeps its original
+		// formatting and comments instead of being re-encoded.
 		if d.orig != "" && d.name != d.orig && sameSessionYAML(d.sess, st.cfg.Sessions[d.orig]) {
 			didRename = true
 			origName = d.orig
