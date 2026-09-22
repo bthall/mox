@@ -127,3 +127,32 @@ func TestSessionExistsNoServer(t *testing.T) {
 		t.Errorf("SessionExists returned true for non-existent session")
 	}
 }
+
+// TestCreateWindowExactSessionMatch pins that CreateWindow targets its
+// session by exact name. Without the "=" prefix tmux falls back to prefix
+// matching, so a missing session would quietly resolve to a longer-named
+// one and the window would land there.
+func TestCreateWindowExactSessionMatch(t *testing.T) {
+	client, err := NewClient()
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	const longer = "mox-test-cwexact-longer"
+	_ = client.KillSession(longer)
+	if err := client.CreateSession(longer, "", "main"); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	t.Cleanup(func() { _ = client.KillSession(longer) })
+
+	if _, err := client.CreateWindow("mox-test-cwexact", "stray", ""); err == nil {
+		t.Fatal("CreateWindow on a missing session succeeded (prefix-matched the longer name)")
+	}
+	out, err := client.Run("list-windows", "-t", "="+longer, "-F", "#{window_name}")
+	if err != nil {
+		t.Fatalf("list-windows: %v", err)
+	}
+	if strings.Contains(out, "stray") {
+		t.Fatalf("stray window landed in %q: %q", longer, out)
+	}
+}

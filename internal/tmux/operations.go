@@ -131,7 +131,7 @@ func (c *Client) AttachSession(name string) error {
 
 // CreateWindow creates a new window in a session and returns the new window's id.
 func (c *Client) CreateWindow(session, name, startDir string) (string, error) {
-	args := []string{"new-window", "-t", session + ":", "-P", "-F", "#{window_id}", "-n", name}
+	args := []string{"new-window", "-t", "=" + session + ":", "-P", "-F", "#{window_id}", "-n", name}
 	if startDir != "" {
 		args = append(args, "-c", startDir)
 	}

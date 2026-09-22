@@ -123,3 +123,13 @@ func (c *Config) ListSessionNames() []string {
 	slices.Sort(names)
 	return names
 }
+
+// ListLayoutNames returns all layout names sorted alphabetically.
+func (c *Config) ListLayoutNames() []string {
+	names := make([]string, 0, len(c.Layouts))
+	for name := range c.Layouts {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}

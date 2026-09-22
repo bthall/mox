@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows added to a session (multi-window builds and `mox new -w`) now
+  target the session by exact name. tmux fell back to prefix matching, so
+  a missing session could resolve to a longer-named one and the window
+  would land there.
+- Fast typing in the hub no longer runs keys typed after a quit: `qi`
+  quit and then fell through to the import handoff. The hub and editor now
+  share one key-repeat replay that stops at the key that quits.
+- `mox validate` lists layouts in name order instead of a different order
+  on every run.
+
 ## [0.6.2] — 2026-07-23
 
 ### Added
