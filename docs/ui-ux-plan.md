@@ -34,12 +34,58 @@ paths stay fast: navigation, attach, start, kill, edit, and import should not
 gain extra confirmation steps except where data or a running session is
 destroyed. Color remains terminal-native and optional.
 
+## Shared screen model
+
+At 80 columns and wider, reserve a stable session list on the left and a
+larger work area on the right. The work area shows a live preview in the hub,
+session fields in the editor, and the current step plus YAML review in add.
+Keep the view name, selected session, operation status, and current key hints
+in the same locations during handoffs. The add wizard should replace only
+the work area when launched from the editor; the list and selection remain.
+
+```text
+mox / edit                                      config.yml · 12 sessions
+  Sessions              │  new session · hosts                 step 2/8
+  ● api-prod            │  Hosts, space separated
+  ○ web-prod            │  @cluster expands before review
+  ◆ scratch  tmux only  │  ▸ api web worker
+  ...                   │
+                        │  Review shows the YAML before save/start.
+  Tab focus  / filter   │  Enter next  Esc back
+  Draft not saved                                                80 × 24
+```
+
+At 40 columns, show the focused pane alone with a short breadcrumb and
+`Tab` to switch list/detail. At 12 rows, keep the focused content, one status
+line, and only the keys usable in that state; scroll content rather than
+expanding the frame beyond the terminal. Never enforce a minimum width
+larger than the actual viewport. Full-screen capture may be reduced to a
+short preview or omitted at narrow widths, but session identity and state
+must remain visible.
+
+## Interaction contract to implement
+
+| Key | Browse/list | Field or wizard | Confirmation/review |
+| --- | --- | --- | --- |
+| `Enter` | Attach in hub; focus selected field in editor | Commit a field or advance one wizard step | Perform the labeled action |
+| `Esc` | Clear an active filter, otherwise go back or quit | Return one level without losing a draft | Cancel and return to the draft |
+| `Tab` | Move focus between list and work area | Move focus only when more than one area is shown | No hidden action |
+| `/` | Filter the session list | Insert a literal slash in text input | No effect |
+| `?` | Show help for the current view | Insert a literal question mark in text input; show help otherwise | Show help for the decision |
+
+Preserve `j/k`, `S`, `K`, `i`, and `Ctrl+E` in the hub, plus editor
+`a`, `s`, `D`, and `o`. Surface these shortcuts only when their target
+action is available. Killing a running session, deleting a saved session,
+and abandoning an unsaved draft require an explicit decision; attach,
+start, and switching focus do not. `Ctrl+C` exits immediately only when
+there is no unsaved draft.
+
 ## Work sequence
 
-1. **Lock the interaction map.** Inventory actions and states across the three
-   views. Define one rule for Enter, Esc, Tab, `/`, `?`, and status feedback;
-   retain existing expert shortcuts where they have no conflict. Write the
-   rules before changing rendering.
+1. **Validate the interaction contract.** Inventory every mode across the
+   three views, resolve any conflict with the proposed key table, and turn
+   the agreed transitions and status feedback into interaction tests before
+   changing rendering.
 2. **Build shared chrome and visual roles.** Add a common responsive layout,
    focus treatment, status area, and context-sensitive key hints. Separate
    primary text, secondary text, inactive state, warning, success, and border
