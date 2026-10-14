@@ -96,7 +96,11 @@ jobs:
           args: check
 
       - name: Build release snapshot
-        run: goreleaser release --snapshot --clean --skip=publish
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --clean --skip=publish
 
   integration:
     name: Integration tests (tmux)
