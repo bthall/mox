@@ -29,7 +29,7 @@ jobs:
           MOX_SCREENSHOT_DIR="$PWD/build/frames" go test ./internal/cli -run TestGenerateScreenshots -count=1
           for frame in build/frames/*.ans; do
             name=$(basename "$frame" .ans)
-            "$(go env GOPATH)/bin/freeze" "$frame" -l ansi --window --padding 25 --margin 15 --border.radius 10 --font.family "DejaVu Sans Mono" -o "build/screenshots/$name.png"
+            "$(go env GOPATH)/bin/freeze" -l ansi --window --padding 25 --margin 15 --border.radius 10 --font.family "DejaVu Sans Mono" -o "build/screenshots/$name.png" < "$frame"
           done
       - name: Bundle development dependencies
         run: |
@@ -38,6 +38,7 @@ jobs:
           cp "$(go env GOPATH)/bin/freeze" build/tools/
           tar -czf build/ui-dev-bundle.tgz -C "$(go env GOMODCACHE)" .
       - uses: actions/upload-artifact@v6
+        if: always()
         with:
           name: mox-ui-preview
           path: |
