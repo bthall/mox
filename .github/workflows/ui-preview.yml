@@ -31,6 +31,9 @@ jobs:
             name=$(basename "$frame" .ans)
             "$(go env GOPATH)/bin/freeze" -l ansi --window --padding 25 --margin 15 --border.radius 10 --font.family "DejaVu Sans Mono" -o "build/screenshots/$name.png" < "$frame"
           done
+          for name in hub editor add; do
+            "$(go env GOPATH)/bin/freeze" -l ansi --theme github --background '#ffffff' --window --padding 25 --margin 15 --border.radius 10 --font.family "DejaVu Sans Mono" -o "build/screenshots/$name-light.png" < "build/frames/$name.ans"
+          done
       - name: Export preview frames for inspection
         if: always()
         run: |

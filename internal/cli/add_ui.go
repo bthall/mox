@@ -585,6 +585,14 @@ func (m addModel) stepTitle() string {
 }
 
 func (m addModel) actionHints() []keyHint {
+	actions := m.stepHints()
+	if !m.embedded && !m.cancelConfirm && !m.help && !m.focusList {
+		actions = append(actions, keyHint{"Tab", "sessions"})
+	}
+	return actions
+}
+
+func (m addModel) stepHints() []keyHint {
 	if m.cancelConfirm {
 		return []keyHint{{"d", "discard"}, {"Esc", "keep editing"}}
 	}
@@ -602,7 +610,11 @@ func (m addModel) actionHints() []keyHint {
 	case stepArrange, stepConfirm:
 		return []keyHint{{"Enter", "confirm"}, {"↑/↓", "choose"}, {"Esc", "back"}, {"?", "help"}}
 	case stepCommands:
-		return []keyHint{{"Enter", "add line / finish"}, {"Bksp", "edit last line"}, {"Esc", "back"}}
+		actions := []keyHint{{"Enter", "add line / finish"}, {"Esc", "back"}}
+		if len(m.commands) > 0 && len(m.input) == 0 {
+			actions = append(actions, keyHint{"Bksp", "edit last line"})
+		}
+		return actions
 	default:
 		return []keyHint{{"Enter", "next"}, {"Esc", "back"}}
 	}
@@ -610,7 +622,11 @@ func (m addModel) actionHints() []keyHint {
 
 func (m addModel) helpActions() []keyHint {
 	m.help = false
-	return append(m.actionHints(), keyHint{"PgUp/PgDn", "scroll the YAML review"}, keyHint{"Ctrl+C", "cancel / discard decision"})
+	actions := m.actionHints()
+	if m.step == stepConfirm {
+		actions = append(actions, keyHint{"PgUp/PgDn", "scroll the YAML review"})
+	}
+	return append(actions, keyHint{"Ctrl+C", "cancel / discard decision"})
 }
 
 // stepLines renders the body of the current step.

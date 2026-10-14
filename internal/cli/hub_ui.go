@@ -732,7 +732,7 @@ func (m hubModel) listLines(w, h int) []string {
 func (m hubModel) previewPane(w, h int) []string {
 	c, ok := m.selected()
 	if !ok {
-		return []string{pkDim.Render("no session matches the filter")}
+		return []string{"No session matches the filter.", "Esc clears it; / changes the search."}
 	}
 	if m.mode == hubConfirmKill {
 		return []string{pkErr.Render("Kill " + c.Name + "?"), "", "The running session and its panes will close.", "Enter/y kills it. Esc keeps it running."}
@@ -753,8 +753,10 @@ func (m hubModel) previewPane(w, h int) []string {
 		lines = append(lines, pkBorder.Render(strings.Repeat("─", max(0, w))))
 	}
 	if m.previewErr != "" {
+		lines = append(lines, pkForeign.Render("preview unavailable"), "Enter still attaches. Capture retries automatically.")
+		lines = append(lines, wrapWords(strings.Fields(m.previewErr), w)...)
+		lines = append(lines, "")
 		lines = append(lines, m.summaryLines(c, w)...)
-		lines = append(lines, "", pkDim.Render(truncate("preview unavailable: "+m.previewErr, w)))
 		return lines
 	}
 	if m.previewName != c.Name {
@@ -859,6 +861,9 @@ func (m hubModel) statusLine() string {
 		parts = append(parts, style.Render(m.status))
 	}
 	if len(parts) == 0 {
+		if m.previewErr != "" {
+			return pkForeign.Render("Preview unavailable · Enter still attaches")
+		}
 		return "Ready"
 	}
 	return strings.Join(parts, pkDim.Render(" · "))

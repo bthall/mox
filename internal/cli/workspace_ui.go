@@ -185,7 +185,7 @@ func sessionRow(name, state string, selected bool, width int) string {
 	if width < 20 {
 		state = ""
 	}
-	nameWidth := max(1, width-4-ansi.StringWidth(state)-1)
+	nameWidth := max(1, width-4-ansi.StringWidth(state)-3)
 	name = clipText(name, nameWidth)
 	if selected {
 		name = pkSelected.Render(name)

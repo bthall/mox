@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/bthall/mox/internal/config"
 	"github.com/bthall/mox/internal/session"
@@ -519,6 +520,9 @@ func lipglossWidth(s string) int { return lipgloss.Width(s) }
 // capture lines are width-clipped without breaking sequences, every body
 // line is reset-terminated, and panel rows stay aligned.
 func TestHubColoredPreviewNoBleed(t *testing.T) {
+	profile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	t.Cleanup(func() { lipgloss.SetColorProfile(profile) })
 	longRed := "\x1b[31m" + strings.Repeat("x", 200) // long colored line, no reset
 	capture := func(string) (string, error) {
 		return "\x1b[32mgreen ok\x1b[0m\n" + longRed + "\n", nil

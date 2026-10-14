@@ -829,11 +829,18 @@ func (m editorModel) hasPendingInput() bool {
 	if m.draft == nil {
 		return false
 	}
-	switch m.mode {
+	mode := m.mode
+	if mode == modeGuard {
+		mode = m.guardReturn
+	}
+	switch mode {
 	case modeFieldEdit:
 		return string(m.input) != m.fields[m.fieldSel].text(m.draft.sess)
 	case modeInput:
-		return m.inputPurpose == inputDuplicate || string(m.input) != m.draft.name
+		if m.inputPurpose == inputDuplicate {
+			return len(m.input) > 0
+		}
+		return string(m.input) != m.draft.name
 	case modeListEdit:
 		if m.listEd.editing {
 			if m.listEd.adding {
@@ -1281,7 +1288,18 @@ func (m editorModel) actionHints() []keyHint {
 		if m.listEd.editing {
 			return []keyHint{{"Enter", "commit"}, {"Esc", "cancel"}}
 		}
-		return []keyHint{{"a", "add"}, {"e", "edit"}, {"d", "delete"}, {"J/K", "move"}, {"Esc", "back"}, {"?", "help"}}
+		actions := []keyHint{{"a", "add"}, {"Esc", "back"}}
+		items := m.fields[m.listEd.field].list(m.draft.sess)
+		if len(*items) > 0 {
+			actions = append(actions, keyHint{"e", "edit"}, keyHint{"d", "delete"})
+			if m.listEd.sel > 0 {
+				actions = append(actions, keyHint{"K", "move up"})
+			}
+			if m.listEd.sel < len(*items)-1 {
+				actions = append(actions, keyHint{"J", "move down"})
+			}
+		}
+		return append(actions, keyHint{"?", "help"})
 	case modeInput:
 		return []keyHint{{"Enter", "confirm"}, {"Esc", "cancel"}}
 	case modeConfirmDelete:
@@ -1298,26 +1316,57 @@ func (m editorModel) actionHints() []keyHint {
 				return []keyHint{{"Tab", "add session"}, {"Esc", "add session"}}
 			}
 			actions := m.wizard.actionHints()
+			if m.wizard.cancelConfirm || m.wizard.help {
+				return actions
+			}
 			return append(actions, keyHint{"Tab", "sessions"})
 		}
 	}
 	actions := []keyHint{{"Enter", "edit"}, {"Tab", "sessions"}}
 	if m.pane == paneList {
-		actions = []keyHint{{"Enter", "fields"}, {"a", "add"}, {"/", "filter"}}
+		actions = []keyHint{{"Enter", "fields"}}
+		if !m.isDirty() {
+			actions = append(actions, keyHint{"a", "add"}, keyHint{"/", "filter"})
+		}
 	} else if m.draft != nil && len(m.fields) > m.fieldSel && m.fields[m.fieldSel].kind == fieldCycle {
 		actions = append(actions, keyHint{"Space", "cycle"})
 	}
 	if m.isDirty() {
 		actions = append(actions, keyHint{"s", "save"})
 	}
-	return append(actions, keyHint{"o", "YAML"}, keyHint{"q", "quit"}, keyHint{"?", "help"})
+	if m.draft == nil {
+		filtered := actions[:0]
+		for _, action := range actions {
+			if action.key != "Enter" {
+				filtered = append(filtered, action)
+			}
+		}
+		actions = filtered
+	}
+	if !m.isDirty() {
+		actions = append(actions, keyHint{"o", "YAML"})
+	}
+	return append(actions, keyHint{"q", "quit"}, keyHint{"?", "help"})
 }
 
 func (m editorModel) helpActions() []keyHint {
 	m.help = false
 	actions := append([]keyHint{{"j/k, ↑/↓", "navigate the focused area"}}, m.actionHints()...)
 	if m.mode == modeBrowse {
-		actions = append(actions, keyHint{"a", "add session"}, keyHint{"r", "rename session"}, keyHint{"y", "duplicate session"}, keyHint{"D", "delete / undo deletion"})
+		if !m.isDirty() {
+			actions = append(actions, keyHint{"a", "add session"})
+			if m.draft != nil {
+				actions = append(actions, keyHint{"y", "duplicate session"})
+			}
+		}
+		if m.draft != nil {
+			if !m.draft.deleted {
+				actions = append(actions, keyHint{"r", "rename session"})
+			}
+			if len(m.st.cfg.Sessions) > 1 || m.draft.added || m.draft.deleted {
+				actions = append(actions, keyHint{"D", "delete / undo deletion"})
+			}
+		}
 	}
 	return actions
 }
@@ -1439,6 +1488,8 @@ func (m editorModel) statusLine() string {
 	}
 	if m.isDirty() {
 		parts = append(parts, pkForeign.Render("unsaved: "+m.draft.name))
+	} else if m.hasPendingInput() {
+		parts = append(parts, pkForeign.Render("Editing · not saved: "+m.draft.name))
 	}
 	if m.status != "" {
 		style := pkDim

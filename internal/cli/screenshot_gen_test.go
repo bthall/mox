@@ -8,11 +8,13 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -45,7 +47,7 @@ func TestGenerateScreenshots(t *testing.T) {
 	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
 	t.Setenv("CLICOLOR_FORCE", "1") // colors mox list's raw-ANSI path into files
 
-	now := time.Now()
+	now := time.Date(2026, time.October, 14, 12, 0, 0, 0, time.UTC)
 	write := func(name, frame string) {
 		t.Helper()
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(frame), 0o600); err != nil { //nolint:gosec // dev-only generator; dir is the developer's own env var
@@ -56,11 +58,66 @@ func TestGenerateScreenshots(t *testing.T) {
 	write("hub.ans", hubFrame(t, now))
 	write("list.ans", listFrame(t, now))
 	write("editor.ans", editorFrame(t))
+	write("add.ans", wizardFrame(t, 110, 30, false))
+	write("review.ans", wizardFrame(t, 80, 24, true))
+	help := screenshotHubModel(t, now)
+	help.width, help.height, help.help = 80, 24, true
+	write("help.ans", help.View())
+	cancel := screenshotWizardModel(t, 80, 24, false)
+	cancel = edType(t, cancel, tea.KeyCtrlC)
+	write("cancel.ans", cancel.View())
+	st := testEditorState(t, screenshotConfigYAML)
+	errors := newEditorModel(st, nil, nil, "webfarm")
+	errors.width, errors.height = 80, 24
+	for i, field := range errors.fields {
+		if field.key == "retry" {
+			errors.fieldSel = i
+		}
+	}
+	errors = edType(t, errors, tea.KeyEnter)
+	errors = edType(t, errors, tea.KeyCtrlU)
+	errors = edRunes(t, errors, "-3")
+	errors = edType(t, errors, tea.KeyEnter)
+	write("validation.ans", errors.View())
+	errors.mode = modeStale
+	errors.draft.sess.Root = "/srv/ops"
+	write("stale.ans", errors.View())
+	for _, size := range [][2]int{{40, 12}, {80, 24}, {120, 35}} {
+		w, h := size[0], size[1]
+		m := screenshotHubModel(t, now)
+		m.width, m.height = w, h
+		write(fmt.Sprintf("hub-%dx%d.ans", w, h), m.View())
+		if w == 40 {
+			m.focusDetail = true
+			write("preview-40x12.ans", m.View())
+		}
+		st := testEditorState(t, screenshotConfigYAML)
+		ed := newEditorModel(st, nil, nil, "webfarm")
+		ed.width, ed.height = w, h
+		if w == 40 {
+			ed.fieldSel = len(ed.fields) - 1
+		}
+		write(fmt.Sprintf("editor-%dx%d.ans", w, h), ed.View())
+		write(fmt.Sprintf("add-%dx%d.ans", w, h), wizardFrame(t, w, h, false))
+	}
+	lipgloss.SetColorProfile(termenv.Ascii)
+	m := screenshotHubModel(t, now)
+	m.width, m.height = 80, 24
+	write("hub-no-color.ans", m.View())
+	ed := newEditorModel(testEditorState(t, screenshotConfigYAML), nil, nil, "webfarm")
+	ed.width, ed.height = 80, 24
+	write("editor-no-color.ans", ed.View())
+	write("add-no-color.ans", wizardFrame(t, 80, 24, true))
 }
 
 // hubFrame stages the session hub: a running unmanaged session (◆), the
 // highlighted running webfarm with a live preview, and two stopped sessions.
 func hubFrame(t *testing.T, now time.Time) string {
+	t.Helper()
+	return screenshotHubModel(t, now).View()
+}
+
+func screenshotHubModel(t *testing.T, now time.Time) hubModel {
 	t.Helper()
 	candidates := []session.SessionInfo{
 		{Name: "main", Running: true, Managed: false, Windows: 1, LastActivity: now},
@@ -84,7 +141,35 @@ func hubFrame(t *testing.T, now time.Time) string {
 		"ok: [\x1b[36mweb1\x1b[0m] task 3",
 		"ok: [\x1b[36mweb2\x1b[0m] task 4",
 	}
-	return m.View()
+	return m
+}
+
+func wizardFrame(t *testing.T, width, height int, review bool) string {
+	t.Helper()
+	return screenshotWizardModel(t, width, height, review).View()
+}
+
+func screenshotWizardModel(t *testing.T, width, height int, review bool) editorModel {
+	t.Helper()
+	st := testEditorState(t, screenshotConfigYAML)
+	m := newEditorModel(st, nil, nil, "webfarm")
+	m.width, m.height = width, height
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "ops")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "@webfarm")
+	if review {
+		m = edType(t, m, tea.KeyEnter)
+		m = edType(t, m, tea.KeyEnter)
+		m = edType(t, m, tea.KeyEnter)
+		m = edType(t, m, tea.KeyEnter)
+		m = edRunes(t, m, "/srv/ops")
+		m = edType(t, m, tea.KeyEnter)
+		m = edRunes(t, m, "htop")
+		m = edType(t, m, tea.KeyEnter)
+		m = edType(t, m, tea.KeyEnter)
+	}
+	return m
 }
 
 // listFrame stages mox list: configured stopped/running sessions plus one
