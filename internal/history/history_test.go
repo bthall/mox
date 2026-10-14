@@ -1,6 +1,8 @@
 package history
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -115,6 +117,65 @@ func TestStore_MissingFileLoadsEmpty(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("want empty for missing file, got %+v", got)
+	}
+}
+
+func TestStore_WriteReplacesFileWithoutTruncatingOpenReaders(t *testing.T) {
+	s, _ := newTestStore(t)
+	if err := s.write([]Entry{{Name: "before", Action: ActionCreated}}); err != nil {
+		t.Fatal(err)
+	}
+	old, err := os.Open(s.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	if err := s.write([]Entry{{Name: "after", Action: ActionAttached}}); err != nil {
+		t.Fatal(err)
+	}
+	oldData, err := io.ReadAll(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oldEntries []Entry
+	if err := json.Unmarshal(oldData, &oldEntries); err != nil || len(oldEntries) != 1 || oldEntries[0].Name != "before" {
+		t.Fatalf("open reader saw changed or invalid history: %q, %v", oldData, err)
+	}
+	newEntries, err := s.load()
+	if err != nil || len(newEntries) != 1 || newEntries[0].Name != "after" {
+		t.Fatalf("new reader saw %v, %v", newEntries, err)
+	}
+	info, err := os.Stat(s.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("history mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestStore_WritePreservesSymlink(t *testing.T) {
+	s, _ := newTestStore(t)
+	target := filepath.Join(filepath.Dir(s.path), "target.json")
+	if err := os.WriteFile(target, []byte("[]"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, s.path); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.record("dev", ActionCreated); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(s.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("history symlink was replaced")
+	}
+	entries, err := s.load()
+	if err != nil || len(entries) != 1 || entries[0].Name != "dev" {
+		t.Fatalf("symlink target history = %v, %v", entries, err)
 	}
 }
 

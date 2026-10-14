@@ -143,10 +143,11 @@ to a plain stack with a notice on stderr.
 
 ## Dry-run (`--print`)
 
-`mox new --print` and `mox -a <session> --print` emit the exact tmux
-commands a build would run, one copy-pasteable line each, without executing
-anything (tmux doesn't even need to be installed). Hooks are printed rather
-than run, and nothing is recorded in the recents history.
+`mox new --print` and `mox -a <session> --print` emit shell-quoted tmux
+invocations without executing anything (tmux doesn't even need to be
+installed). A command containing a literal newline spans more than one
+display line. Hooks are printed rather than run, and nothing is recorded in
+the recents history.
 
 ## Global flags
 

@@ -30,6 +30,9 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Check module metadata
+        run: go mod tidy -diff
+
       - name: Vet
         run: go vet ./...
 

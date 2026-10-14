@@ -24,6 +24,15 @@ jobs:
           go-version: '1.25'
           cache: true
 
+      - name: Check module metadata
+        run: go mod tidy -diff
+
+      - name: Test release commit
+        run: go test -race -count=1 ./...
+
+      - name: Vet release commit
+        run: go vet ./...
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

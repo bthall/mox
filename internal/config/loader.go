@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -83,6 +84,13 @@ func Load(path string) (*Config, error) {
 	var cfg Config
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	var extra yaml.Node
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return nil, fmt.Errorf("parse config %s: %w", path, err)
+		}
+		return nil, fmt.Errorf("parse config %s: multiple YAML documents are not supported", path)
 	}
 
 	if err := cfg.Validate(); err != nil {
