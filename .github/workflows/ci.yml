@@ -74,11 +74,19 @@ jobs:
         uses: golang/govulncheck-action@v1
 
   release-config:
-    name: Release config
+    name: Release snapshot
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache: true
 
       - name: Check GoReleaser config
         uses: goreleaser/goreleaser-action@v7
@@ -86,6 +94,9 @@ jobs:
           distribution: goreleaser
           version: '~> v2'
           args: check
+
+      - name: Build release snapshot
+        run: goreleaser release --snapshot --clean --skip=publish
 
   integration:
     name: Integration tests (tmux)
