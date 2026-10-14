@@ -199,17 +199,21 @@ func TestAddWizard_EscGoesBackThenCancels(t *testing.T) {
 		t.Error("esc should go back one step")
 	}
 	m = sendAdd(t, m, keyEsc)
-	if m.done.action != addActionCancel {
-		t.Error("esc on the first step should cancel")
+	if !m.cancelConfirm || m.finished {
+		t.Error("esc on the first step should protect the entered draft")
 	}
 }
 
-func TestAddWizard_CtrlCCancelsAnywhere(t *testing.T) {
+func TestAddWizard_CtrlCProtectsDraft(t *testing.T) {
 	m := newTestAddModel()
 	m = through(t, m, "web")
 	m = sendAdd(t, m, keyCtrlC)
-	if m.done.action != addActionCancel {
-		t.Error("ctrl-c should cancel")
+	if !m.cancelConfirm || m.finished {
+		t.Fatal("ctrl-c should ask before discarding a draft")
+	}
+	m = sendAdd(t, m, runes("d")...)
+	if !m.finished || m.done.action != addActionCancel {
+		t.Error("explicit discard should cancel")
 	}
 }
 

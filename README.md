@@ -35,11 +35,18 @@ Edit any session without touching YAML using `mox edit <session>`:
   <img src="assets/screenshot-editor.png" alt="mox session editor" width="850">
 </p>
 
+Add a session in the same workspace, with live host expansion and YAML review:
+
+<p align="center">
+  <img src="assets/screenshot-add.png" alt="mox add wizard inside the session editor" width="850">
+</p>
+
 ## Features
 
 - **Declarative YAML config**: one window per host, full custom layouts, or anything between; project-local `.mox.yml` overrides; editor autocomplete via a published JSON Schema
 - **Cssh-style broadcast**: `sync: true` for synchronized typing; tiled layouts; `sudo -i` once for every pane
 - **Ad-hoc sessions**: `mox new @cluster` or `mox new host1 host2` without touching config; `-x` excludes hosts; `--save` keeps the definition
+- **Shared terminal workspace**: hub, editor, and add use one responsive layout with readable state labels, context-sensitive shortcuts, and `?` help; narrow terminals switch list/detail with Tab
 - **Session hub**: bare `mox` opens a full-screen hub with a filterable session list, live buffer previews of running sessions, and start/kill/edit/import actions in place
 - **Config without YAML**: `mox edit <session>` opens a full-screen editor with buffered drafts, a validated diff preview before anything is written, and comment-preserving saves; `mox add` walks a short wizard; `mox import` captures a running session (structure, pane geometry, *and its SSH connections*)
 - **Broadcast safety**: an ended connection holds its pane instead of dropping to a local shell; optional retry

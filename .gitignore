@@ -37,3 +37,6 @@ CLAUDE.md
 .claude/
 docs/superpowers/
 .worktrees/
+
+# Generated design-review captures
+/.impeccable/review/

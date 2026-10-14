@@ -96,14 +96,16 @@ release-snapshot: ## Build a local snapshot release with goreleaser
 	@echo "Building snapshot release..."
 	goreleaser release --snapshot --clean
 
-screenshots: ## Regenerate README screenshots (requires charmbracelet/freeze)
+screenshots: ## Regenerate README screenshots (requires freeze and rsvg-convert)
 	@echo "Rendering screenshot frames..."
 	@mkdir -p build/frames
 	MOX_SCREENSHOT_DIR=$(CURDIR)/build/frames go test ./internal/cli -run TestGenerateScreenshots -v
-	@for n in hub list editor; do \
-		freeze build/frames/$$n.ans -l ansi --window --padding 25 --margin 15 \
+	@set -e; for n in hub list editor add; do \
+		freeze -l ansi --window --padding 25 --margin 15 \
 			--border.radius 10 --font.family "DejaVu Sans Mono" \
-			-o assets/screenshot-$$n.png; \
+			-o build/frames/$$n.svg < build/frames/$$n.ans; \
+		rsvg-convert build/frames/$$n.svg -o assets/screenshot-$$n.png; \
+		python3 scripts/screenshot-provenance.py assets/screenshot-$$n.png build/frames/$$n.ans; \
 	done
 
 .DEFAULT_GOAL := build

@@ -17,7 +17,6 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 
@@ -113,20 +112,6 @@ func sanitizeCaptureLine(s string) string {
 	return b.String()
 }
 
-// clampView hard-clips every rendered line to the terminal width as the
-// last line of defense: a line the terminal renders wider than we measured
-// (width disagreement on exotic glyphs) would wrap and push the footer and
-// status line off-screen.
-func clampView(view string, w int) string {
-	lines := strings.Split(view, "\n")
-	for i, l := range lines {
-		if lipgloss.Width(l) > w {
-			lines[i] = ansi.Truncate(l, w, "") + "\x1b[0m"
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 type hubModel struct {
 	ctx      context.Context
 	mgr      hubManager
@@ -142,7 +127,10 @@ type hubModel struct {
 	sel        int   // index into visible
 	offset     int
 
-	mode hubMode
+	mode        hubMode
+	focusDetail bool
+	help        bool
+	helpOff     int
 
 	previewName string   // session the preview belongs to
 	previewBody []string // captured buffer lines
@@ -295,6 +283,7 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.keepVisible()
 		return m, nil
 
 	case hubTickMsg:
@@ -361,6 +350,23 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
+		if m.help {
+			switch {
+			case msg.Type == tea.KeyCtrlC:
+				return m.quit()
+			case msg.Type == tea.KeyEsc || string(msg.Runes) == "?":
+				m.help = false
+			case msg.Type == tea.KeyDown || string(msg.Runes) == "j":
+				m.helpOff = min(m.helpOff+1, max(0, len(m.helpActions())-1))
+			case msg.Type == tea.KeyUp || string(msg.Runes) == "k":
+				m.helpOff = max(0, m.helpOff-1)
+			}
+			return m, nil
+		}
+		if m.mode != hubFilter && string(msg.Runes) == "?" {
+			m.help, m.helpOff = true, 0
+			return m, nil
+		}
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
 			return replayRunes(m, msg.Runes)
 		}
@@ -378,6 +384,9 @@ func (m hubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m hubModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
+	case tea.KeyTab:
+		m.focusDetail = !m.focusDetail
+		return m, nil
 	case tea.KeyCtrlC:
 		return m.quit()
 	case tea.KeyUp, tea.KeyCtrlP, tea.KeyCtrlK:
@@ -567,11 +576,7 @@ func (m *hubModel) keepVisible() {
 }
 
 func (m hubModel) panelHeight() int {
-	h := m.height - 2
-	if h < 8 {
-		h = 8
-	}
-	return h
+	return terminalLayout(m.width, m.height).contentHeight + 2
 }
 
 func (m hubModel) listRows() int {
@@ -598,25 +603,27 @@ func (m hubModel) effectiveListRows() int {
 // --- view ---
 
 func (m hubModel) View() string {
-	h := m.panelHeight()
-	if m.width < 60 {
-		w := m.width
-		if w < 24 {
-			w = 24
+	l := terminalLayout(m.width, m.height)
+	detail, title := m.previewPane(l.detailWidth, l.contentHeight), m.previewTitle()
+	focus := m.focusDetail || m.mode == hubConfirmKill
+	if m.mode == hubFilter {
+		focus = false
+	}
+	if m.help {
+		detail = helpLines(m.helpActions(), l.detailWidth)
+		detail = detail[min(m.helpOff, len(detail)):]
+		title, focus = "help / sessions", true
+	}
+	running := 0
+	for _, c := range m.candidates {
+		if c.Running {
+			running++
 		}
-		return clampView(panel(m.listTitle(), m.footer(), m.listLines(w-4, h-2), w, h)+"\n"+m.statusLine(), w)
 	}
-	leftW := m.width * 2 / 5
-	if leftW < 26 {
-		leftW = 26
-	}
-	if leftW > 40 {
-		leftW = 40
-	}
-	rightW := m.width - leftW - 1
-	left := panel(m.listTitle(), "", m.listLines(leftW-4, h-2), leftW, h)
-	right := panel(m.previewTitle(), m.footer(), m.previewPane(rightW-4, h-2), rightW, h)
-	return clampView(lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right)+"\n"+m.statusLine(), m.width)
+	return renderWorkspace(workspaceView{width: m.width, height: m.height, view: "sessions",
+		context:   fmt.Sprintf("%d running · %d sessions", running, len(m.candidates)),
+		listTitle: m.listTitle(), detailTitle: title, list: m.listLines(l.listWidth, l.contentHeight),
+		detail: detail, focusDetail: focus, actions: m.actionHints(), status: m.statusLine()})
 }
 
 func (m hubModel) listTitle() string {
@@ -641,13 +648,52 @@ func (m hubModel) previewTitle() string {
 }
 
 func (m hubModel) footer() string {
+	return renderHints(m.actionHints(), 1000)
+}
+
+func (m hubModel) actionHints() []keyHint {
+	if m.help {
+		return []keyHint{{"Esc", "back"}, {"j/k", "scroll"}}
+	}
 	switch m.mode {
 	case hubFilter:
-		return hints("↵", "keep", "esc", "clear")
+		return []keyHint{{"Enter", "keep filter"}, {"Esc", "clear"}}
 	case hubConfirmKill:
-		return hints("y", "kill", "esc", "cancel")
+		return []keyHint{{"Enter/y", "kill"}, {"Esc", "cancel"}, {"?", "help"}}
 	}
-	return hints("↵", "attach", "S", "start", "K", "kill", "^e", "edit", "i", "import", "q", "quit")
+	var actions []keyHint
+	if _, ok := m.selected(); ok && m.pending == "" {
+		actions = append(actions, keyHint{"Enter", "attach"})
+	}
+	label := "preview"
+	if m.focusDetail {
+		label = "sessions"
+	}
+	actions = append(actions, keyHint{"Tab", label})
+	if c, ok := m.selected(); ok && m.pending == "" {
+		if c.Running {
+			actions = append(actions, keyHint{"K", "kill"})
+		} else if c.Managed {
+			actions = append(actions, keyHint{"S", "start"})
+		}
+		if c.Managed {
+			actions = append(actions, keyHint{"^e", "edit"})
+		} else if c.Running {
+			actions = append(actions, keyHint{"i", "import"})
+		}
+	}
+	actions = append(actions, keyHint{"/", "filter"})
+	if m.pending == "" {
+		actions = append(actions, keyHint{"q", "quit"})
+	}
+	return append(actions, keyHint{"?", "help"})
+}
+
+func (m hubModel) helpActions() []keyHint {
+	actions := []keyHint{{"j/k, ↑/↓", "select a session"}}
+	m.help = false
+	actions = append(actions, m.actionHints()...)
+	return actions
 }
 
 func (m hubModel) listLines(w, h int) []string {
@@ -666,32 +712,14 @@ func (m hubModel) listLines(w, h int) []string {
 	}
 	for i := m.offset; i < end; i++ {
 		c := m.candidates[m.visible[i]]
-		meta := ""
+		state := "stopped"
 		if c.Running {
-			meta = fmt.Sprintf("%dw %s", c.Windows, relativeShort(m.now, c.LastActivity))
+			state = "running"
+			if !c.Managed {
+				state = "tmux only"
+			}
 		}
-		name := truncate(c.Name, w-6-len(meta))
-		pad := w - 4 - lipgloss.Width(name) - len(meta)
-		if pad < 1 {
-			pad = 1
-		}
-		// mox list's vocabulary: running green, unmanaged-running yellow.
-		styledName := name
-		switch {
-		case c.Running && !c.Managed:
-			styledName = pkForeign.Render(name)
-		case c.Running:
-			styledName = pkRunning.Render(name)
-		}
-		if i == m.sel {
-			styledName = pkSelected.Render(styledName)
-		}
-		row := statusDot(c) + " " + styledName + strings.Repeat(" ", pad) + pkDim.Render(meta)
-		if i == m.sel {
-			lines = append(lines, pkAccent.Render("▌")+" "+row)
-		} else {
-			lines = append(lines, "  "+row)
-		}
+		lines = append(lines, sessionRow(c.Name, state, i == m.sel, w))
 	}
 	if end < len(m.visible) {
 		lines = append(lines, pkDim.Render(fmt.Sprintf("  … %d more", len(m.visible)-end)))
@@ -704,7 +732,10 @@ func (m hubModel) listLines(w, h int) []string {
 func (m hubModel) previewPane(w, h int) []string {
 	c, ok := m.selected()
 	if !ok {
-		return []string{pkDim.Render("no session matches the filter")}
+		return []string{"No session matches the filter.", "Esc clears it; / changes the search."}
+	}
+	if m.mode == hubConfirmKill {
+		return []string{pkErr.Render("Kill " + c.Name + "?"), "", "The running session and its panes will close.", "Enter/y kills it. Esc keeps it running."}
 	}
 	if m.pending != "" {
 		return []string{"", pkForeign.Render("  " + m.pending)}
@@ -719,15 +750,17 @@ func (m hubModel) previewPane(w, h int) []string {
 	var lines []string
 	if m.previewWin != "" {
 		lines = append(lines, pkDim.Render(truncate("win: "+m.previewWin, w)))
-		lines = append(lines, pkBorder.Render(strings.Repeat("─", w)))
+		lines = append(lines, pkBorder.Render(strings.Repeat("─", max(0, w))))
 	}
 	if m.previewErr != "" {
+		lines = append(lines, pkForeign.Render("preview unavailable"), "Enter still attaches. Capture retries automatically.")
+		lines = append(lines, wrapWords(strings.Fields(m.previewErr), w)...)
+		lines = append(lines, "")
 		lines = append(lines, m.summaryLines(c, w)...)
-		lines = append(lines, "", pkDim.Render(truncate("preview unavailable: "+m.previewErr, w)))
 		return lines
 	}
 	if m.previewName != c.Name {
-		lines = append(lines, pkDim.Render("  …"))
+		lines = append(lines, pkDim.Render("Loading preview…"))
 		return lines
 	}
 	// Tail-clip the buffer to the rows left under the header, dropping
@@ -810,7 +843,7 @@ func (m hubModel) summaryLines(c session.SessionInfo, w int) []string {
 func (m hubModel) statusLine() string {
 	if m.mode == hubConfirmKill {
 		if c, ok := m.selected(); ok {
-			return " " + pkErr.Render("kill "+c.Name+"? ") + pkDim.Render("y / esc")
+			return pkErr.Render("kill "+c.Name+"? ") + pkDim.Render("Enter/y / Esc")
 		}
 	}
 	var parts []string
@@ -827,5 +860,11 @@ func (m hubModel) statusLine() string {
 		}
 		parts = append(parts, style.Render(m.status))
 	}
-	return " " + truncate(strings.Join(parts, pkDim.Render(" · ")), m.width-2)
+	if len(parts) == 0 {
+		if m.previewErr != "" {
+			return pkForeign.Render("Preview unavailable · Enter still attaches")
+		}
+		return "Ready"
+	}
+	return strings.Join(parts, pkDim.Render(" · "))
 }
