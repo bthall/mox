@@ -121,6 +121,37 @@ func TestAppendSessionToConfigRejectsMultipleDocumentsWithoutWriting(t *testing.
 	}
 }
 
+func TestAppendSessionToConfigRejectsInvalidResultWithoutWriting(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	input := "sessions:\n  first:\n    hots: [a]\n"
+	if err := os.WriteFile(p, []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendSessionToConfig(p, "second", &config.Session{Hosts: []string{"b"}}, false); err == nil || !strings.Contains(err.Error(), "hots") {
+		t.Fatalf("appendSessionToConfig error = %v, want invalid field", err)
+	}
+	got, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != input {
+		t.Fatalf("import changed invalid config: %q", got)
+	}
+}
+
+func TestAppendSessionToConfigSeedsEmptyExistingConfig(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(p, []byte("sessions: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendSessionToConfig(p, "first", &config.Session{Hosts: []string{"a"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Load(p); err != nil {
+		t.Fatalf("seeded config is invalid: %v", err)
+	}
+}
+
 func TestBuildWindow_UniformSSHFanout(t *testing.T) {
 	// The reported bug: a window of plain ssh panes must import as simple-mode
 	// hosts, not anonymous panes.

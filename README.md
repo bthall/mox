@@ -50,6 +50,9 @@ Edit any session without touching YAML using `mox edit <session>`:
 
 ## Install
 
+Runtime requires tmux 3.1 or newer. Building from source requires Go 1.25 or
+newer.
+
 ```bash
 # Go
 go install github.com/bthall/mox/cmd/mox@latest

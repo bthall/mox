@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Config loading, editing, and importing now reject additional YAML documents
   instead of silently dropping everything after the first one.
+- Import now checks the resulting config before saving, leaving an existing
+  invalid file untouched instead of reporting a successful import.
 - Recents history updates replace the file atomically, so interrupted writes
   cannot leave truncated JSON behind.
 - `mox init --force` atomically replaces an existing config without breaking
