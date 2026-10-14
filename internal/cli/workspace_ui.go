@@ -47,9 +47,9 @@ func renderWorkspace(v workspaceView) string {
 	rows := []string{" " + header + " ", pkBorder.Render(strings.Repeat("─", l.width))}
 	listTitle, detailTitle := v.listTitle, v.detailTitle
 	if v.focusDetail {
-		detailTitle = pkAccent.Render(detailTitle)
+		detailTitle = pkSelected.Render(detailTitle)
 	} else {
-		listTitle = pkAccent.Render(listTitle)
+		listTitle = pkSelected.Render(listTitle)
 	}
 	if l.narrow {
 		title, content := listTitle, v.list
@@ -172,9 +172,9 @@ func sessionRow(name, state string, selected bool, width int) string {
 	stateStyle := pkDim
 	switch state {
 	case "running":
-		dot, stateStyle = pkRunning.Render("●"), pkRunning
+		dot, stateStyle = pkStateRunning.Render("●"), pkRunning
 	case "tmux only":
-		dot, stateStyle = pkForeign.Render("◆"), pkForeign
+		dot, stateStyle = pkStateForeign.Render("◆"), pkForeign
 	case "draft", "delete":
 		dot, stateStyle = pkForeign.Render("*"), pkForeign
 	}
@@ -195,8 +195,16 @@ func sessionRow(name, state string, selected bool, width int) string {
 
 func helpLines(actions []keyHint, width int) []string {
 	lines := []string{pkTitle.Render("Keyboard help"), ""}
+	seen := make(map[string]bool)
 	for _, action := range actions {
-		lines = append(lines, pkAccent.Render(fitCell(action.key, min(10, max(1, width/3))))+" "+action.label)
+		if seen[action.key] {
+			continue
+		}
+		seen[action.key] = true
+		if action.key == "?" {
+			action.label = "close help"
+		}
+		lines = append(lines, pkTitle.Render(fitCell(action.key, min(10, max(1, width/3))))+" "+action.label)
 	}
 	return lines
 }
@@ -207,7 +215,7 @@ func inputTail(input string, width int) string {
 		return ""
 	}
 	if ansi.StringWidth(input)+1 <= width {
-		return input + pkAccent.Render("█")
+		return input + pkTitle.Render("█")
 	}
 	runes := []rune(input)
 	used, start := 0, len(runes)
@@ -220,7 +228,7 @@ func inputTail(input string, width int) string {
 		start--
 	}
 	if width == 1 {
-		return pkAccent.Render("█")
+		return pkTitle.Render("█")
 	}
-	return "…" + string(runes[start:]) + pkAccent.Render("█")
+	return "…" + string(runes[start:]) + pkTitle.Render("█")
 }

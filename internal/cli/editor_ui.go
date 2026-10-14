@@ -24,9 +24,9 @@ import (
 
 // Diff/error styles; everything else reuses the picker's pk* palette.
 var (
-	pkDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	pkDiffDel = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	pkErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	pkDiffAdd = lipgloss.NewStyle().Bold(true)
+	pkDiffDel = lipgloss.NewStyle().Bold(true)
+	pkErr     = lipgloss.NewStyle().Bold(true)
 )
 
 type editorMode int
@@ -1147,7 +1147,7 @@ func (m editorModel) guardLines(w int) []string {
 	}
 }
 
-// diffModalLines renders the colorized save preview. The diff shows both
+// diffModalLines renders the save preview. The diff shows both
 // sides in canonical (re-encoded) form — a semantic preview, not a byte
 // diff of the file; unchanged context lines may differ in formatting from
 // what is on disk.
@@ -1468,7 +1468,7 @@ func (m editorModel) formLines(w, h int) []string {
 		}
 	}
 	if m.mode == modeFieldEdit && m.inputErr != "" {
-		lines = append(lines, "", pkErr.Render(clipText(m.inputErr, w)))
+		lines = append(lines, "", pkErr.Render(clipText("Error: "+m.inputErr, w)))
 		return lines
 	}
 	lines = append(lines, "")
@@ -1502,7 +1502,7 @@ func (m editorModel) statusLine() string {
 		parts = append(parts, style.Render(m.status))
 	}
 	if len(parts) == 0 {
-		return "Saved · changes apply on the next session build"
+		return "Saved · changes apply on next build"
 	}
 	return strings.Join(parts, pkDim.Render(" · "))
 }
@@ -1639,7 +1639,7 @@ func (m editorModel) listEditLines(w, h int) []string {
 	if m.listEd.editing {
 		lines = append(lines, pkAccent.Render("▸ ")+inputTail(string(m.listEd.input), w-2))
 		if m.listEd.errMsg != "" {
-			lines = append(lines, pkErr.Render(clipText(m.listEd.errMsg, w)))
+			lines = append(lines, pkErr.Render(clipText("Error: "+m.listEd.errMsg, w)))
 		}
 		lines = append(lines, "")
 	}

@@ -110,3 +110,27 @@ there is no unsaved draft.
   actions do not appear as active hints.
 - Every supported width stays within terminal bounds, and essential text is
   readable in dark, light, and no-color modes.
+
+## Direction contract
+
+**Mode:** Operate. **Thesis:** a compact keyboard workspace for experienced
+tmux/SSH users, with one stable session rail and one current task.
+
+**Own world:** terminal foreground for text and key hints; weight and
+underline for hierarchy; thin rules, restrained state glyph colors, and
+no enclosing panel boxes. The user's terminal font and theme remain native.
+
+**Path:** find a session, inspect or act, edit/add in the same frame, review
+the result, then save or start. Unsaved work survives resizing and going back.
+
+**First viewport:** one header, a session rail beside a larger work area,
+and two fixed bottom rows for actions and feedback. At narrow widths, Tab
+switches areas while selection and drafts stay intact.
+
+**Form:** the user-approved shared workspace in this plan; a code-led terminal
+implementation. The signature interaction is editor → add → review without
+losing the rail or draft.
+
+**Finish:** unreviewed and undocumented is unfinished; this build ends with
+the finish review, the verdict, DESIGN.md, and every shipping raster carrying
+its provenance.

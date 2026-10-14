@@ -567,7 +567,7 @@ func TestHubStateColors(t *testing.T) {
 		t.Fatal("unmanaged state missing")
 	}
 	// footer keys are accent-styled
-	if !strings.Contains(out, pkAccent.Render("K")) {
+	if !strings.Contains(out, pkTitle.Render("K")) {
 		t.Fatal("footer keys not accent-styled")
 	}
 }

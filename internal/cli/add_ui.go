@@ -643,25 +643,23 @@ func (m addModel) stepLines(w int) []string {
 	prompt := pkAccent.Render("▸ ") + inputTail(string(m.input), w-2)
 	switch m.step {
 	case stepName:
-		return []string{pkDim.Render("Session name for the config."), "", prompt}
+		return []string{"Session name for the config.", "", prompt}
 
 	case stepHosts:
-		lines := []string{
-			pkDim.Render("Hosts, space separated. @cluster expands; empty = local session."),
-			"",
-			prompt,
-		}
+		lines := wrapWords(strings.Fields("Hosts or @cluster; empty creates a local session."), w)
+		lines = append(lines, "", prompt)
 		switch {
 		case m.expandErr != "":
 			lines = append(lines, "", pkForeign.Render(truncate(m.expandErr, w)))
 		case len(m.expanded) > 0:
-			lines = append(lines, "", pkDim.Render(fmt.Sprintf("%d host(s):", len(m.expanded))))
-			lines = append(lines, wrapWords(m.expanded, w)...)
+			words := append([]string{fmt.Sprintf("%d hosts:", len(m.expanded))}, m.expanded...)
+			lines = append(lines, "")
+			lines = append(lines, wrapWords(words, w)...)
 		}
 		return lines
 
 	case stepUser:
-		return []string{pkDim.Render("SSH as this user (empty for your default)."), "", prompt}
+		return []string{"SSH user; empty uses your default.", "", prompt}
 
 	case stepSync:
 		state := pkStopped.Render("off")
@@ -669,7 +667,7 @@ func (m addModel) stepLines(w int) []string {
 			state = pkRunning.Render("on")
 		}
 		return []string{
-			pkDim.Render("Broadcast typed input to every pane (synchronize-panes)?"),
+			"Broadcast input to every host pane?",
 			"",
 			"  sync: " + state,
 		}
@@ -686,7 +684,7 @@ func (m addModel) stepLines(w int) []string {
 		return lines
 
 	case stepRoot:
-		return []string{pkDim.Render("Working directory for panes (empty to skip)."), "", prompt}
+		return []string{"Directory; empty uses tmux's default.", "", prompt}
 
 	case stepCommands:
 		lines := []string{pkDim.Render("Commands run in each pane after connect, one per line.")}

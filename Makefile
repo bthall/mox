@@ -100,7 +100,7 @@ screenshots: ## Regenerate README screenshots (requires freeze and rsvg-convert)
 	@echo "Rendering screenshot frames..."
 	@mkdir -p build/frames
 	MOX_SCREENSHOT_DIR=$(CURDIR)/build/frames go test ./internal/cli -run TestGenerateScreenshots -v
-	@for n in hub list editor add; do \
+	@set -e; for n in hub list editor add; do \
 		freeze -l ansi --window --padding 25 --margin 15 \
 			--border.radius 10 --font.family "DejaVu Sans Mono" \
 			-o build/frames/$$n.svg < build/frames/$$n.ans; \

@@ -16,13 +16,15 @@ var (
 	pkTitle  = lipgloss.NewStyle().Bold(true)
 	// Secondary text follows the terminal foreground so it remains readable
 	// on light, dark, and custom themes. Only decorative rules use color 8.
-	pkDim      = lipgloss.NewStyle()
-	pkAccent   = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-	pkSelected = lipgloss.NewStyle().Bold(true)
-	pkRunning  = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	pkStopped  = lipgloss.NewStyle()
-	pkForeign  = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	pkOK       = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	pkDim          = lipgloss.NewStyle()
+	pkAccent       = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	pkSelected     = lipgloss.NewStyle().Bold(true).Underline(true)
+	pkRunning      = lipgloss.NewStyle().Bold(true)
+	pkStopped      = lipgloss.NewStyle()
+	pkForeign      = lipgloss.NewStyle().Bold(true)
+	pkOK           = lipgloss.NewStyle().Bold(true)
+	pkStateRunning = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	pkStateForeign = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 )
 
 // hints renders alternating key/label pairs for a panel footer: keys in
@@ -33,7 +35,7 @@ func hints(pairs ...string) string {
 		if i > 0 {
 			b.WriteString(pkDim.Render(" · "))
 		}
-		b.WriteString(pkAccent.Render(pairs[i]))
+		b.WriteString(pkTitle.Render(pairs[i]))
 		b.WriteString(pkDim.Render(" " + pairs[i+1]))
 	}
 	return b.String()
@@ -45,9 +47,9 @@ func hints(pairs ...string) string {
 func statusDot(c session.SessionInfo) string {
 	switch {
 	case c.Running && !c.Managed:
-		return pkForeign.Render("◆")
+		return pkStateForeign.Render("◆")
 	case c.Running:
-		return pkRunning.Render("●")
+		return pkStateRunning.Render("●")
 	default:
 		return pkStopped.Render("○")
 	}

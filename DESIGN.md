@@ -10,9 +10,11 @@ flow. The approved direction and acceptance checks live in
   the focused area with `Tab` to switch. Content scrolls within the viewport.
 - The last two rows hold context-sensitive actions and operation/draft status.
   Short hints yield to important actions; `?` exposes the complete key map.
-- Primary and secondary content use the terminal's default foreground. Weight
-  and spacing establish hierarchy. Cyan marks focus/actions, green success and
-  running sessions, yellow warnings and unmanaged sessions, red errors.
+- Primary and secondary content, action keys, and feedback use the terminal's
+  default foreground. Weight, underline, and spacing establish hierarchy.
+  Small state glyphs use green for running and yellow for unmanaged sessions;
+  those colors never carry essential text. Captured panes retain their own
+  colors unless the user disables color.
 - State glyphs have text equivalents: running, stopped, tmux only, and draft.
   Color is optional and never carries a decision alone.
 - Add stays in the editor's work area when embedded. Review, errors, and
