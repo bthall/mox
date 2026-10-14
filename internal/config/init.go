@@ -98,9 +98,11 @@ func writeInitialConfig(path string, data []byte, force bool) error {
 		return err
 	}
 	defer os.Remove(tmp.Name()) //nolint:errcheck // no-op after successful rename
+	if err := tmp.Chmod(configFileMode); err != nil {
+		return errors.Join(err, tmp.Close())
+	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close() //nolint:errcheck // best-effort cleanup
-		return err
+		return errors.Join(err, tmp.Close())
 	}
 	if err := tmp.Close(); err != nil {
 		return err

@@ -129,7 +129,7 @@ func TestStore_WriteReplacesFileWithoutTruncatingOpenReaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer old.Close()
+	defer func() { _ = old.Close() }()
 	if err := s.write([]Entry{{Name: "after", Action: ActionAttached}}); err != nil {
 		t.Fatal(err)
 	}

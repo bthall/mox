@@ -81,8 +81,10 @@ func shellJoin(args []string) string {
 	parts := make([]string, len(args))
 	for i, a := range args {
 		if a == "" || strings.IndexFunc(a, func(r rune) bool {
-			return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-				(r >= '0' && r <= '9') || strings.ContainsRune("_./:=,@%+-", r))
+			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+				return false
+			}
+			return !strings.ContainsRune("_./:=,@%+-", r)
 		}) >= 0 {
 			parts[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
 		} else {

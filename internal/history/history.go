@@ -10,6 +10,7 @@ package history
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -132,8 +133,7 @@ func (s *store) write(entries []Entry) error {
 	}
 	defer os.Remove(tmp.Name()) //nolint:errcheck // no-op after successful rename
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close() //nolint:errcheck // best-effort cleanup
-		return err
+		return errors.Join(err, tmp.Close())
 	}
 	if err := tmp.Close(); err != nil {
 		return err

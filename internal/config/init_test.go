@@ -58,7 +58,7 @@ func TestInitForceReplacesTargetWithoutTruncatingOpenReaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := filepath.Join(base, "original.yml")
-	if err := os.WriteFile(target, []byte("# previous config\n"), 0o644); err != nil {
+	if err := os.WriteFile(target, []byte("# previous config\n"), 0o644); err != nil { //nolint:gosec // verifies that force replaces the old mode
 		t.Fatal(err)
 	}
 	path := filepath.Join(configDir, "config.yml")
@@ -69,7 +69,7 @@ func TestInitForceReplacesTargetWithoutTruncatingOpenReaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer old.Close()
+	defer func() { _ = old.Close() }()
 	if _, err := Init(true); err != nil {
 		t.Fatal(err)
 	}
