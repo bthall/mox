@@ -515,9 +515,15 @@ func (m addModel) detailLines(w, h int) []string {
 		return lines[min(m.helpOff, len(lines)):]
 	}
 	if m.step == stepConfirm {
-		choices := confirmChoices
+		choices := slices.Clone(confirmChoices)
 		if m.embedded {
 			choices = []string{"keep as draft", "review + save + start", "cancel"}
+		}
+		if m.overwrite {
+			choices[0], choices[1] = "overwrite config", "overwrite + start"
+			if m.embedded {
+				choices[0], choices[1] = "keep replacement draft", "review + replace + start"
+			}
 		}
 		var lines []string
 		for i, choice := range choices {
@@ -604,6 +610,9 @@ func (m addModel) stepHints() []keyHint {
 	}
 	switch m.step {
 	case stepName:
+		if m.collision {
+			return []keyHint{{"Enter", "overwrite"}, {"Esc", "cancel"}}
+		}
 		return []keyHint{{"Enter", "next"}, {"Esc", "cancel"}}
 	case stepSync:
 		return []keyHint{{"Enter", "next"}, {"y/n", "toggle"}, {"Esc", "back"}, {"?", "help"}}

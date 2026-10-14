@@ -946,7 +946,7 @@ func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.pane == paneList && msg.Type != tea.KeyCtrlC {
+	if m.pane == paneList && !m.wizard.cancelConfirm && !m.wizard.help && msg.Type != tea.KeyCtrlC {
 		if msg.Type == tea.KeyEsc {
 			m.pane = paneForm
 		}
@@ -1312,13 +1312,13 @@ func (m editorModel) actionHints() []keyHint {
 		return []keyHint{{"Esc", "keep draft"}, {"R", "reload / discard"}, {"?", "help"}}
 	case modeWizard:
 		if m.wizard != nil {
+			if m.wizard.cancelConfirm || m.wizard.help {
+				return m.wizard.actionHints()
+			}
 			if m.pane == paneList {
 				return []keyHint{{"Tab", "add session"}, {"Esc", "add session"}}
 			}
 			actions := m.wizard.actionHints()
-			if m.wizard.cancelConfirm || m.wizard.help {
-				return actions
-			}
 			return append(actions, keyHint{"Tab", "sessions"})
 		}
 	}
@@ -1636,7 +1636,17 @@ func (m editorModel) listEditLines(w, h int) []string {
 	if len(*items) == 0 && !m.listEd.editing {
 		lines = append(lines, pkDim.Render("  (empty — a to add)"))
 	}
-	rows := max(1, h-4)
+	if m.listEd.editing {
+		lines = append(lines, pkAccent.Render("▸ ")+inputTail(string(m.listEd.input), w-2))
+		if m.listEd.errMsg != "" {
+			lines = append(lines, pkErr.Render(clipText(m.listEd.errMsg, w)))
+		}
+		lines = append(lines, "")
+	}
+	rows := max(0, h-len(lines)-2)
+	if !m.listEd.editing {
+		rows = max(1, rows)
+	}
 	start := max(0, m.listEd.sel-rows+1)
 	end := min(len(*items), start+rows)
 	for i := start; i < end; i++ {
@@ -1647,10 +1657,7 @@ func (m editorModel) listEditLines(w, h int) []string {
 			lines = append(lines, "  "+row)
 		}
 	}
-	if m.listEd.editing {
-		lines = append(lines, "", pkAccent.Render("▸ ")+inputTail(string(m.listEd.input), w-2))
-	}
-	if m.listEd.errMsg != "" {
+	if m.listEd.errMsg != "" && !m.listEd.editing {
 		lines = append(lines, "", pkErr.Render(truncate(m.listEd.errMsg, w)))
 	}
 	if f.expand {

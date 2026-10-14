@@ -188,3 +188,31 @@ func TestWorkspaceNoColorStripsCapturedANSI(t *testing.T) {
 		t.Fatal("no-color view retained capture color or lost its content")
 	}
 }
+
+func TestEditorFocusedFieldSurvivesSmallResize(t *testing.T) {
+	m := testEditorModel(t)
+	m.pane = paneForm
+	m.fieldSel = len(m.fields) - 1
+	key := m.fields[m.fieldSel].key
+	name := m.selectedName()
+	nm, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 12})
+	m = nm.(editorModel)
+	if !strings.Contains(m.View(), key) || m.selectedName() != name || m.fields[m.fieldSel].key != key {
+		t.Fatal("resize hid the focused field or changed selection")
+	}
+}
+
+func TestEmbeddedWizardCancelFromSessionRail(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "new-work")
+	m = edType(t, m, tea.KeyTab)
+	m = edType(t, m, tea.KeyCtrlC)
+	if !m.wizard.cancelConfirm || !strings.Contains(m.View(), "discard") {
+		t.Fatal("cancel decision was not visible from the session rail")
+	}
+	m = edRunes(t, m, "d")
+	if !m.leaving {
+		t.Fatal("explicit discard did not finish the requested quit")
+	}
+}
