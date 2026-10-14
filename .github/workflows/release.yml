@@ -4,19 +4,100 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+    paths:
+      - '.github/release-request.json'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable release tag, for example v0.7.0'
+        required: true
+        type: string
+      commit:
+        description: 'Full main-branch commit SHA with successful CI'
+        required: true
+        type: string
 
 permissions:
   contents: write
+  actions: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   goreleaser:
     name: GoReleaser
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Select release commit
+        id: release
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const tagged = context.ref.startsWith('refs/tags/');
+            const request = tagged ? {
+              version: context.ref.slice('refs/tags/'.length),
+              commit: context.sha,
+            } : context.eventName === 'workflow_dispatch'
+              ? context.payload.inputs
+              : JSON.parse(fs.readFileSync('.github/release-request.json', 'utf8'));
+            if (!/^v\d+\.\d+\.\d+$/.test(request.version || '')) {
+              throw new Error('Release version must be a stable vX.Y.Z tag');
+            }
+            if (!/^[a-f0-9]{40}$/.test(request.commit || '')) {
+              throw new Error('Release commit must be a full SHA');
+            }
+            if (!tagged) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                ...context.repo, workflow_id: 'ci.yml', event: 'push',
+                head_sha: request.commit, per_page: 100,
+              });
+              const run = data.workflow_runs.find(run =>
+                run.head_sha === request.commit && run.status === 'completed' &&
+                run.conclusion === 'success');
+              if (!run) throw new Error('Requested release commit has no successful main CI run');
+              const { data: result } = await github.rest.actions.listJobsForWorkflowRun({
+                ...context.repo, run_id: run.id, per_page: 100,
+              });
+              const required = ['Test (ubuntu-latest)', 'Test (macos-latest)',
+                'Lint', 'govulncheck', 'Release snapshot', 'Integration tests (tmux)'];
+              if (required.some(name => !result.jobs.some(job =>
+                job.name === name && job.conclusion === 'success'))) {
+                throw new Error('Not every required CI job passed for the release commit');
+              }
+            }
+            core.setOutput('version', request.version);
+            core.setOutput('commit', request.commit);
+            core.setOutput('requested', String(!tagged));
+
+      - name: Check out release source
+        env:
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+          git checkout --detach "$RELEASE_COMMIT"
+
+      - name: Select release notes
+        id: notes
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          notes=".github/release-notes/$RELEASE_VERSION.md"
+          if [ -f "$notes" ]; then
+            echo "args=release --clean --release-notes $notes" >> "$GITHUB_OUTPUT"
+          else
+            echo 'args=release --clean' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -33,12 +114,66 @@ jobs:
       - name: Vet release commit
         run: go vet ./...
 
+      - name: Create requested tag
+        if: steps.release.outputs.requested == 'true'
+        uses: actions/github-script@v9
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+        with:
+          script: |
+            const version = process.env.RELEASE_VERSION;
+            const commit = process.env.RELEASE_COMMIT;
+            let existing;
+            try {
+              existing = await github.rest.git.getRef({ ...context.repo, ref: `tags/${version}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            if (existing && existing.data.object.sha !== commit) {
+              throw new Error('Existing release tag points to a different object; refusing to move it');
+            }
+            if (!existing) {
+              await github.rest.git.createRef({ ...context.repo, ref: `refs/tags/${version}`, sha: commit });
+            }
+
+      - name: Fetch release tag
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          git fetch origin "refs/tags/$RELEASE_VERSION:refs/tags/$RELEASE_VERSION"
+          test "$(git rev-parse "$RELEASE_VERSION^{commit}")" = "$RELEASE_COMMIT"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: release --clean
+          args: ${{ steps.notes.outputs.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.release.outputs.version }}
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+
+      - name: Verify published archives
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          verify_dir="$RUNNER_TEMP/mox-release-verify"
+          mkdir -p "$verify_dir/unpack"
+          gh release download "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'checksums.txt' --pattern 'mox_*.tar.gz' --dir "$verify_dir"
+          cd "$verify_dir"
+          sha256sum --check checksums.txt
+          tar -xzf "mox_${RELEASE_VERSION#v}_linux_amd64.tar.gz" -C unpack
+          unpack/mox --version | tee version.txt
+          grep -F "mox version ${RELEASE_VERSION#v} (" version.txt
+          grep -F "${RELEASE_COMMIT:0:7}" version.txt
+          unpack/mox --help >/dev/null
+          curl --fail --location --retry 3 \
+            "https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/$RELEASE_VERSION.tar.gz" \
+            --output source.tar.gz
+          echo "MOX_SOURCE_SHA256 $(sha256sum source.tar.gz | cut -d' ' -f1)"

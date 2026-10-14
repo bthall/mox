@@ -56,6 +56,29 @@ but not required - they make the goreleaser-generated changelog cleaner. The
 release changelog excludes commits prefixed with `chore:`, `docs:`, and
 `test:`.
 
+## Releases
+
+Move the completed changelog entries into a dated release section and add the
+release notes at `.github/release-notes/vX.Y.Z.md`. Merge the preparation and
+wait for every main CI job to pass on that exact commit.
+
+The Release workflow accepts a version and full commit SHA through **Run
+workflow**. A connected tool can also commit `.github/release-request.json` on
+main with the same inputs:
+
+```json
+{"version": "vX.Y.Z", "commit": "<full SHA of the prepared, verified main commit>"}
+```
+
+The workflow checks the requested commit's CI, verifies it belongs to main,
+tests it, creates its tag, and runs GoReleaser in the same job. A tag created
+with `GITHUB_TOKEN` does not trigger another release job. Existing tag-push
+releases continue to work. The workflow refuses to move an existing tag.
+
+After publishing, it downloads and checks all release archives, verifies the
+Linux binary's version and commit, and prints the source-archive SHA256. Use
+that hash to update `packaging/aur/PKGBUILD` after the tag exists.
+
 ## Reporting security issues
 
 Please do **not** report security issues in public. See [SECURITY.md](./SECURITY.md).
