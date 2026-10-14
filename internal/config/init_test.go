@@ -1,7 +1,9 @@
 package config
 
 import (
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -45,5 +47,43 @@ func TestInitRefusesOverwriteWithoutForce(t *testing.T) {
 	}
 	if _, err := Init(true); err != nil {
 		t.Errorf("Init with force: %v", err)
+	}
+}
+
+func TestInitForceReplacesTargetWithoutTruncatingOpenReaders(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+	configDir := filepath.Join(base, "mox")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(base, "original.yml")
+	if err := os.WriteFile(target, []byte("# previous config\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(configDir, "config.yml")
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	old, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	if _, err := Init(true); err != nil {
+		t.Fatal(err)
+	}
+	oldData, err := io.ReadAll(old)
+	if err != nil || string(oldData) != "# previous config\n" {
+		t.Fatalf("open reader saw %q, %v", oldData, err)
+	}
+	if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("config symlink was replaced: %v, %v", info, err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("replacement config is invalid: %v", err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("replacement mode = %v, %v; want 0600", info, err)
 	}
 }

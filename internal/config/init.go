@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,8 +77,42 @@ func Init(force bool) (string, error) {
 	}
 	data = append([]byte("# yaml-language-server: $schema="+SchemaURL+"\n\n"), data...)
 
-	if err := os.WriteFile(configPath, data, configFileMode); err != nil {
+	if err := writeInitialConfig(configPath, data, force); err != nil {
 		return "", fmt.Errorf("write %s: %w", configPath, err)
 	}
 	return configPath, nil
+}
+
+// writeInitialConfig publishes a complete scaffold in one step. A normal init
+// uses a hard link so a config created after the existence check cannot be
+// overwritten; --force atomically replaces the target of an existing symlink.
+func writeInitialConfig(path string, data []byte, force bool) error {
+	target := path
+	if force {
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			target = resolved
+		}
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".mox-init-*.yml")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) //nolint:errcheck // no-op after successful rename
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close() //nolint:errcheck // best-effort cleanup
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if force {
+		return os.Rename(tmp.Name(), target)
+	}
+	if err := os.Link(tmp.Name(), target); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("config already exists at %s (use --force to overwrite)", path)
+		}
+		return err
+	}
+	return nil
 }

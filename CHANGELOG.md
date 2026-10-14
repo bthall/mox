@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ignoring everything after the first one.
 - Recents history updates replace the file atomically, so interrupted writes
   cannot leave truncated JSON behind.
+- `mox init --force` atomically replaces an existing config without breaking
+  symlinked config paths.
 - `--print` now quotes shell metacharacters such as backslashes and brackets,
   so the displayed tmux commands keep their original arguments when pasted.
 - Windows added to a session (multi-window builds and `mox new -w`) now
