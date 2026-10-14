@@ -1,0 +1,330 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T16:43:43Z",
+  "title": "Design System: Mox",
+  "extensions": {
+    "breakpoints": [
+      {
+        "name": "two-area",
+        "value": "80 columns",
+        "purpose": "Show both areas at or above this width; below it show the focused area."
+      }
+    ],
+    "terminal": {
+      "platform": "Go / Bubble Tea terminal application",
+      "units": {
+        "horizontal": "terminal display cells",
+        "vertical": "terminal rows",
+        "primitiveSource": "DESIGN.md frontmatter"
+      },
+      "inheritance": {
+        "foreground": "terminal default",
+        "background": "terminal default",
+        "fontFamily": "user terminal setting",
+        "fontSize": "user terminal setting",
+        "palette": "user terminal base ANSI palette"
+      },
+      "palette": [
+        {
+          "role": "running-state-glyph",
+          "index": 2,
+          "source": "internal/cli/picker_ui.go: pkStateRunning",
+          "scope": "Running session mark"
+        },
+        {
+          "role": "tmux-only-state-glyph",
+          "index": 3,
+          "source": "internal/cli/picker_ui.go: pkStateForeign",
+          "scope": "Unmanaged running session mark"
+        },
+        {
+          "role": "focus-and-input-marker",
+          "index": 6,
+          "source": "internal/cli/picker_ui.go: pkAccent",
+          "scope": "Selection bar, active-field/input arrow, filter caret"
+        },
+        {
+          "role": "decorative-rule",
+          "index": 8,
+          "source": "internal/cli/picker_ui.go: pkBorder",
+          "scope": "Shared horizontal rules and vertical divider"
+        }
+      ],
+      "attributes": [
+        {
+          "role": "title-and-action-key",
+          "bold": true,
+          "underline": false,
+          "foreground": "terminal default",
+          "source": "internal/cli/picker_ui.go: pkTitle"
+        },
+        {
+          "role": "selected-name-label-and-choice",
+          "bold": true,
+          "underline": true,
+          "foreground": "terminal default",
+          "source": "internal/cli/picker_ui.go: pkSelected"
+        },
+        {
+          "role": "body-and-secondary",
+          "bold": false,
+          "underline": false,
+          "foreground": "terminal default",
+          "source": "internal/cli/picker_ui.go: pkDim / pkStopped"
+        },
+        {
+          "role": "running-word-tmux-only-word-draft-and-success",
+          "bold": true,
+          "underline": false,
+          "foreground": "terminal default",
+          "source": "internal/cli/picker_ui.go: pkRunning / pkForeign / pkOK"
+        },
+        {
+          "role": "error-and-changed-diff-lines",
+          "bold": true,
+          "underline": false,
+          "foreground": "terminal default",
+          "source": "internal/cli/editor_ui.go: pkErr / pkDiffAdd / pkDiffDel"
+        }
+      ],
+      "glyphs": {
+        "selectedRow": "▌",
+        "activeFieldOrPrompt": "▸",
+        "caret": "█",
+        "running": "●",
+        "stopped": "○",
+        "tmuxOnly": "◆",
+        "draft": "*",
+        "pendingDelete": "*",
+        "truncation": "…",
+        "horizontalRule": "─",
+        "verticalDivider": "│",
+        "actionSeparator": "·"
+      },
+      "layout": {
+        "source": "internal/cli/workspace_ui.go: terminalLayout / renderWorkspace",
+        "breakpoint": "two-area",
+        "width": "max(1, terminalWidth)",
+        "height": "max(1, terminalHeight)",
+        "innerWidth": "max(0, width - 2)",
+        "contentHeight": "max(0, terminalHeight - 6)",
+        "wideRailWidth": "min(32, max(24, (innerWidth - 3) / 3)); integer division",
+        "wideWorkAreaWidth": "innerWidth - railWidth - 3",
+        "narrowAreaWidth": "innerWidth",
+        "rows": [
+          "header",
+          "horizontal-rule",
+          "area-title",
+          "contentHeight content rows",
+          "horizontal-rule",
+          "action-row",
+          "feedback-row"
+        ],
+        "smallHeight": "At height 1 render only the header; otherwise retain the final action and feedback rows when initial rows exceed height.",
+        "spacingReferences": {
+          "outerGap": "{spacing.cell-gap}",
+          "marker": "{spacing.marker-width}",
+          "divider": "{spacing.divider-width}",
+          "section": "{spacing.section-gap}"
+        },
+        "sessionStateWordVisible": "rowWidth >= 20",
+        "fieldLabelWidth": "min(max(9, maximum display width of field keys), max(1, workAreaWidth / 3))",
+        "bounds": "ANSI-aware display width, truncation and cell padding; every final row clips to the terminal width."
+      },
+      "focus": {
+        "hub": "Tab toggles sessions/preview. Filtering shows sessions; help and kill confirmation show the work area.",
+        "editor": "Tab toggles sessions/form. Non-browse prompts and help show the work area. Resizing keeps the selected session and focused field visible.",
+        "embeddedAdd": "Tab toggles the editor rail/wizard unless help or discard confirmation owns input. Rail focus preserves the wizard and its buffers.",
+        "standaloneAdd": "Tab toggles configured sessions/wizard. Help or discard confirmation shows the work area.",
+        "sources": [
+          "internal/cli/hub_ui.go: View / updateBrowse",
+          "internal/cli/editor_ui.go: View / updateWizard",
+          "internal/cli/add_ui.go: View / Update"
+        ]
+      },
+      "colorPolicy": {
+        "source": [
+          "internal/cli/tuicolor.go: tuiColorProfile",
+          "internal/cli/color.go: useColor",
+          "internal/cli/workspace_ui.go: renderWorkspace"
+        ],
+        "enabledProfile": "ANSI256; Mox's own color styles use base palette indices",
+        "noColorProfile": "Ascii; strip all ANSI sequences from the completed workspace, including captured content and Bold/Underline",
+        "noColorEnvironment": "Non-empty NO_COLOR disables color and wins over CLICOLOR_FORCE=1.",
+        "capturedContent": "Preserve capture SGR attributes, expand tabs to 8-column stops, drop other control characters, truncate by display width, and reset after every capture row.",
+        "capturedContentSource": "internal/cli/hub_ui.go: sanitizeCaptureLine / previewPane"
+      },
+      "components": [
+        {
+          "name": "Workspace frame",
+          "kind": "custom",
+          "source": "internal/cli/workspace_ui.go: renderWorkspace",
+          "traits": [
+            "Shared header, titles, rules and fixed footer locations",
+            "Single divider, no enclosing panel boxes",
+            "Narrow view selects the focused area",
+            "Final clipping and no-color stripping"
+          ]
+        },
+        {
+          "name": "Session rail",
+          "kind": "nav",
+          "refersTo": "session-row",
+          "source": "internal/cli/workspace_ui.go: sessionRow; hub_ui.go / editor_ui.go: listLines",
+          "traits": [
+            "State shape and word",
+            "Bar and bold/underline identify selection",
+            "Filter line separated from rows",
+            "Continuation count and model-owned scroll offset"
+          ]
+        },
+        {
+          "name": "Text input",
+          "kind": "input",
+          "source": "internal/cli/workspace_ui.go: inputTail",
+          "traits": [
+            "Active prompt arrow",
+            "Visible input tail and block caret",
+            "Wide-character display width",
+            "Printable / and ? remain input in text states"
+          ]
+        },
+        {
+          "name": "Action row",
+          "kind": "custom",
+          "refersTo": "action-row",
+          "source": "internal/cli/workspace_ui.go: renderHints; picker_ui.go: hints",
+          "traits": [
+            "Bold foreground keys and plain foreground labels",
+            "Whole key/action pairs with middle-dot separators",
+            "Context-sensitive availability",
+            "Reserve room for help when available"
+          ]
+        },
+        {
+          "name": "Feedback row",
+          "kind": "custom",
+          "refersTo": "feedback-row",
+          "source": "internal/cli/hub_ui.go / editor_ui.go: statusLine; add_ui.go: View",
+          "traits": [
+            "Stable final row",
+            "Pending operation, save/draft state, error or next action",
+            "Emphasis uses bold terminal foreground"
+          ]
+        },
+        {
+          "name": "Task work area",
+          "kind": "custom",
+          "source": "internal/cli/hub_ui.go: previewPane; editor_ui.go: rightLines / formLines; add_ui.go: detailLines",
+          "traits": [
+            "Live capture or stopped-session summary",
+            "Focused-field help and validation",
+            "Review, confirmation and changed-file content replace the current task",
+            "Editor embeds add without a second frame"
+          ]
+        }
+      ],
+      "behavior": {
+        "editorDiscardEdits": {
+          "key": "u",
+          "when": "Dirty draft in browse state",
+          "result": "Open save/discard/stay guard; do not discard immediately",
+          "source": "internal/cli/editor_ui.go: updateBrowse / updateGuard"
+        },
+        "editorDelete": {
+          "key": "D",
+          "saved": "Confirm, then buffer deletion; s writes and D undoes pending deletion",
+          "newDraft": "Confirm before discarding the unsaved added session",
+          "lastSavedSession": "Deletion is refused",
+          "source": "internal/cli/editor_ui.go: updateBrowse / updateConfirmDelete"
+        },
+        "editorSave": {
+          "normal": "Validate, show canonical diff, then Enter writes config",
+          "guard": "Choosing s in the guard confirms save directly; commit pending input and validate before continuing",
+          "source": "internal/cli/editor_ui.go: startSave / updateDiff / updateGuard / finishSave"
+        },
+        "embeddedAdd": {
+          "steps": [
+            "name",
+            "hosts",
+            "ssh user",
+            "broadcast",
+            "layout",
+            "directory",
+            "commands",
+            "review"
+          ],
+          "completion": "Keep as draft, or review/save/start through the editor; the embedded wizard does not write config itself",
+          "back": "Keep input buffers and committed choices",
+          "source": "internal/cli/editor_ui.go: updateWizard; internal/cli/add_ui.go: Update / back / detailLines"
+        },
+        "help": {
+          "key": "?",
+          "commandStates": "Show contextual keyboard help; Esc or ? closes it",
+          "textStates": "Insert literal ?; literal / also remains text",
+          "source": "internal/cli/hub_ui.go / editor_ui.go / add_ui.go: Update"
+        },
+        "draftProtection": {
+          "editor": "Changing sessions with a dirty draft or leaving with dirty/pending input opens a save/discard/stay guard",
+          "add": "Cancel with draft input opens a discard/keep-editing decision",
+          "source": "internal/cli/editor_ui.go: requestSelect / requestQuit; internal/cli/add_ui.go: requestCancel"
+        }
+      },
+      "evidence": {
+        "sourceRevision": "8c7253d646d29a127b2c52da803be8efb6a23689",
+        "visualSamples": [
+          ".impeccable/review/hub.png",
+          ".impeccable/review/editor.png",
+          ".impeccable/review/add.png"
+        ],
+        "authority": "Implemented Go styles and model behavior; screenshots confirm the shared frame. Screenshot font and RGB palette are renderer settings, not application tokens."
+      },
+      "formatLimits": [
+        "Frontmatter spacing/dimensions use terminal cell/row strings. CSS color and font primitives are omitted.",
+        "Terminal component traits live here instead of fabricated HTML/CSS snippets or browser state previews.",
+        "Palette indices cannot provide fixed RGB swatches or synthesized tonal ramps for user-defined terminal themes."
+      ]
+    }
+  },
+  "narrative": {
+    "northStar": "Compact keyboard workspace",
+    "overview": "Mox keeps a stable session rail beside the current task. The hub, editor, and\nadd flow share the same frame, so an operator can inspect a session, change its\nconfiguration, and review a draft without rebuilding their sense of place.\n\nThe material is terminal text: native foreground, bold and underline, thin\nrules, and small state marks. Density follows the available terminal cells.\nThe user's font, size, background, and palette remain native.",
+    "keyCharacteristics": [
+      "One shared frame for navigation, work, actions, and feedback.",
+      "Keyboard focus and session state remain visible without color.",
+      "Add, review, and draft decisions occupy the current work area.",
+      "Terminal width controls composition while selection and input persist."
+    ],
+    "rules": [
+      {
+        "name": "The Terminal Inheritance Rule",
+        "body": "Keep essential text on the terminal foreground. Color supplements a mark or state word and never owns a decision.",
+        "section": "colors"
+      },
+      {
+        "name": "The Stable Frame Rule",
+        "body": "Change the work area's content for review, help, errors, and confirmations while preserving the frame and session context.",
+        "section": "layout"
+      },
+      {
+        "name": "The Explicit Draft Decision Rule",
+        "body": "Name the affected work and show the available save, discard, or stay action before abandoning it.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "**Do** reuse the shared frame for the hub, editor, and add flow.",
+      "**Do** pair state marks with words wherever row width permits.",
+      "**Do** keep selection, focused input, and draft state through resizing.",
+      "**Do** keep errors and the next useful action in the current work area and feedback row.",
+      "**Do** preserve literal printable input before applying command shortcuts."
+    ],
+    "donts": [
+      "**Don't** assign fixed colors, fonts, or pixel dimensions to terminal-native roles.",
+      "**Don't** enclose the two workspace areas in individual panel boxes.",
+      "**Don't** dim essential text or depend on color to distinguish session ownership.",
+      "**Don't** split a displayed key/action pair to fit a narrow footer.",
+      "**Don't** discard dirty editor work directly from the discard-edits shortcut."
+    ]
+  }
+}

@@ -42,15 +42,6 @@ jobs:
             rsvg-convert "build/screenshots/$name-light.svg" -o "build/screenshots/$name-light.png"
             python3 scripts/screenshot-provenance.py "build/screenshots/$name-light.png" "build/frames/$name.ans"
           done
-      - name: Export preview frames for inspection
-        if: always()
-        run: |
-          for file in build/frames/*.ans build/screenshots/*.png; do
-            [ -f "$file" ] || continue
-            echo "MOX_FILE_BEGIN $file"
-            base64 -w80 "$file"
-            echo MOX_FILE_END
-          done
       - uses: actions/upload-artifact@v6
         if: always()
         with:

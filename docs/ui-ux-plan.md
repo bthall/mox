@@ -1,10 +1,11 @@
 # Terminal UI/UX plan
 
-Status: proposed. Audience: experienced tmux and SSH users. Scope: the
+Status: implemented in [PR #33](https://github.com/bthall/mox/pull/33).
+Audience: experienced tmux and SSH users. Scope: the
 interactive hub, config editor, and add wizard. The command interface and
 session semantics remain the product contract.
 
-## What the current UI shows
+## Before the redesign
 
 - The hub and editor share a panel renderer, but their list widths, footer
   actions, and narrow-terminal behavior differ. The add wizard replaces the
@@ -63,7 +64,7 @@ larger than the actual viewport. Full-screen capture may be reduced to a
 short preview or omitted at narrow widths, but session identity and state
 must remain visible.
 
-## Interaction contract to implement
+## Interaction contract
 
 | Key | Browse/list | Field or wizard | Confirmation/review |
 | --- | --- | --- | --- |
@@ -79,6 +80,10 @@ action is available. Killing a running session, deleting a saved session,
 and abandoning an unsaved draft require an explicit decision; attach,
 start, and switching focus do not. `Ctrl+C` exits immediately only when
 there is no unsaved draft.
+
+The editor also provides `u` to open save/discard/stay for unsaved edits.
+Discarding edits keeps the saved session; `D` explicitly deletes a saved
+session or asks before discarding a never-saved session.
 
 ## Work sequence
 
@@ -110,6 +115,28 @@ there is no unsaved draft.
   actions do not appear as active hints.
 - Every supported width stays within terminal bounds, and essential text is
   readable in dark, light, and no-color modes.
+
+## Implementation and verification
+
+The hub, editor, and standalone/embedded add flow now use the shared shell in
+`internal/cli/workspace_ui.go`. Key-path tests cover focus, resize, available
+actions, literal text-input keys, cancellation, draft discard, and backtracking.
+Rendered bounds are checked at 40×12, 80×24, 120×35 and defensive tiny sizes.
+
+[CI](https://github.com/bthall/mox/actions/runs/38599593497) passed Linux/macOS
+race tests, lint, tmux integration, vulnerability checks, and release builds.
+The [preview workflow](https://github.com/bthall/mox/actions/runs/38599593504)
+generated 29 captures covering the supported sizes, light/dark/no-color views,
+and review, help, validation, stale-file, and discard states. These captures use
+deterministic demo data in the actual Go models. README images carry the source
+commit, frame hash, and renderer in PNG metadata; `make screenshots` regenerates
+them.
+
+The independent finish review checked the written terminal plan and captures.
+It found three draft/recovery issues; the follow-up verdict scored all three
+fixes resolved (`ship` at that correction scope). The approved written plan was
+the composition reference; no separate bitmap comp or visual benchmark was used.
+`DESIGN.md` and `.impeccable/design.json` describe the built terminal system.
 
 ## Direction contract
 
