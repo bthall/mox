@@ -56,6 +56,24 @@ func TestLoadEditorState(t *testing.T) {
 	}
 }
 
+func TestLoadEditorStateRejectsMultipleDocuments(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yml")
+	input := "sessions:\n  first:\n    hosts: [a]\n---\nsessions:\n  second:\n    hosts: [b]\n"
+	if err := os.WriteFile(p, []byte(input), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadEditorState(p); err == nil || !strings.Contains(err.Error(), "multiple YAML documents") {
+		t.Fatalf("loadEditorState error = %v, want multiple-document rejection", err)
+	}
+	got, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != input {
+		t.Fatalf("editor changed rejected config: %q", got)
+	}
+}
+
 func TestDraftDirty(t *testing.T) {
 	st := testEditorState(t, editorFixtureYAML)
 	d := newDraft(st.cfg, "webfarm")

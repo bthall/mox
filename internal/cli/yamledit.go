@@ -7,6 +7,8 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -14,6 +16,26 @@ import (
 
 	"github.com/bthall/mox/internal/config"
 )
+
+// decodeSingleYAMLDocument reads a config for editing without silently
+// dropping a second document when the first one is written back.
+func decodeSingleYAMLDocument(data []byte, root *yaml.Node) error {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(root); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	var extra yaml.Node
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return err
+		}
+		return errors.New("multiple YAML documents are not supported")
+	}
+	return nil
+}
 
 // findOrCreateMapKey returns the value Node for a given key in a MappingNode,
 // creating an empty MappingNode if the key doesn't exist yet.

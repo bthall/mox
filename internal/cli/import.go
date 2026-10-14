@@ -365,7 +365,7 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 	switch {
 	case err == nil:
 		if len(data) > 0 {
-			if err := yaml.Unmarshal(data, &root); err != nil {
+			if err := decodeSingleYAMLDocument(data, &root); err != nil {
 				return fmt.Errorf("parse existing config %s: %w", path, err)
 			}
 		}

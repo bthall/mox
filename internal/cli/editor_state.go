@@ -42,7 +42,7 @@ func loadEditorState(path string) (*editorState, error) {
 	}
 
 	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	if err := decodeSingleYAMLDocument(data, &root); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
