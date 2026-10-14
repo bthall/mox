@@ -35,7 +35,10 @@ go test -tags=integration ./...
 
 `make screenshots` regenerates the README captures from deterministic demo
 fixtures in the actual UI models. It requires `freeze` v0.2.2 and
-`rsvg-convert` (the `librsvg2-bin` package on Debian/Ubuntu). The UI preview
+`rsvg-convert` (the `librsvg2-bin` package on Debian/Ubuntu), and Python 3.
+Each PNG records its source commit, model-frame hash, and renderer in PNG text
+metadata. Regenerate captures from a clean checkout to keep that source accurate.
+The UI preview
 workflow also captures 40×12, 80×24, and 120×35 terminals, light and no-color
 views, and review/error states as downloadable PR artifacts.
 

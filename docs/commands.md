@@ -87,7 +87,9 @@ validation on exit — fixing a broken config by hand still works.
 | `enter` | edit the focused field (text input, toggle, or list editor) |
 | `space` | cycle toggle/enum fields (`sync`, `arrange`, `hold`) |
 | `a` | add inside the work area; *keep as draft* buffers it, *review + save + start* opens the diff and starts detached after saving |
-| `r` / `y` / `D` | rename / duplicate / delete (all buffered until save) |
+| `r` / `y` | rename / duplicate (buffered until save) |
+| `D` | delete a saved session (buffered until save), undo pending deletion, or confirm discarding a new draft |
+| `u` | open save/discard/stay for unsaved edits; discarding keeps the saved session |
 | `o` | open the config in `$EDITOR` (window/pane structure) |
 | `s` | save: validate → diff preview → write |
 | `q` / `esc` | quit (prompts if there are unsaved changes) |

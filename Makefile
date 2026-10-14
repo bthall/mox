@@ -105,6 +105,7 @@ screenshots: ## Regenerate README screenshots (requires freeze and rsvg-convert)
 			--border.radius 10 --font.family "DejaVu Sans Mono" \
 			-o build/frames/$$n.svg < build/frames/$$n.ans; \
 		rsvg-convert build/frames/$$n.svg -o assets/screenshot-$$n.png; \
+		python3 scripts/screenshot-provenance.py assets/screenshot-$$n.png build/frames/$$n.ans; \
 	done
 
 .DEFAULT_GOAL := build

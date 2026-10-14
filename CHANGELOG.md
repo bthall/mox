@@ -20,7 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Ctrl+C protects unsaved editor input and wizard drafts. Going back in add
-  retains entered values and command lines.
+  retains entered values, command lines, and the broadcast choice. Deleting
+  an unsaved session asks before discarding it; `u` discards edits through
+  save/discard/stay without deleting a saved session.
 - Config loading, editing, and importing now reject additional YAML documents
   instead of silently dropping everything after the first one.
 - Import now checks the resulting config before saving, leaving an existing

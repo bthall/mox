@@ -165,6 +165,85 @@ func TestAddBackPreservesCommandsAndInput(t *testing.T) {
 	}
 }
 
+func TestEditorNewDraftRequiresDiscardConfirmation(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "a")
+	m = edRunes(t, m, "new-draft")
+	for range 5 {
+		m = edType(t, m, tea.KeyEnter)
+	}
+	if m.draft == nil || !m.draft.added {
+		t.Fatal("wizard did not return a new draft")
+	}
+	m = edRunes(t, m, "D")
+	if m.mode != modeConfirmDelete || m.draft == nil || !strings.Contains(m.View(), "discard unsaved session") {
+		t.Fatal("D discarded a new draft without confirmation")
+	}
+	m = edType(t, m, tea.KeyEsc)
+	if m.mode != modeBrowse || m.draft.name != "new-draft" || !m.isDirty() {
+		t.Fatal("Esc did not preserve the new draft")
+	}
+	m = edRunes(t, m, "D")
+	m = edRunes(t, m, "y")
+	if m.mode != modeBrowse || m.isDirty() || strings.Contains(m.View(), "new-draft") {
+		t.Fatal("confirmed discard did not remove the new draft")
+	}
+	if _, exists := m.st.cfg.Sessions["solo"]; !exists {
+		t.Fatal("discard changed the saved sessions")
+	}
+}
+
+func TestAddBroadcastChoiceSurvivesUserBacktracking(t *testing.T) {
+	m := through(t, newTestAddModel(), "broadcast")
+	m = through(t, m, "web1 web2")
+	m = through(t, m, "")
+	if m.step != stepSync || !m.sync {
+		t.Fatal("multi-host default should enable broadcast")
+	}
+	m = sendAdd(t, m, runes("n")...)
+	m = sendAdd(t, m, keyEsc)
+	m = sendAdd(t, m, keyEnter)
+	if m.step != stepSync || m.sync {
+		t.Fatal("backtracking through SSH user reset explicit broadcast choice")
+	}
+	m = sendAdd(t, m, keyEsc, keyEsc)
+	m = sendAdd(t, m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = through(t, m, "web1 web2 web3")
+	m = sendAdd(t, m, keyEnter)
+	if m.step != stepSync || !m.sync {
+		t.Fatal("changed hosts did not reseed the broadcast default")
+	}
+}
+
+func TestEditorDiscardEditsKeepsSavedSession(t *testing.T) {
+	m := testEditorModel(t)
+	m = edRunes(t, m, "r")
+	m = edType(t, m, tea.KeyCtrlU)
+	m = edRunes(t, m, "renamed-draft")
+	m = edType(t, m, tea.KeyEnter)
+	m = edRunes(t, m, "a")
+	if !strings.Contains(m.status, "u discard") || strings.Contains(m.status, "discard (D)") {
+		t.Fatalf("blocked action offered the wrong recovery: %s", m.status)
+	}
+	m = edRunes(t, m, "u")
+	if m.mode != modeGuard {
+		t.Fatal("u did not open save/discard/stay")
+	}
+	m = edType(t, m, tea.KeyEsc)
+	if !m.isDirty() || m.draft.name != "renamed-draft" {
+		t.Fatal("staying lost unsaved edits")
+	}
+	m = edRunes(t, m, "u")
+	m = edRunes(t, m, "d")
+	if m.mode != modeBrowse || m.isDirty() || m.leaving {
+		t.Fatal("discard did not return to the unchanged editor")
+	}
+	cfg, err := config.Load(m.st.path)
+	if err != nil || cfg.Sessions["solo"] == nil || cfg.Sessions["renamed-draft"] != nil {
+		t.Fatalf("discard altered the saved config: %v", err)
+	}
+}
+
 func TestWorkspaceHelpAndTextInputKeys(t *testing.T) {
 	hub := testHubModel(t, nil)
 	name := hub.selectedName()

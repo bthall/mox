@@ -378,7 +378,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		if m.pane == paneList {
 			if m.isDirty() {
-				m.status = "unsaved changes — save (s) or discard (D) before filtering"
+				m.status = "unsaved changes — s save / u discard before filtering"
 				m.statusErr = true
 				return m, nil
 			}
@@ -387,7 +387,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "a":
 		if m.isDirty() {
-			m.status = "unsaved changes — save (s) or discard (D) before adding"
+			m.status = "unsaved changes — s save / u discard before adding"
 			m.statusErr = true
 			return m, nil
 		}
@@ -412,7 +412,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.isDirty() {
-			m.status = "unsaved changes — save (s) or discard (D) before duplicating"
+			m.status = "unsaved changes — s save / u discard before duplicating"
 			m.statusErr = true
 			return m, nil
 		}
@@ -423,6 +423,13 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "s":
 		return m.startSave()
+	case "u":
+		if m.isDirty() {
+			m.guardReturn = m.mode
+			m.mode = modeGuard
+			m.pending = pendingAction{}
+		}
+		return m, nil
 	case "D":
 		if m.draft == nil {
 			return m, nil
@@ -433,12 +440,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.draft.added {
-			// a never-saved draft just disappears
-			m.draft = nil
-			m.refilter()
-			m.resetDraft()
-			m.status = "discarded unsaved session"
-			m.statusErr = false
+			m.mode = modeConfirmDelete
 			return m, nil
 		}
 		if len(m.st.cfg.Sessions) == 1 {
@@ -450,7 +452,7 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "o":
 		if m.isDirty() {
-			m.status = "unsaved changes — save (s) or discard (D) before opening $EDITOR"
+			m.status = "unsaved changes — s save / u discard before opening $EDITOR"
 			m.statusErr = true
 			return m, nil
 		}
@@ -716,6 +718,15 @@ func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if string(msg.Runes) == "y" || msg.Type == tea.KeyEnter {
+		if m.draft.added {
+			m.draft = nil
+			m.refilter()
+			m.resetDraft()
+			m.mode = modeBrowse
+			m.status = "discarded unsaved session"
+			m.statusErr = false
+			return m, nil
+		}
 		m.draft.deleted = true
 		m.mode = modeBrowse
 		m.status = "delete pending — press s to save, D to undo"
@@ -1129,6 +1140,13 @@ func (m editorModel) inputLines(w int) []string {
 
 // confirmDeleteLines renders the delete confirmation in the right pane.
 func (m editorModel) confirmDeleteLines(w int) []string {
+	if m.draft.added {
+		return []string{
+			pkErr.Render(truncate(fmt.Sprintf("discard unsaved session %q?", m.draft.name), w)),
+			"",
+			"This draft has not been saved to the config.",
+		}
+	}
 	return []string{
 		pkErr.Render(truncate(fmt.Sprintf("delete session %q from the config?", m.draft.name), w)),
 		"",
@@ -1303,6 +1321,9 @@ func (m editorModel) actionHints() []keyHint {
 	case modeInput:
 		return []keyHint{{"Enter", "confirm"}, {"Esc", "cancel"}}
 	case modeConfirmDelete:
+		if m.draft.added {
+			return []keyHint{{"y", "discard"}, {"Esc", "stay"}, {"?", "help"}}
+		}
 		return []keyHint{{"y", "delete"}, {"Esc", "cancel"}, {"?", "help"}}
 	case modeDiff:
 		return []keyHint{{"Enter", "write config"}, {"Esc", "back"}, {"j/k", "scroll"}, {"?", "help"}}
@@ -1332,7 +1353,7 @@ func (m editorModel) actionHints() []keyHint {
 		actions = append(actions, keyHint{"Space", "cycle"})
 	}
 	if m.isDirty() {
-		actions = append(actions, keyHint{"s", "save"})
+		actions = append(actions, keyHint{"s", "save"}, keyHint{"u", "discard edits"})
 	}
 	if m.draft == nil {
 		filtered := actions[:0]
@@ -1364,7 +1385,11 @@ func (m editorModel) helpActions() []keyHint {
 				actions = append(actions, keyHint{"r", "rename session"})
 			}
 			if len(m.st.cfg.Sessions) > 1 || m.draft.added || m.draft.deleted {
-				actions = append(actions, keyHint{"D", "delete / undo deletion"})
+				if m.draft.added {
+					actions = append(actions, keyHint{"D", "discard unsaved session"})
+				} else {
+					actions = append(actions, keyHint{"D", "delete / undo deletion"})
+				}
 			}
 		}
 	}

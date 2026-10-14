@@ -82,6 +82,27 @@ func TestGenerateScreenshots(t *testing.T) {
 	errors.mode = modeStale
 	errors.draft.sess.Root = "/srv/ops"
 	write("stale.ans", errors.View())
+	discard := screenshotWizardModel(t, 80, 24, true)
+	discard = edType(t, discard, tea.KeyEnter)
+	discard = edRunes(t, discard, "D")
+	write("draft-discard.ans", discard.View())
+	broadcast := screenshotWizardModel(t, 80, 24, false)
+	broadcast = edType(t, broadcast, tea.KeyEnter)
+	broadcast = edType(t, broadcast, tea.KeyEnter)
+	broadcast = edRunes(t, broadcast, "n")
+	broadcast = edType(t, broadcast, tea.KeyEsc)
+	broadcast = edType(t, broadcast, tea.KeyEnter)
+	write("broadcast-back.ans", broadcast.View())
+	recovery := newEditorModel(testEditorState(t, screenshotConfigYAML), nil, nil, "webfarm")
+	recovery.width, recovery.height = 80, 24
+	recovery = edRunes(t, recovery, "r")
+	recovery = edType(t, recovery, tea.KeyCtrlU)
+	recovery = edRunes(t, recovery, "webfarm-renamed")
+	recovery = edType(t, recovery, tea.KeyEnter)
+	recovery = edRunes(t, recovery, "a")
+	write("draft-recovery.ans", recovery.View())
+	recovery = edRunes(t, recovery, "u")
+	write("discard-edits.ans", recovery.View())
 	for _, size := range [][2]int{{40, 12}, {80, 24}, {120, 35}} {
 		w, h := size[0], size[1]
 		m := screenshotHubModel(t, now)

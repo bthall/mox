@@ -6,6 +6,7 @@ on:
       - 'internal/cli/**'
       - 'assets/**'
       - 'Makefile'
+      - 'scripts/screenshot-provenance.py'
       - '.github/workflows/ui-preview.yml'
   workflow_dispatch:
 
@@ -34,10 +35,12 @@ jobs:
             name=$(basename "$frame" .ans)
             "$(go env GOPATH)/bin/freeze" -l ansi --window --padding 25 --margin 15 --border.radius 10 --font.family "DejaVu Sans Mono" -o "build/screenshots/$name.svg" < "$frame"
             rsvg-convert "build/screenshots/$name.svg" -o "build/screenshots/$name.png"
+            python3 scripts/screenshot-provenance.py "build/screenshots/$name.png" "$frame"
           done
           for name in hub editor add; do
             "$(go env GOPATH)/bin/freeze" -l ansi --theme github --background '#ffffff' --window --padding 25 --margin 15 --border.radius 10 --font.family "DejaVu Sans Mono" -o "build/screenshots/$name-light.svg" < "build/frames/$name.ans"
             rsvg-convert "build/screenshots/$name-light.svg" -o "build/screenshots/$name-light.png"
+            python3 scripts/screenshot-provenance.py "build/screenshots/$name-light.png" "build/frames/$name.ans"
           done
       - name: Export preview frames for inspection
         if: always()

@@ -70,6 +70,7 @@ type addModel struct {
 	expandErr  string
 	user       string
 	sync       bool
+	syncSet    bool // default seeded for the current committed hosts
 	arrangeIdx int
 	root       string
 	commands   []string
@@ -328,6 +329,9 @@ func (m addModel) advance() (tea.Model, tea.Cmd) {
 			m.errMsg = err.Error()
 			return m, nil
 		}
+		if !slices.Equal(strings.Fields(m.hostsRaw), strings.Fields(string(m.input))) {
+			m.syncSet = false
+		}
 		m.hostsRaw = string(m.input)
 		if len(m.expanded) == 0 {
 			// No hosts: ssh user, sync, and arrange have nothing to act on.
@@ -342,9 +346,12 @@ func (m addModel) advance() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.user = user
-		// Seed the sync default on the forward pass only — re-entering the
-		// step via Esc must not discard an explicit toggle.
-		m.sync = len(m.expanded) > 1
+		// Backtracking through SSH user preserves the broadcast choice.
+		// A changed host list starts with the appropriate default again.
+		if !m.syncSet {
+			m.sync = len(m.expanded) > 1
+			m.syncSet = true
+		}
 		return m.goTo(stepSync), nil
 
 	case stepSync:
