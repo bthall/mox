@@ -51,6 +51,14 @@ sessions:
 	}
 }
 
+func TestLoad_RejectsAdditionalDocument(t *testing.T) {
+	p := writeTemp(t, "sessions:\n  dev:\n    hosts: [a]\n---\nsessions:\n  prod:\n    hosts: [b]\n")
+	_, err := Load(p)
+	if err == nil || !strings.Contains(err.Error(), "multiple YAML documents") {
+		t.Fatalf("expected extra-document error, got %v", err)
+	}
+}
+
 func TestLoad_RejectsBadHostname(t *testing.T) {
 	p := writeTemp(t, `
 sessions:

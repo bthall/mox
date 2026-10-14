@@ -74,12 +74,18 @@ func (c *Client) dryRun(args []string) (string, error) {
 	}
 }
 
-// shellJoin renders an argv as a copy-pasteable shell line, quoting any
-// argument that needs it.
+// shellJoin renders an argv as a copy-pasteable shell command, quoting any
+// argument that needs it. A literal newline inside an argument still spans
+// display lines, but stays inside one quoted shell argument.
 func shellJoin(args []string) string {
 	parts := make([]string, len(args))
 	for i, a := range args {
-		if a == "" || strings.ContainsAny(a, " \t\"'$&|;<>(){}*?#~") {
+		if a == "" || strings.IndexFunc(a, func(r rune) bool {
+			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+				return false
+			}
+			return !strings.ContainsRune("_./:=,@%+-", r)
+		}) >= 0 {
 			parts[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
 		} else {
 			parts[i] = a

@@ -4,7 +4,7 @@ project_name: mox
 
 before:
   hooks:
-    - go mod tidy
+    - go mod verify
 
 builds:
   - id: mox
@@ -56,13 +56,3 @@ aurs:
     # always skip. Without the key this resolves to true and the release
     # proceeds without the AUR step.
     skip_upload: '{{ if envOrDefault "AUR_SSH_KEY" "" }}auto{{ else }}true{{ end }}'
-
-# TODO: add a `brews:` block here once a Homebrew tap repo exists
-# (e.g. github.com/bthall/homebrew-tap). Example:
-# brews:
-#   - repository:
-#       owner: bthall
-#       name: homebrew-tap
-#     homepage: https://github.com/bthall/mox
-#     description: tmux session manager
-#     license: MIT

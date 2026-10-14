@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Config loading, editing, and importing now reject additional YAML documents
+  instead of silently dropping everything after the first one.
+- Import now checks the resulting config before saving, leaving an existing
+  invalid file untouched instead of reporting a successful import.
+- Recents history updates replace the file atomically, so interrupted writes
+  cannot leave truncated JSON behind.
+- `mox init --force` atomically replaces an existing config without breaking
+  symlinked config paths.
+- `--print` now quotes shell metacharacters such as backslashes and brackets,
+  so the displayed tmux commands keep their original arguments when pasted.
 - Windows added to a session (multi-window builds and `mox new -w`) now
   target the session by exact name. tmux fell back to prefix matching, so
   a missing session could resolve to a longer-named one and the window

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -365,7 +366,7 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 	switch {
 	case err == nil:
 		if len(data) > 0 {
-			if err := yaml.Unmarshal(data, &root); err != nil {
+			if err := decodeSingleYAMLDocument(data, &root); err != nil {
 				return fmt.Errorf("parse existing config %s: %w", path, err)
 			}
 		}
@@ -389,6 +390,9 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 	topMap := root.Content[0]
 
 	sessionsMap := findOrCreateMapKey(topMap, "sessions")
+	if sessionsMap.Kind != yaml.MappingNode {
+		return fmt.Errorf("sessions in %s must be a mapping", path)
+	}
 
 	// Encode the new session into a Node.
 	var sessNode yaml.Node
@@ -396,20 +400,44 @@ func appendSessionToConfig(path, name string, sess *config.Session, force bool) 
 		return fmt.Errorf("encode session: %w", err)
 	}
 
+	replaced := false
 	for i := 0; i < len(sessionsMap.Content); i += 2 {
 		if sessionsMap.Content[i].Value == name {
 			if !force {
 				return fmt.Errorf("config already has session %q (use --force to overwrite)", name)
 			}
 			sessionsMap.Content[i+1] = &sessNode
-			return writeYAMLNode(path, &root, false)
+			replaced = true
+			break
 		}
 	}
-	sessionsMap.Content = append(sessionsMap.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: name},
-		&sessNode,
-	)
+	if !replaced {
+		sessionsMap.Content = append(sessionsMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: name},
+			&sessNode,
+		)
+	}
+	if err := validateImportedConfig(&root); err != nil {
+		return fmt.Errorf("resulting config is invalid: %w", err)
+	}
 	return writeYAMLNode(path, &root, fresh)
+}
+
+// validateImportedConfig checks the exact document we are about to publish.
+// Import can create the first session in an empty file, so validating the
+// existing file before applying the new session would reject that use case.
+func validateImportedConfig(root *yaml.Node) error {
+	data, err := yaml.Marshal(root)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	var cfg config.Config
+	if err := dec.Decode(&cfg); err != nil {
+		return err
+	}
+	return cfg.Validate()
 }
 
 // completeRunningTmuxSessions powers tab completion for `mox import <TAB>`.

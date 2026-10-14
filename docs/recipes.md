@@ -73,8 +73,8 @@ panes fully reproducible.
 
 ## Preview what mox will do
 
-`--print` emits the tmux commands a build would run, one line each,
-without touching your tmux server:
+`--print` emits the shell-quoted tmux commands a build would run without
+touching your tmux server:
 
 ```bash
 mox new @api-cluster --print        # inspect the full build

@@ -1,6 +1,8 @@
 # Configuration
 
 mox builds tmux sessions from a YAML config file.
+The file must contain one YAML document; a second `---` document is rejected
+so later session definitions cannot be silently ignored.
 
 ## Config file location
 
