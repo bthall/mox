@@ -199,8 +199,8 @@ func TestAddWizard_EscGoesBackThenCancels(t *testing.T) {
 		t.Error("esc should go back one step")
 	}
 	m = sendAdd(t, m, keyEsc)
-	if m.done.action != addActionCancel {
-		t.Error("esc on the first step should cancel")
+	if !m.cancelConfirm || m.finished {
+		t.Error("esc on the first step should protect the entered draft")
 	}
 }
 

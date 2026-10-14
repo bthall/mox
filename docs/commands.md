@@ -39,6 +39,13 @@ one on the right. For a **running** session the preview is a live capture
 of its active pane (refreshed every second while highlighted) with a
 window summary line. For a **stopped** session it's the config summary.
 
+Hub, editor, and add share a session rail, work area, and bottom action/status
+rows. At fewer than 80 columns, one area is shown at a time; `Tab` switches
+between the list and the current task without changing the selection. The
+action row shows available shortcuts that fit; `?` opens the full key map
+outside text input. Names and instructions use the terminal foreground so
+they remain readable on light, dark, and no-color terminals.
+
 | Key | Action |
 | --- | --- |
 | `↑↓` / `j k` | move |
@@ -48,6 +55,8 @@ window summary line. For a **stopped** session it's the config summary.
 | `K` | kill the highlighted running session (confirm, runs `on_stop`) |
 | `ctrl+e` | open the session in the config editor; quitting returns here |
 | `i` | import the highlighted unmanaged session into the config |
+| `tab` | switch list/preview focus (also exposes the preview on narrow terminals) |
+| `?` | show keyboard help; `esc` returns |
 | `q` / `esc` | quit (esc clears an active filter first) |
 
 Start and kill run in the background with a status line while they work;
@@ -56,7 +65,7 @@ their own flows and return to a fresh hub over the updated config.
 
 The status glyphs are shared with `mox list`: shape carries the origin,
 color the state. `●` green is a running configured session; `◆` yellow is
-a session running outside the config (`tmux only` in the preview title; it
+a session running outside the config (`tmux only` beside its name; it
 can be attached, killed, or imported, but not started or edited); `○` is
 stopped. Terminals that can't host the UI get a numbered prompt instead;
 piped and scripted invocations print help, so scripts never hang.
@@ -77,11 +86,13 @@ validation on exit — fixing a broken config by hand still works.
 | `/` | filter the session list |
 | `enter` | edit the focused field (text input, toggle, or list editor) |
 | `space` | cycle toggle/enum fields (`sync`, `arrange`, `hold`) |
-| `a` | add a session (runs the `mox add` wizard; *save* lands as a draft, *save + start now* opens the diff preview and starts the session detached once the save lands) |
+| `a` | add inside the work area; *keep as draft* buffers it, *review + save + start* opens the diff and starts detached after saving |
 | `r` / `y` / `D` | rename / duplicate / delete (all buffered until save) |
 | `o` | open the config in `$EDITOR` (window/pane structure) |
 | `s` | save: validate → diff preview → write |
 | `q` / `esc` | quit (prompts if there are unsaved changes) |
+| `?` | show the current key map outside text input |
+| `ctrl+c` | quit, with save/discard/stay when a draft or active input is unsaved |
 
 Edits buffer into a draft; nothing touches the file until you confirm the
 diff preview. The save rewrites only the edited session's block — comments
@@ -99,6 +110,11 @@ form, and each *simple-mode* window (hosts, no panes) contributes editable
 other. Pane geometry itself is one `o` away in `$EDITOR`.
 Changes apply the next time the session is built — a running session is
 never touched.
+
+The embedded add flow keeps the list and current selection in place. `Esc`
+returns one step, retaining entered values and command lines. At the name
+step or on `Ctrl+C`, a draft requires an explicit discard decision. YAML
+review keeps its save choices visible and scrolls with `PgUp`/`PgDn`.
 
 ## Cluster expansion (`@name`)
 
@@ -122,10 +138,11 @@ mox new @webfarm -x web3        # the cluster minus a host that's mid-deploy
 
 Three routes, by decreasing interactivity:
 
-1. **`mox add`** — a short wizard: name, hosts (with live `@cluster`
+1. **`mox add`** — a full-screen wizard: name, hosts (with live `@cluster`
    expansion), ssh user, sync, arrangement, directory, commands, then a
    YAML preview with *save to config* or *save + start now*. Simple-mode
-   sessions only.
+   sessions only. `Esc` goes back without clearing entered values; on the
+   commands step, Backspace on an empty input edits the last collected line.
 2. **`mox new ... --save`** — you already expressed the session in flags;
    `--save` persists that definition to the config (requires `-n`) and
    creates the session as usual. Refuses to overwrite an existing entry.

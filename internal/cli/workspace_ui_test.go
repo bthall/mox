@@ -39,6 +39,14 @@ func TestWorkspaceViewsRespectTerminalBounds(t *testing.T) {
 			editor.width, editor.height = w, h
 			for _, mode := range []editorMode{modeBrowse, modeFieldEdit, modeListEdit, modeDiff, modeGuard, modeStale} {
 				editor.mode = mode
+				if mode == modeFieldEdit {
+					for i, field := range editor.fields {
+						if field.kind == fieldText || field.kind == fieldNumber {
+							editor.fieldSel = i
+							break
+						}
+					}
+				}
 				if mode == modeListEdit {
 					for i, field := range editor.fields {
 						if field.kind == fieldList {

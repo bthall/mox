@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Hub, editor, and add now share a responsive terminal workspace with one
+  session rail, work area, and consistent action/status rows. The editor's
+  add wizard stays in the work area instead of replacing the screen.
+- State labels distinguish running, stopped, unmanaged, and draft sessions.
+  Instructions use the terminal foreground; `?` shows the available key map.
+- Narrow terminals switch list/detail with Tab. Long forms, list entries,
+  and YAML reviews keep the focused item visible within terminal bounds.
+
 ### Fixed
 
+- Ctrl+C protects unsaved editor input and wizard drafts. Going back in add
+  retains entered values and command lines.
 - Config loading, editing, and importing now reject additional YAML documents
   instead of silently dropping everything after the first one.
 - Import now checks the resulting config before saving, leaving an existing
