@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/bthall/mox/internal/config"
@@ -99,6 +101,9 @@ type editorModel struct {
 	pane     editorPane
 
 	mode         editorMode
+	help         bool
+	helpOff      int
+	guardReturn  editorMode
 	input        []rune // shared buffer for modeFieldEdit / modeInput
 	inputPurpose inputPurpose
 	inputErr     string
@@ -227,6 +232,7 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.keepVisible()
 		if m.mode == modeWizard && m.wizard != nil {
 			nm, _ := m.wizard.Update(msg)
 			if aw, ok := nm.(addModel); ok {
@@ -259,6 +265,28 @@ func (m editorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusErr = false
 		return m, nil
 	case tea.KeyMsg:
+		if m.help {
+			switch {
+			case msg.Type == tea.KeyCtrlC:
+				m.help = false
+				return m.requestQuit()
+			case msg.Type == tea.KeyEsc || string(msg.Runes) == "?":
+				m.help = false
+			case msg.Type == tea.KeyDown || string(msg.Runes) == "j":
+				m.helpOff = min(m.helpOff+1, max(0, len(m.helpActions())-1))
+			case msg.Type == tea.KeyUp || string(msg.Runes) == "k":
+				m.helpOff = max(0, m.helpOff-1)
+			}
+			return m, nil
+		}
+		textInput := m.mode == modeFilter || m.mode == modeFieldEdit || m.mode == modeInput || (m.mode == modeListEdit && m.listEd.editing)
+		if m.mode != modeWizard && !textInput && string(msg.Runes) == "?" {
+			m.help, m.helpOff = true, 0
+			return m, nil
+		}
+		if msg.Type == tea.KeyCtrlC && m.mode != modeWizard && m.mode != modeGuard {
+			return m.requestQuit()
+		}
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
 			return replayRunes(m, msg.Runes)
 		}
@@ -365,8 +393,11 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		w := newAddModel(m.st.cfg, m.clusters, "")
 		w.width = m.width // embedded: no initial WindowSizeMsg arrives
+		w.height = m.height
+		w.embedded = true
 		m.wizard = &w
 		m.mode = modeWizard
+		m.pane = paneForm
 		return m, nil
 	case "r":
 		if m.draft != nil && !m.draft.deleted {
@@ -775,6 +806,7 @@ func (m editorModel) updateStale(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // active draft has unsaved changes.
 func (m editorModel) requestSelect(idx int) (tea.Model, tea.Cmd) {
 	if m.isDirty() {
+		m.guardReturn = m.mode
 		m.mode = modeGuard
 		m.pending = pendingAction{kind: pendingSelect, target: idx}
 		return m, nil
@@ -784,7 +816,8 @@ func (m editorModel) requestSelect(idx int) (tea.Model, tea.Cmd) {
 
 // requestQuit quits, interposing the guard when the draft is dirty.
 func (m editorModel) requestQuit() (tea.Model, tea.Cmd) {
-	if m.isDirty() {
+	if m.isDirty() || m.hasPendingInput() {
+		m.guardReturn = m.mode
 		m.mode = modeGuard
 		m.pending = pendingAction{kind: pendingQuit}
 		return m, nil
@@ -792,20 +825,68 @@ func (m editorModel) requestQuit() (tea.Model, tea.Cmd) {
 	return m.quit()
 }
 
+func (m editorModel) hasPendingInput() bool {
+	if m.draft == nil {
+		return false
+	}
+	switch m.mode {
+	case modeFieldEdit:
+		return string(m.input) != m.fields[m.fieldSel].text(m.draft.sess)
+	case modeInput:
+		return m.inputPurpose == inputDuplicate || string(m.input) != m.draft.name
+	case modeListEdit:
+		if m.listEd.editing {
+			if m.listEd.adding {
+				return len(m.listEd.input) > 0
+			}
+			items := m.fields[m.listEd.field].list(m.draft.sess)
+			return string(m.listEd.input) != (*items)[m.listEd.sel]
+		}
+	}
+	return false
+}
+
 // updateGuard resolves the save/discard/stay prompt, then continues the
 // pending action. Guard-save skips the diff preview — choosing "save" is
 // the confirmation.
 func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return m.quit()
+		return m, nil
 	}
 	if msg.Type == tea.KeyEsc {
-		m.mode = modeBrowse
+		m.mode = m.guardReturn
 		m.pending = pendingAction{}
 		return m, nil
 	}
 	switch string(msg.Runes) {
 	case "s":
+		// A quit from a text input must offer saving the text the user just
+		// typed, not only the last committed draft. Validation keeps focus
+		// in the input when it cannot be committed.
+		switch m.guardReturn {
+		case modeFieldEdit, modeInput:
+			m.mode = m.guardReturn
+			var nm tea.Model
+			if m.mode == modeFieldEdit {
+				nm, _ = m.updateFieldEdit(tea.KeyMsg{Type: tea.KeyEnter})
+			} else {
+				nm, _ = m.updateInput(tea.KeyMsg{Type: tea.KeyEnter})
+			}
+			m = nm.(editorModel)
+			if m.mode != modeBrowse {
+				m.pending = pendingAction{}
+				return m, nil
+			}
+		case modeListEdit:
+			if m.listEd.editing {
+				m.commitListInput()
+				if m.listEd.editing {
+					m.mode = modeListEdit
+					m.pending = pendingAction{}
+					return m, nil
+				}
+			}
+		}
 		var ok bool
 		m, ok = m.finishSave()
 		if !ok {
@@ -850,10 +931,19 @@ func (m editorModel) continuePending() (tea.Model, tea.Cmd) {
 // "save + start now" jumps straight into that pipeline (diff → write) with
 // the draft marked to start detached once the save lands.
 func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyCtrlC {
-		// Hard-quit like every other sub-mode — the wizard's own ctrl+c
-		// handling would only cancel back into the editor.
-		return m.quit()
+	if msg.Type == tea.KeyTab && !m.wizard.cancelConfirm && !m.wizard.help {
+		if m.pane == paneForm {
+			m.pane = paneList
+		} else {
+			m.pane = paneForm
+		}
+		return m, nil
+	}
+	if m.pane == paneList && msg.Type != tea.KeyCtrlC {
+		if msg.Type == tea.KeyEsc {
+			m.pane = paneForm
+		}
+		return m, nil
 	}
 	nm, _ := m.wizard.Update(msg) // swallow the wizard's tea.Quit
 	aw, ok := nm.(addModel)
@@ -868,6 +958,9 @@ func (m editorModel) updateWizard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.wizard = nil
 	m.mode = modeBrowse
 	if res.action == addActionCancel {
+		if aw.cancelQuit {
+			return m.requestQuit()
+		}
 		return m, nil
 	}
 	d := &sessionDraft{name: res.name, sess: res.sess, startAfter: res.action == addActionSaveStart}
@@ -1019,7 +1112,7 @@ func (m editorModel) inputLines(w int) []string {
 	lines := []string{
 		pkDim.Render(truncate(label, w)),
 		"",
-		pkAccent.Render("▸ ") + string(m.input) + pkAccent.Render("█"),
+		pkAccent.Render("▸ ") + inputTail(string(m.input), w-2),
 	}
 	if m.inputErr != "" {
 		lines = append(lines, "", pkErr.Render(truncate(m.inputErr, w)))
@@ -1121,11 +1214,7 @@ func (m editorModel) effectiveListRows() int {
 // --- view ---
 
 func (m editorModel) panelHeight() int {
-	h := m.height - 2 // status line + trailing newline
-	if h < 8 {
-		h = 8
-	}
-	return h
+	return terminalLayout(m.width, m.height).contentHeight + 2
 }
 
 // listRows is how many session rows fit in the list pane.
@@ -1138,32 +1227,22 @@ func (m editorModel) listRows() int {
 }
 
 func (m editorModel) View() string {
+	l := terminalLayout(m.width, m.height)
+	detail, title := m.rightLines(l.detailWidth, l.contentHeight), m.formTitle()
+	focus := m.pane == paneForm || (m.mode != modeBrowse && m.mode != modeFilter && m.mode != modeWizard)
 	if m.mode == modeWizard && m.wizard != nil {
-		return m.wizard.View()
+		title = m.wizard.title()
+		focus = m.pane == paneForm || m.wizard.cancelConfirm || m.wizard.help
 	}
-	h := m.panelHeight()
-	if m.width < 60 {
-		// Narrow: one pane at a time, Tab flips between them.
-		w := m.width
-		if w < 24 {
-			w = 24
-		}
-		if (m.pane == paneList && m.mode == modeBrowse) || m.mode == modeFilter {
-			return panel(m.listTitle(), m.footer(), m.listLines(w-4, h-2), w, h) + "\n" + m.statusLine()
-		}
-		return panel(m.formTitle(), m.footer(), m.rightLines(w-4, h-2), w, h) + "\n" + m.statusLine()
+	if m.help {
+		detail = helpLines(m.helpActions(), l.detailWidth)
+		detail = detail[min(m.helpOff, len(detail)):]
+		title, focus = "help / edit", true
 	}
-	leftW := m.width / 4
-	if leftW < 20 {
-		leftW = 20
-	}
-	if leftW > 36 {
-		leftW = 36
-	}
-	rightW := m.width - leftW - 1
-	left := panel(m.listTitle(), "", m.listLines(leftW-4, h-2), leftW, h)
-	right := panel(m.formTitle(), m.footer(), m.rightLines(rightW-4, h-2), rightW, h)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right) + "\n" + m.statusLine()
+	return renderWorkspace(workspaceView{width: m.width, height: m.height, view: "edit",
+		context:   fmt.Sprintf("%s · %d sessions", filepath.Base(m.st.path), len(m.st.cfg.Sessions)),
+		listTitle: m.listTitle(), detailTitle: title, list: m.listLines(l.listWidth, l.contentHeight),
+		detail: detail, focusDetail: focus, actions: m.actionHints(), status: m.statusLine()})
 }
 
 func (m editorModel) listTitle() string {
@@ -1189,33 +1268,58 @@ func (m editorModel) formTitle() string {
 	return m.draft.name + " · " + badge
 }
 
-func (m editorModel) footer() string {
+func (m editorModel) actionHints() []keyHint {
+	if m.help {
+		return []keyHint{{"Esc", "back"}, {"j/k", "scroll"}}
+	}
 	switch m.mode {
 	case modeFilter:
-		return hints("↵", "keep", "esc", "clear")
+		return []keyHint{{"Enter", "keep filter"}, {"Esc", "clear"}}
 	case modeFieldEdit:
-		return hints("↵", "commit", "esc", "cancel")
+		return []keyHint{{"Enter", "commit"}, {"Esc", "cancel"}}
 	case modeListEdit:
 		if m.listEd.editing {
-			return hints("↵", "commit", "esc", "cancel")
+			return []keyHint{{"Enter", "commit"}, {"Esc", "cancel"}}
 		}
-		return hints("a", "add", "e", "edit", "d", "delete", "J/K", "move", "esc", "back")
+		return []keyHint{{"a", "add"}, {"e", "edit"}, {"d", "delete"}, {"J/K", "move"}, {"Esc", "back"}, {"?", "help"}}
 	case modeInput:
-		return hints("↵", "confirm", "esc", "cancel")
+		return []keyHint{{"Enter", "confirm"}, {"Esc", "cancel"}}
 	case modeConfirmDelete:
-		return hints("y", "delete", "esc", "cancel")
+		return []keyHint{{"y", "delete"}, {"Esc", "cancel"}, {"?", "help"}}
 	case modeDiff:
-		return hints("↵", "write config", "esc", "back")
+		return []keyHint{{"Enter", "write config"}, {"Esc", "back"}, {"j/k", "scroll"}, {"?", "help"}}
 	case modeGuard:
-		return hints("s", "save", "d", "discard", "esc", "stay")
+		return []keyHint{{"s", "save"}, {"d", "discard"}, {"Esc", "stay"}, {"?", "help"}}
 	case modeStale:
-		return hints("R", "reload (discards changes)", "esc", "back")
-	default:
-		if m.pane == paneList {
-			return hints("↵", "fields", "a", "add", "r", "rename", "y", "dup", "D", "del", "s", "save", "q", "quit")
+		return []keyHint{{"Esc", "keep draft"}, {"R", "reload / discard"}, {"?", "help"}}
+	case modeWizard:
+		if m.wizard != nil {
+			if m.pane == paneList {
+				return []keyHint{{"Tab", "add session"}, {"Esc", "add session"}}
+			}
+			actions := m.wizard.actionHints()
+			return append(actions, keyHint{"Tab", "sessions"})
 		}
-		return hints("↵", "edit", "space", "cycle", "s", "save", "tab", "sessions", "q", "quit")
 	}
+	actions := []keyHint{{"Enter", "edit"}, {"Tab", "sessions"}}
+	if m.pane == paneList {
+		actions = []keyHint{{"Enter", "fields"}, {"a", "add"}, {"/", "filter"}}
+	} else if m.draft != nil && len(m.fields) > m.fieldSel && m.fields[m.fieldSel].kind == fieldCycle {
+		actions = append(actions, keyHint{"Space", "cycle"})
+	}
+	if m.isDirty() {
+		actions = append(actions, keyHint{"s", "save"})
+	}
+	return append(actions, keyHint{"o", "YAML"}, keyHint{"q", "quit"}, keyHint{"?", "help"})
+}
+
+func (m editorModel) helpActions() []keyHint {
+	m.help = false
+	actions := append([]keyHint{{"j/k, ↑/↓", "navigate the focused area"}}, m.actionHints()...)
+	if m.mode == modeBrowse {
+		actions = append(actions, keyHint{"a", "add session"}, keyHint{"r", "rename session"}, keyHint{"y", "duplicate session"}, keyHint{"D", "delete / undo deletion"})
+	}
+	return actions
 }
 
 // listLines renders the filter line plus the visible session rows.
@@ -1238,19 +1342,21 @@ func (m editorModel) listLines(w, h int) []string {
 	}
 	for i := m.offset; i < end; i++ {
 		name := m.visible[i]
-		dot := pkStopped.Render("○")
+		state := "stopped"
 		if info, ok := m.running[name]; ok && info.Running {
-			dot = pkRunning.Render("●")
+			state = "running"
 		}
-		display := truncate(name, w-4)
+		display := name
 		if m.draft != nil && m.draft.orig == name && m.draft.name != name {
-			display = truncate(m.draft.name+"*", w-4) // pending rename
+			display = m.draft.name + "*"
 		}
-		if i == m.sel {
-			lines = append(lines, pkAccent.Render("▌")+" "+dot+" "+pkSelected.Render(display))
-		} else {
-			lines = append(lines, "  "+dot+" "+display)
+		if m.draft != nil && (m.draft.orig == name || m.draft.name == name) && m.isDirty() {
+			state = "draft"
+			if m.draft.deleted {
+				state = "delete"
+			}
 		}
+		lines = append(lines, sessionRow(display, state, i == m.sel, w))
 	}
 	if end < len(m.visible) {
 		lines = append(lines, pkDim.Render(fmt.Sprintf("  … %d more", len(m.visible)-end)))
@@ -1261,6 +1367,10 @@ func (m editorModel) listLines(w, h int) []string {
 // rightLines picks the right pane's content by mode.
 func (m editorModel) rightLines(w, h int) []string {
 	switch m.mode {
+	case modeWizard:
+		if m.wizard != nil {
+			return m.wizard.detailLines(w, h)
+		}
 	case modeListEdit:
 		return m.listEditLines(w, h)
 	case modeInput:
@@ -1288,17 +1398,20 @@ func (m editorModel) formLines(w, h int) []string {
 	}
 	labelW := 9
 	for _, f := range m.fields {
-		if len(f.key) > labelW {
-			labelW = len(f.key)
-		}
+		labelW = max(labelW, ansi.StringWidth(f.key))
 	}
-	for i, f := range m.fields {
-		label := fmt.Sprintf("%-*s", labelW, f.key)
-		val := truncate(f.display(m.draft.sess), w-labelW-4)
+	labelW = min(labelW, max(1, w/3))
+	fieldRows := max(1, h-len(lines)-3)
+	start := max(0, m.fieldSel-fieldRows+1)
+	end := min(len(m.fields), start+fieldRows)
+	for i := start; i < end; i++ {
+		f := m.fields[i]
+		label := fitCell(f.key, labelW)
+		val := clipText(f.display(m.draft.sess), w-labelW-4)
 		switch {
 		case i == m.fieldSel && m.mode == modeFieldEdit:
-			in := truncate(string(m.input), w-labelW-5)
-			lines = append(lines, pkAccent.Render("▸ ")+pkSelected.Render(label)+" "+in+pkAccent.Render("█"))
+			in := inputTail(string(m.input), w-labelW-3)
+			lines = append(lines, pkAccent.Render("▸ ")+pkSelected.Render(label)+" "+in)
 		case i == m.fieldSel && m.pane == paneForm && m.mode != modeListEdit:
 			lines = append(lines, pkAccent.Render("▸ ")+pkSelected.Render(label)+" "+val)
 		default:
@@ -1306,11 +1419,13 @@ func (m editorModel) formLines(w, h int) []string {
 		}
 	}
 	if m.mode == modeFieldEdit && m.inputErr != "" {
-		lines = append(lines, "", pkErr.Render(truncate(m.inputErr, w)))
+		lines = append(lines, "", pkErr.Render(clipText(m.inputErr, w)))
+		return lines
 	}
 	lines = append(lines, "")
 	if m.pane == paneForm && len(m.fields) > 0 && m.fieldSel < len(m.fields) {
-		for _, hl := range wrapWords(strings.Fields(m.fields[m.fieldSel].help), w) {
+		helps := wrapWords(strings.Fields(m.fields[m.fieldSel].help), w)
+		for _, hl := range helps[:min(len(helps), max(0, h-len(lines)))] {
 			lines = append(lines, pkDim.Render(hl))
 		}
 	}
@@ -1319,6 +1434,9 @@ func (m editorModel) formLines(w, h int) []string {
 
 func (m editorModel) statusLine() string {
 	var parts []string
+	if m.mode == modeWizard && m.wizard != nil {
+		return pkForeign.Render("Draft not saved · " + m.wizard.stepTitle())
+	}
 	if m.isDirty() {
 		parts = append(parts, pkForeign.Render("unsaved: "+m.draft.name))
 	}
@@ -1332,7 +1450,10 @@ func (m editorModel) statusLine() string {
 		}
 		parts = append(parts, style.Render(m.status))
 	}
-	return " " + truncate(strings.Join(parts, pkDim.Render(" · ")), m.width-2)
+	if len(parts) == 0 {
+		return "Saved · changes apply on the next session build"
+	}
+	return strings.Join(parts, pkDim.Render(" · "))
 }
 
 // listItems returns the live backing slice for the sub-editor's field.
@@ -1464,8 +1585,11 @@ func (m editorModel) listEditLines(w, h int) []string {
 	if len(*items) == 0 && !m.listEd.editing {
 		lines = append(lines, pkDim.Render("  (empty — a to add)"))
 	}
-	for i, it := range *items {
-		row := truncate(it, w-4)
+	rows := max(1, h-4)
+	start := max(0, m.listEd.sel-rows+1)
+	end := min(len(*items), start+rows)
+	for i := start; i < end; i++ {
+		row := clipText((*items)[i], w-4)
 		if i == m.listEd.sel && !m.listEd.editing {
 			lines = append(lines, pkAccent.Render("▌ ")+pkSelected.Render(row))
 		} else {
@@ -1473,7 +1597,7 @@ func (m editorModel) listEditLines(w, h int) []string {
 		}
 	}
 	if m.listEd.editing {
-		lines = append(lines, "", pkAccent.Render("▸ ")+string(m.listEd.input)+pkAccent.Render("█"))
+		lines = append(lines, "", pkAccent.Render("▸ ")+inputTail(string(m.listEd.input), w-2))
 	}
 	if m.listEd.errMsg != "" {
 		lines = append(lines, "", pkErr.Render(truncate(m.listEd.errMsg, w)))

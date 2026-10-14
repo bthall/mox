@@ -143,7 +143,7 @@ func drain(t *testing.T, m hubModel, cmd tea.Cmd) hubModel {
 func TestHubViewBasics(t *testing.T) {
 	m := testHubModel(t, nil)
 	out := m.View()
-	for _, want := range []string{"webfarm", "dbcluster", "scratch", "3w", "attach", "S start", "K kill"} {
+	for _, want := range []string{"webfarm", "dbcluster", "scratch", "3 windows", "attach", "K kill"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q:\n%s", want, out)
 		}
@@ -551,18 +551,19 @@ func TestHubColoredPreviewNoBleed(t *testing.T) {
 	}
 }
 
-// TestHubStateColoredNames pins the mox-list color vocabulary in the list.
-func TestHubStateColoredNames(t *testing.T) {
+// State color belongs to the glyph and state label; session names retain
+// the terminal foreground for contrast on arbitrary terminal themes.
+func TestHubStateColors(t *testing.T) {
 	m := testHubModel(t, nil)
 	out := m.View()
-	if !strings.Contains(out, pkRunning.Render("webfarm")) && !strings.Contains(out, pkSelected.Render(pkRunning.Render("webfarm"))) {
-		t.Fatal("running managed session not green")
+	if !strings.Contains(out, pkRunning.Render("running")) {
+		t.Fatal("running state missing")
 	}
-	if !strings.Contains(out, pkForeign.Render("scratch")) {
-		t.Fatal("running unmanaged session not yellow")
+	if !strings.Contains(out, pkForeign.Render("tmux only")) {
+		t.Fatal("unmanaged state missing")
 	}
 	// footer keys are accent-styled
-	if !strings.Contains(out, pkAccent.Render("S")) {
+	if !strings.Contains(out, pkAccent.Render("K")) {
 		t.Fatal("footer keys not accent-styled")
 	}
 }

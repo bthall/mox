@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/bthall/mox/internal/config"
 )
@@ -79,9 +80,18 @@ type addModel struct {
 	confirmIdx int
 	preview    []string // rendered YAML for the confirm step
 
-	width    int
-	done     addResult
-	finished bool // set exactly when done is populated and the wizard quits
+	width, height int
+	embedded      bool
+	focusList     bool
+	listOff       int
+	help          bool
+	helpOff       int
+	previewOff    int
+	cancelConfirm bool
+	cancelQuit    bool
+	buffers       map[addStep][]rune
+	done          addResult
+	finished      bool // set exactly when done is populated and the wizard quits
 }
 
 func newAddModel(cfg *config.Config, clusters map[string][]string, prefillName string) addModel {
@@ -93,6 +103,7 @@ func newAddModel(cfg *config.Config, clusters map[string][]string, prefillName s
 		clusters: clusters,
 		input:    []rune(prefillName),
 		width:    80,
+		height:   24,
 	}
 }
 
@@ -102,14 +113,54 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		m.height = msg.Height
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.cancelConfirm {
+			if msg.Type == tea.KeyEsc {
+				m.cancelConfirm = false
+			} else if string(msg.Runes) == "d" {
+				m.done = addResult{action: addActionCancel}
+				m.finished = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		if msg.Type == tea.KeyCtrlC {
+			return m.requestCancel(true)
+		}
+		if m.help {
+			switch {
+			case msg.Type == tea.KeyEsc || string(msg.Runes) == "?":
+				m.help = false
+			case msg.Type == tea.KeyDown || string(msg.Runes) == "j":
+				m.helpOff = min(m.helpOff+1, max(0, len(m.helpActions())-1))
+			case msg.Type == tea.KeyUp || string(msg.Runes) == "k":
+				m.helpOff = max(0, m.helpOff-1)
+			}
+			return m, nil
+		}
+		if msg.Type == tea.KeyTab && !m.embedded {
+			m.focusList = !m.focusList
+			return m, nil
+		}
+		if m.focusList {
+			switch {
+			case msg.Type == tea.KeyEsc:
+				m.focusList = false
+			case msg.Type == tea.KeyDown || string(msg.Runes) == "j":
+				m.listOff = min(m.listOff+1, max(0, len(m.cfg.Sessions)-1))
+			case msg.Type == tea.KeyUp || string(msg.Runes) == "k":
+				m.listOff = max(0, m.listOff-1)
+			}
+			return m, nil
+		}
+		if (m.step == stepSync || m.step == stepArrange || m.step == stepConfirm) && string(msg.Runes) == "?" {
+			m.help, m.helpOff = true, 0
+			return m, nil
+		}
 		switch msg.Type {
-		case tea.KeyCtrlC:
-			m.done = addResult{action: addActionCancel}
-			m.finished = true
-			return m, tea.Quit
 		case tea.KeyEsc:
 			return m.back()
 		case tea.KeyEnter:
@@ -126,7 +177,16 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyBackspace:
 			if len(m.input) > 0 {
 				m.setInput(m.input[:len(m.input)-1])
+			} else if m.step == stepCommands && len(m.commands) > 0 {
+				m.input = []rune(m.commands[len(m.commands)-1])
+				m.commands = m.commands[:len(m.commands)-1]
 			}
+			return m, nil
+		case tea.KeyPgUp:
+			m.previewOff = max(0, m.previewOff-max(1, m.height-12))
+			return m, nil
+		case tea.KeyPgDown:
+			m.previewOff = min(max(0, len(m.preview)-1), m.previewOff+max(1, m.height-12))
 			return m, nil
 		case tea.KeySpace:
 			// bubbletea reports a lone space as KeySpace, not KeyRunes.
@@ -135,6 +195,9 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyRunes:
 			if m.step == stepSync {
 				return m.syncKey(msg.Runes)
+			}
+			if m.step == stepArrange || m.step == stepConfirm {
+				return m, nil
 			}
 			buf := m.input
 			for _, r := range msg.Runes {
@@ -147,6 +210,29 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m addModel) hasDraft() bool {
+	if strings.TrimSpace(string(m.input)) != "" || m.name != "" || m.hostsRaw != "" || m.user != "" || m.root != "" || len(m.commands) > 0 {
+		return true
+	}
+	for _, input := range m.buffers {
+		if strings.TrimSpace(string(input)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (m addModel) requestCancel(quit bool) (tea.Model, tea.Cmd) {
+	m.cancelQuit = quit
+	if m.hasDraft() {
+		m.cancelConfirm = true
+		return m, nil
+	}
+	m.done = addResult{action: addActionCancel}
+	m.finished = true
+	return m, tea.Quit
 }
 
 // setInput updates the text buffer plus anything derived from it.
@@ -282,7 +368,7 @@ func (m addModel) advance() (tea.Model, tea.Cmd) {
 
 	case stepConfirm:
 		if action := confirmActions[m.confirmIdx]; action == addActionCancel {
-			m.done = addResult{action: addActionCancel}
+			return m.requestCancel(false)
 		} else {
 			m.done = addResult{action: action, name: m.name, sess: m.buildSession(), overwrite: m.overwrite}
 		}
@@ -294,6 +380,10 @@ func (m addModel) advance() (tea.Model, tea.Cmd) {
 
 // goTo enters a step, seeding the text buffer and step defaults.
 func (m addModel) goTo(step addStep) addModel {
+	if m.buffers == nil {
+		m.buffers = make(map[addStep][]rune)
+	}
+	m.buffers[m.step] = slices.Clone(m.input)
 	m.step = step
 	m.errMsg = ""
 	m.collision = false
@@ -314,6 +404,13 @@ func (m addModel) goTo(step addStep) addModel {
 	case stepConfirm:
 		m.input = nil
 		m.preview = m.renderPreview()
+		m.previewOff = 0
+	}
+	if input, ok := m.buffers[step]; ok && step != stepConfirm {
+		m.input = slices.Clone(input)
+		if step == stepHosts {
+			m.reexpand()
+		}
 	}
 	return m
 }
@@ -322,9 +419,7 @@ func (m addModel) goTo(step addStep) addModel {
 func (m addModel) back() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepName:
-		m.done = addResult{action: addActionCancel}
-		m.finished = true
-		return m, tea.Quit
+		return m.requestCancel(false)
 	case stepHosts:
 		return m.goTo(stepName), nil
 	case stepUser:
@@ -339,9 +434,6 @@ func (m addModel) back() (tea.Model, tea.Cmd) {
 		}
 		return m.goTo(stepArrange), nil
 	case stepCommands:
-		// Backing out of commands drops the collected lines so re-entry
-		// starts clean rather than appending duplicates.
-		m.commands = nil
 		return m.goTo(stepRoot), nil
 	case stepConfirm:
 		return m.goTo(stepCommands), nil
@@ -372,7 +464,7 @@ func wrapWords(words []string, width int) []string {
 	var lines []string
 	cur := " "
 	for _, word := range words {
-		if len(cur) > 1 && len(cur)+1+len(word) > width {
+		if ansi.StringWidth(cur) > 1 && ansi.StringWidth(cur)+1+ansi.StringWidth(word) > width {
 			lines = append(lines, cur)
 			cur = " "
 		}
@@ -394,20 +486,80 @@ func (m *addModel) renderPreview() []string {
 }
 
 func (m addModel) View() string {
-	w := m.width
-	if w > 64 {
-		w = 64
+	l := terminalLayout(m.width, m.height)
+	lines := []string{sessionRow(orDash(m.name), "draft", true, l.listWidth), ""}
+	names := m.cfg.ListSessionNames()
+	for _, name := range names[min(m.listOff, len(names)):] {
+		lines = append(lines, sessionRow(name, "config", false, l.listWidth))
 	}
-	if w < 32 {
-		w = 32
-	}
-
-	lines := m.stepLines(w - 4)
+	status := pkForeign.Render("Draft not saved")
 	if m.errMsg != "" {
-		lines = append(lines, "", pkForeign.Render(truncate(m.errMsg, w-4)))
+		status = pkErr.Render(m.errMsg)
 	}
-	title := fmt.Sprintf("add session · %s", m.stepTitle())
-	return panel(title, m.stepFooter(), lines, w, len(lines)+2) + "\n"
+	return renderWorkspace(workspaceView{width: m.width, height: m.height, view: "add",
+		context: fmt.Sprintf("%d configured sessions", len(m.cfg.Sessions)), listTitle: "sessions",
+		detailTitle: m.title(), list: lines, detail: m.detailLines(l.detailWidth, l.contentHeight),
+		focusDetail: !m.focusList || m.cancelConfirm || m.help, actions: m.actionHints(), status: status})
+}
+
+func (m addModel) title() string {
+	return fmt.Sprintf("add session · %s · step %d/8", m.stepTitle(), m.step+1)
+}
+
+func (m addModel) detailLines(w, h int) []string {
+	if m.cancelConfirm {
+		return []string{pkForeign.Render("Discard this session draft?"), "", "Your input is still here. Esc keeps editing.", "Press d to discard and leave."}
+	}
+	if m.help {
+		lines := helpLines(m.helpActions(), w)
+		return lines[min(m.helpOff, len(lines)):]
+	}
+	if m.step == stepConfirm {
+		choices := confirmChoices
+		if m.embedded {
+			choices = []string{"keep as draft", "review + save + start", "cancel"}
+		}
+		var lines []string
+		for i, choice := range choices {
+			prefix := "  "
+			if i == m.confirmIdx {
+				prefix = pkAccent.Render("▸ ")
+				choice = pkSelected.Render(choice)
+			}
+			lines = append(lines, prefix+choice)
+		}
+		lines = append(lines, "", pkTitle.Render("YAML review · PgUp/PgDn to scroll"))
+		rows := max(1, h-len(lines))
+		start := min(m.previewOff, max(0, len(m.preview)-rows))
+		end := min(len(m.preview), start+rows)
+		return append(lines, m.preview[start:end]...)
+	}
+	if m.step == stepArrange {
+		lines := []string{"Pane arrangement for the window.", ""}
+		rows := max(1, h-2)
+		start := max(0, m.arrangeIdx-rows+1)
+		for i := start; i < min(len(arrangeChoices), start+rows); i++ {
+			prefix, choice := "  ", arrangeChoices[i]
+			if i == m.arrangeIdx {
+				prefix, choice = pkAccent.Render("▌ "), pkSelected.Render(choice)
+			}
+			lines = append(lines, prefix+choice)
+		}
+		return lines
+	}
+	if m.step == stepCommands {
+		lines := []string{"Commands after connect, one per line."}
+		start := max(0, len(m.commands)-max(0, h-3))
+		for _, command := range m.commands[start:] {
+			lines = append(lines, "  "+clipText(command, w-2))
+		}
+		return append(lines, "", pkAccent.Render("▸ ")+inputTail(string(m.input), w-2))
+	}
+	lines := m.stepLines(w)
+	if m.errMsg != "" {
+		lines = append([]string{pkErr.Render(clipText(m.errMsg, w)), ""}, lines...)
+	}
+	return lines
 }
 
 func (m addModel) stepTitle() string {
@@ -432,24 +584,38 @@ func (m addModel) stepTitle() string {
 	return ""
 }
 
-func (m addModel) stepFooter() string {
+func (m addModel) actionHints() []keyHint {
+	if m.cancelConfirm {
+		return []keyHint{{"d", "discard"}, {"Esc", "keep editing"}}
+	}
+	if m.help {
+		return []keyHint{{"Esc", "back"}, {"j/k", "scroll"}}
+	}
+	if m.focusList {
+		return []keyHint{{"Tab", "add session"}, {"j/k", "scroll"}, {"Esc", "add session"}}
+	}
 	switch m.step {
 	case stepName:
-		return "↵ next · esc quit"
+		return []keyHint{{"Enter", "next"}, {"Esc", "cancel"}}
 	case stepSync:
-		return "y/n toggle · ↵ next · esc back"
+		return []keyHint{{"Enter", "next"}, {"y/n", "toggle"}, {"Esc", "back"}, {"?", "help"}}
 	case stepArrange, stepConfirm:
-		return "↑↓ choose · ↵ confirm · esc back"
+		return []keyHint{{"Enter", "confirm"}, {"↑/↓", "choose"}, {"Esc", "back"}, {"?", "help"}}
 	case stepCommands:
-		return "↵ add line · empty ↵ done · esc back"
+		return []keyHint{{"Enter", "add line / finish"}, {"Bksp", "edit last line"}, {"Esc", "back"}}
 	default:
-		return "↵ next · esc back"
+		return []keyHint{{"Enter", "next"}, {"Esc", "back"}}
 	}
+}
+
+func (m addModel) helpActions() []keyHint {
+	m.help = false
+	return append(m.actionHints(), keyHint{"PgUp/PgDn", "scroll the YAML review"}, keyHint{"Ctrl+C", "cancel / discard decision"})
 }
 
 // stepLines renders the body of the current step.
 func (m addModel) stepLines(w int) []string {
-	prompt := pkAccent.Render("▸ ") + string(m.input) + pkAccent.Render("█")
+	prompt := pkAccent.Render("▸ ") + inputTail(string(m.input), w-2)
 	switch m.step {
 	case stepName:
 		return []string{pkDim.Render("Session name for the config."), "", prompt}
