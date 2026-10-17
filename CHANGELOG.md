@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-10-17
+
+### Added
+
+- Direct attachment with `mox <session>`, `mox attach <session>`, and
+  `mox a <session>`, including dry-run support. Existing `mox -a <session>`
+  attachment remains available.
+- Command aliases: `e` for edit, `k` and `rm` for kill, `l` for list,
+  `i` and `imp` for import, and `n` for new. Existing aliases remain available.
+
+### Changed
+
+- `mox new` can infer local session names from a directory or a sole name
+  supplied with `--root`. A sole configured session name expands its hosts;
+  use `--name` to preserve literal positional hosts.
+
 ### Fixed
 
 - Attachment with `-a` or `--attach` rejects extra positional arguments
