@@ -32,6 +32,8 @@ jobs:
     name: GoReleaser
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -177,3 +179,10 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/$RELEASE_VERSION.tar.gz" \
             --output source.tar.gz
           echo "MOX_SOURCE_SHA256 $(sha256sum source.tar.gz | cut -d' ' -f1)"
+
+  arch-packages:
+    needs: goreleaser
+    uses: ./.github/workflows/arch-packages.yml
+    with:
+      version: ${{ needs.goreleaser.outputs.version }}
+    secrets: inherit

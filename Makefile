@@ -3,7 +3,7 @@
 BINARY_NAME=mox
 BUILD_DIR=./build
 CMD_DIR=./cmd/mox
-VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION=$(shell git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo "dev")
 GIT_COMMIT=$(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE ?= $(shell date -u -d "@$${SOURCE_DATE_EPOCH:-$$(date -u +%s)}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS=-ldflags "-X github.com/bthall/mox/pkg/version.Version=$(VERSION) \
