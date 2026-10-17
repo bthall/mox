@@ -1,0 +1,26 @@
+name: Arch packaging CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  packaging:
+    name: Native Arch packaging and signatures
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install packaging tools
+        run: pacman -Syu --noconfirm --needed git python gnupg curl
+      - uses: actions/checkout@v7
+      - name: Install pinned nFPM
+        shell: bash
+        run: |
+          bash scripts/install-nfpm.sh "$RUNNER_TEMP/nfpm"
+          echo "$RUNNER_TEMP/nfpm" >> "$GITHUB_PATH"
+      - name: Package, verify signatures, and test publication guards
+        run: python -m unittest discover -s scripts -p test_arch_distribution.py

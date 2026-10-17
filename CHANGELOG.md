@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Native Arch Linux packages for x86_64 and aarch64 on GitHub Releases,
+  built from the verified release binaries, plus a signed pacman repository
+  independent of AUR registration.
+
 ## [0.8.0] — 2026-10-17
 
 ### Added

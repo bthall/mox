@@ -1,0 +1,152 @@
+name: Arch packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published stable release tag
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths: ['.github/arch-release-request.json']
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: arch-repository
+  cancel-in-progress: false
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+      signing: ${{ steps.signing.outputs.available }}
+    steps:
+      - name: Install packaging tools
+        run: pacman -Syu --noconfirm --needed git python github-cli curl
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Select published release
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$INPUT_VERSION
+          if [[ -z $version ]]; then
+            version=$(python -c 'import json; print(json.load(open(".github/arch-release-request.json"))["version"])')
+          fi
+          [[ $version =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$version" > "$RUNNER_TEMP/release.json"
+          python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert not r["draft"] and not r["prerelease"]' "$RUNNER_TEMP/release.json"
+          commit=$(git rev-parse "$version^{commit}")
+          git merge-base --is-ancestor "$commit" origin/main
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "epoch=$(git show -s --format=%ct "$commit")" >> "$GITHUB_OUTPUT"
+      - name: Install pinned nFPM
+        shell: bash
+        run: |
+          bash scripts/install-nfpm.sh "$RUNNER_TEMP/nfpm"
+          echo "$RUNNER_TEMP/nfpm" >> "$GITHUB_PATH"
+      - name: Download verified release inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/source"
+          gh release download "$VERSION" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/source" \
+            --pattern checksums.txt --pattern "mox_${VERSION#v}_linux_*.tar.gz"
+      - name: Build native Arch packages
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          EPOCH: ${{ steps.release.outputs.epoch }}
+        run: python scripts/arch_packages.py "$VERSION" "$RUNNER_TEMP/source" "$RUNNER_TEMP/packages" --epoch "$EPOCH"
+      - name: Publish immutable package assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: python scripts/arch_publish.py packages "$GITHUB_REPOSITORY" "$VERSION" "$RUNNER_TEMP/packages"
+      - name: Save packages for repository signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-packages
+          path: ${{ runner.temp }}/packages/
+          retention-days: 7
+      - name: Check signing configuration
+        id: signing
+        env:
+          SIGNING_KEY: ${{ secrets.ARCH_REPO_SIGNING_KEY }}
+        shell: bash
+        run: |
+          if [[ -n $SIGNING_KEY ]]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Arch packages are published. Signed repository publication requires ARCH_REPO_SIGNING_KEY; see docs/arch-linux.md.'
+          fi
+
+  repository:
+    needs: packages
+    if: needs.packages.outputs.signing == 'true'
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    timeout-minutes: 15
+    steps:
+      - name: Install repository tools
+        run: pacman -Syu --noconfirm --needed git python github-cli gnupg curl
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: arch-packages
+          path: ${{ runner.temp }}/packages
+      - name: Import dedicated signing key
+        env:
+          SIGNING_KEY: ${{ secrets.ARCH_REPO_SIGNING_KEY }}
+        shell: bash
+        run: |
+          key_home=$(mktemp -d "$RUNNER_TEMP/arch-signing.XXXXXX")
+          chmod 700 "$key_home"
+          echo "GNUPGHOME=$key_home" >> "$GITHUB_ENV"
+          printf '%s' "$SIGNING_KEY" | gpg --homedir "$key_home" --batch --import
+          fingerprint=$(cat packaging/arch/key-fingerprint.txt)
+          gpg --homedir "$key_home" --batch --list-secret-keys "$fingerprint" >/dev/null
+      - name: Download existing signed database
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.packages.outputs.version }}
+        run: python scripts/arch_publish.py previous "$GITHUB_REPOSITORY" "$VERSION" "$RUNNER_TEMP/previous"
+      - name: Sign packages and repository databases
+        shell: bash
+        run: |
+          python scripts/arch_repository.py "$RUNNER_TEMP/packages" "$RUNNER_TEMP/repository" \
+            "$(cat packaging/arch/key-fingerprint.txt)" --previous "$RUNNER_TEMP/previous"
+      - name: Publish signed repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.packages.outputs.version }}
+          COMMIT: ${{ needs.packages.outputs.commit }}
+        run: python scripts/arch_publish.py repository "$GITHUB_REPOSITORY" "$VERSION" "$RUNNER_TEMP/repository" --commit "$COMMIT"
+      - name: Remove runner signing material
+        if: always()
+        shell: bash
+        run: |
+          if [[ ${GNUPGHOME:-} == "$RUNNER_TEMP"/arch-signing.* ]]; then
+            gpgconf --kill gpg-agent || true
+            rm -rf -- "$GNUPGHOME"
+          fi

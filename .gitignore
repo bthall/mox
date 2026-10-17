@@ -40,3 +40,4 @@ docs/superpowers/
 
 # Generated design-review captures
 /.impeccable/review/
+__pycache__/

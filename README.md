@@ -73,6 +73,9 @@ cd packaging/aur && makepkg -si
 
 Pre-built archives for linux/macOS × amd64/arm64 are attached to each
 [release](https://github.com/bthall/mox/releases) with `checksums.txt`.
+Arch users can install native `.pkg.tar.zst` release packages with `pacman -U`
+or configure the [signed pacman repository](docs/arch-linux.md) for updates.
+Neither installation path requires an AUR account.
 
 ## Quick start
 

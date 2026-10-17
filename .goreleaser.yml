@@ -2,6 +2,11 @@ version: 2
 
 project_name: mox
 
+git:
+  ignore_tags:
+    - archlinux-x86_64
+    - archlinux-aarch64
+
 before:
   hooks:
     - go mod verify

@@ -79,6 +79,11 @@ After publishing, it downloads and checks all release archives, verifies the
 Linux binary's version and commit, and prints the source-archive SHA256. Use
 that hash to update `packaging/aur/PKGBUILD` after the tag exists.
 
+The release then calls the Arch packaging workflow. It packages the verified
+Linux binaries and publishes native packages on the same GitHub release.
+The signed pacman repository additionally requires `ARCH_REPO_SIGNING_KEY`;
+see [Arch distribution](docs/arch-linux.md) for setup and backfilling a release.
+
 ## Reporting security issues
 
 Please do **not** report security issues in public. See [SECURITY.md](./SECURITY.md).
