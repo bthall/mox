@@ -30,7 +30,7 @@ func TestInferAdHocName_ConfigSession(t *testing.T) {
 func TestInferAdHocName_Directory(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "my-project")
-	if err := os.Mkdir(projDir, 0o755); err != nil {
+	if err := os.Mkdir(projDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
