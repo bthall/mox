@@ -26,6 +26,7 @@ func newImportCommand() *cobra.Command {
 	o := &importOpts{}
 	cmd := &cobra.Command{
 		Use:     "import [tmux-session]",
+		Aliases: []string{"i", "imp"},
 		GroupID: groupSession,
 		Short:   "Capture a running tmux session into the config",
 		Long: `Inspect a running tmux session and add it to your mox config so it
@@ -43,7 +44,7 @@ Note: other per-pane shell commands cannot be recovered (an editor or REPL
 you started by typing is not reproducible), so those panes are
 structure-only. Add 'commands:' entries to make them fully reproducible.`,
 		Example: `  mox import work               under its tmux name
-  mox import                    the session you're inside
+  mox i                         the session you're inside
   mox import work -n my-work    rename on import
   mox import work -p            preview on stdout, don't save
   mox import work -F            overwrite an existing config entry`,

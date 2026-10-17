@@ -12,11 +12,13 @@ import (
 func newKillCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "kill <session>",
+		Aliases: []string{"k", "rm"},
 		GroupID: groupSession,
 		Short:   "Kill a running tmux session",
 		Long: `Destroy a tmux session by name. Works on any running tmux session,
 not just ones in the mox config.`,
 		Example: `  mox kill work
+  mox k work
   mox kill <TAB>    completes from running tmux sessions`,
 		Args: cobra.ExactArgs(1),
 		RunE: runKill,
