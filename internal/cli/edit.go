@@ -18,6 +18,7 @@ import (
 func newEditCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "edit [session]",
+		Aliases: []string{"e"},
 		GroupID: groupConfig,
 		Short:   "Edit the config in the full-screen editor (or $EDITOR)",
 		Long: `Open the full-screen session editor: navigate sessions and their fields,
@@ -30,7 +31,7 @@ config in $VISUAL (falling back to $EDITOR, then vi). Invalid configs and
 non-terminal invocations skip the editor and go straight to $EDITOR, which
 validates the file after the editor exits.`,
 		Example: `  mox edit               open the session editor
-  mox edit webfarm       open it with a session selected
+  mox e webfarm          open it with a session selected
   mox edit -c ~/other/config.yml`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeConfiguredSession,

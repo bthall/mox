@@ -81,10 +81,11 @@ mox init                        # scaffold a config at ~/.config/mox/config.yml
 mox add                         # interactively add a session to it
 mox edit                        # full-screen session editor
 mox edit example                # same, with a session pre-selected
-mox -a example                  # build + attach to the "example" session
+mox example                     # build + attach directly to "example" (or mox -a example / mox a example)
 mox                             # or open the session hub
 mox new @webfarm                # ad-hoc broadcast session on a cluster
-mox kill example                # destroy a running session
+mox new my-project              # quick ad-hoc session named "my-project"
+mox kill example                # destroy a running session (or mox k example)
 ```
 
 ## Documentation

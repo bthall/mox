@@ -16,15 +16,41 @@ func TestInferAdHocName_ConfigSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := inferAdHocName([]string{"@foo"}, cfgPath)
+	got := inferAdHocName([]string{"@foo"}, nil, cfgPath)
 	if got != "foo" {
 		t.Errorf("inferAdHocName(@foo) = %q, want %q", got, "foo")
+	}
+
+	gotUnprefixed := inferAdHocName([]string{"foo"}, nil, cfgPath)
+	if gotUnprefixed != "foo" {
+		t.Errorf("inferAdHocName(foo) = %q, want %q", gotUnprefixed, "foo")
+	}
+}
+
+func TestInferAdHocName_Directory(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "my-project")
+	if err := os.Mkdir(projDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	got := inferAdHocName([]string{projDir}, nil, "")
+	if got != "my-project" {
+		t.Errorf("inferAdHocName(%s) = %q, want %q", projDir, got, "my-project")
+	}
+}
+
+func TestInferAdHocName_WithRootFlag(t *testing.T) {
+	o := &newOpts{root: "~/my-root"}
+	got := inferAdHocName([]string{"custom-name"}, o, "")
+	if got != "custom-name" {
+		t.Errorf("inferAdHocName(custom-name with root) = %q, want %q", got, "custom-name")
 	}
 }
 
 func TestInferAdHocName_UnknownRefFallsBack(t *testing.T) {
 	// @unknown is not in any config — should fall back to tmp-<timestamp>
-	got := inferAdHocName([]string{"@unknown"}, "")
+	got := inferAdHocName([]string{"@unknown"}, nil, "")
 	if !strings.HasPrefix(got, "tmp-") {
 		t.Errorf("inferAdHocName(@unknown) = %q, want tmp- prefix", got)
 	}
@@ -38,14 +64,14 @@ func TestInferAdHocName_MultipleArgsFallBack(t *testing.T) {
 	}
 
 	// Multiple args: even if one is a config ref, don't infer a name.
-	got := inferAdHocName([]string{"@foo", "extra"}, cfgPath)
+	got := inferAdHocName([]string{"@foo", "extra"}, nil, cfgPath)
 	if !strings.HasPrefix(got, "tmp-") {
 		t.Errorf("inferAdHocName(@foo extra) = %q, want tmp- prefix", got)
 	}
 }
 
 func TestInferAdHocName_LiteralHostFallsBack(t *testing.T) {
-	got := inferAdHocName([]string{"host1", "host2"}, "")
+	got := inferAdHocName([]string{"host1", "host2"}, nil, "")
 	if !strings.HasPrefix(got, "tmp-") {
 		t.Errorf("inferAdHocName(host1 host2) = %q, want tmp- prefix", got)
 	}
@@ -60,7 +86,7 @@ func TestInferAdHocName_ClustersshOnlyFallsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := inferAdHocName([]string{"@notinconfig"}, cfgPath)
+	got := inferAdHocName([]string{"@notinconfig"}, nil, cfgPath)
 	if !strings.HasPrefix(got, "tmp-") {
 		t.Errorf("inferAdHocName(@notinconfig) = %q, want tmp- prefix", got)
 	}

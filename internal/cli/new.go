@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,7 +49,7 @@ func newNewCommand() *cobra.Command {
 	}
 	cmd := &cobra.Command{
 		Use:     "new [hosts...]",
-		Aliases: []string{"cssh"},
+		Aliases: []string{"n", "cssh"},
 		GroupID: groupSession,
 		Short:   "Create an ad-hoc session or window",
 		Long: `Create a tmux session (or window, with -w) from the command line.
@@ -65,16 +66,17 @@ file. Nested clusters are flattened.
 Use -f / --file to supply a full session body in YAML, or --from to clone
 an existing configured session and override its hosts.`,
 		Example: `  mox new                            quick local session
-  mox new -n work -r ~/proj          named local session in ~/proj
+  mox new my-project -r ~/proj       named local session in ~/proj
+  mox n my-dir                       named local session targeting ./my-dir
   mox new -s                         local session that drops to 'sudo -i'
   mox new -t                         local session, destroyed on detach
 
-  mox new @api-cluster                   cssh-style on a cluster
+  mox new @api-cluster               cssh-style on a cluster
   mox new host1 host2 host3          cssh-style on literal hosts
-  mox new -u root @monitoring    ssh as root
-  mox new @api-cluster -x api2           the cluster minus one host
-  mox new -S=false @api-cluster          no synchronize-panes
-  mox new -w @api-cluster                open as a window in current tmux
+  mox new -u root @monitoring        ssh as root
+  mox new @api-cluster -x api2       the cluster minus one host
+  mox new -S=false @api-cluster      no synchronize-panes
+  mox new -w @api-cluster            open as a window in current tmux
 
   mox new --from api-cluster extra-host  clone configured session, add a host
   echo 'hosts: [a, b]' | mox new -n tmp -f -
@@ -119,9 +121,32 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 		return err
 	}
 
+	cfg, _ := tryLoadConfig(gopts.configPath)
+
 	name := o.name
 	if name == "" {
-		name = inferAdHocName(args, gopts.configPath)
+		name = inferAdHocName(args, o, gopts.configPath)
+	}
+
+	// If a single positional arg matches a configured session name, treat it as a cluster ref (@name).
+	if len(args) == 1 && cfg != nil {
+		candidate := strings.TrimPrefix(args[0], clusterPrefix)
+		if _, ok := cfg.GetSession(candidate); ok {
+			args[0] = clusterPrefix + candidate
+		}
+	}
+
+	// If a single positional arg is a local directory or used as session name for a local session:
+	if len(args) == 1 && !strings.HasPrefix(args[0], clusterPrefix) && o.from == "" && o.file == "" {
+		raw := args[0]
+		if fi, err := os.Stat(raw); err == nil && fi.IsDir() {
+			if o.root == "" {
+				o.root = raw
+			}
+			args = nil
+		} else if o.root != "" {
+			args = nil
+		}
 	}
 
 	expanded, err := expandPositional(args, gopts.configPath)
@@ -171,14 +196,14 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Saved session %q -> %s\n", name, path)
 	}
 
-	cfg := &config.Config{Sessions: map[string]*config.Session{name: sess}}
+	cfgObj := &config.Config{Sessions: map[string]*config.Session{name: sess}}
 	var mgr *session.Manager
 	if o.print {
-		mgr = session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger,
+		mgr = session.NewManagerWith(cfgObj, tmux.NewDryRun(cmd.OutOrStdout()), logger,
 			session.WithHookRunner(printHookRunner(cmd)))
 	} else {
 		var err error
-		mgr, err = session.NewManager(cfg, logger)
+		mgr, err = session.NewManager(cfgObj, logger)
 		if err != nil {
 			return err
 		}
@@ -352,15 +377,25 @@ func defaultAdHocName() string {
 }
 
 // inferAdHocName returns the session name for an ad-hoc new command. If the
-// sole positional arg is @<name> and <name> is a configured mox session, that
-// name is used so that `mox new @foo` creates a session named "foo" rather
-// than a generated tmp- name. Falls back to defaultAdHocName otherwise.
-func inferAdHocName(args []string, configPath string) string {
-	if len(args) == 1 && strings.HasPrefix(args[0], clusterPrefix) {
-		candidate := strings.TrimPrefix(args[0], clusterPrefix)
+// sole positional arg is @<name> or <name> and <name> is a configured mox session, that
+// name is used so that `mox new @foo` or `mox new foo` creates a session named "foo".
+// If the positional arg is a local directory or root directory flag is set, it uses
+// that name. Falls back to defaultAdHocName otherwise.
+func inferAdHocName(args []string, o *newOpts, configPath string) string {
+	if len(args) == 1 {
+		raw := args[0]
+		candidate := strings.TrimPrefix(raw, clusterPrefix)
 		if cfg, _ := tryLoadConfig(configPath); cfg != nil {
 			if _, ok := cfg.GetSession(candidate); ok {
 				return candidate
+			}
+		}
+		if fi, err := os.Stat(raw); err == nil && fi.IsDir() {
+			return filepath.Base(raw)
+		}
+		if o != nil {
+			if o.root != "" || o.file != "" || o.from != "" {
+				return raw
 			}
 		}
 	}

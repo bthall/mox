@@ -25,7 +25,7 @@ const recentFooterLimit = 5
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
-		Aliases: []string{"ls"},
+		Aliases: []string{"ls", "l"},
 		GroupID: groupSession,
 		Short:   "List configured and running sessions",
 		Long: `List all sessions in a single table: those defined in the mox config

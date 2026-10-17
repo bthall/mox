@@ -4,20 +4,19 @@
 Session lifecycle:
   mox                   the session hub: browse, preview, and act on every
                         running/configured/recent session
-  mox -a <session>      attach to a configured session (builds it if not running)
-                        also attaches to any running tmux session by name
-  mox new [hosts...]    ad-hoc session or window (alias: cssh)
-  mox list | ls         list configured and running sessions
-  mox recent | r        sessions you recently created or attached to
+  mox [session]         attach directly to a session by name (or mox attach / mox a)
+  mox new [hosts...]    ad-hoc session or window (aliases: n, cssh)
+  mox list              list configured and running sessions (aliases: ls, l)
+  mox recent            sessions you recently created or attached to (alias: r)
   mox last              attach to the session you used before this one
-  mox kill <session>    destroy a running session
-  mox import [session]  capture a running tmux session into the config
+  mox kill <session>    destroy a running session (aliases: k, rm)
+  mox import [session]  capture a running tmux session into the config (aliases: i, imp)
                         (no argument: the session you're inside)
 
 Configuration:
   mox init              scaffold a default config
   mox add [name]        interactive wizard: build a session, save it to config
-  mox edit [session]    full-screen session editor (optionally pre-selected);
+  mox edit [session]    full-screen session editor (alias: e);
                         invalid configs and non-terminals fall back to $EDITOR
   mox validate          check config syntax
   mox config path       print resolved config path
@@ -72,7 +71,7 @@ piped and scripted invocations print help, so scripts never hang.
 
 ## The session editor
 
-`mox edit` (or `ctrl+e` in the hub) opens a full-screen editor:
+`mox edit` (or `mox e` / `ctrl+e` in the hub) opens a full-screen editor:
 configured sessions on the left, the selected session's fields on the
 right, with the focused field's documentation always visible. Name a
 session (`mox edit webfarm`) to open with it selected. A config the editor
@@ -201,7 +200,7 @@ mox kill <TAB>                  # running tmux sessions
 
 ## Behavior notes
 
-When `-a` attaches from **inside** an existing tmux client (`$TMUX` set),
+When `-a` or positional attachment attaches from **inside** an existing tmux client (`$TMUX` set),
 mox uses `switch-client` instead of `attach-session`, so nested-session
 errors are avoided automatically.
 

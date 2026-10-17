@@ -47,31 +47,27 @@ func NewRootCommand() *cobra.Command {
 	opts := &globalOpts{}
 
 	rootCmd := &cobra.Command{
-		Use:   "mox",
+		Use:   "mox [session]",
 		Short: "Declarative tmux session manager",
 		Long: `mox builds tmux sessions from a YAML config and attaches to them.
 A session can be a simple host list (one pane per host, optionally with
 synchronized typing and tiled layout) or a fully-specified set of windows
 and panes.`,
 		Example: `  mox                           pick a session from a list
-  mox -a api-cluster                attach to a configured session
+  mox api-cluster               attach to a configured or running session
+  mox attach api-cluster        attach via subcommand
   mox new                       quick local session
-  mox new @api-cluster              cssh-style multi-host session
+  mox new @api-cluster          cssh-style multi-host session
   mox new -u root host1 host2   ssh as a specific user
-  mox new -w @api-cluster           open as a window in the current tmux
+  mox new -w @api-cluster       open as a window in the current tmux
   mox list                      what's configured + running
   mox import work               capture a hand-rolled tmux session into config
   mox kill scratch              destroy a running session`,
-		Version:       version.String(),
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return nil
-			}
-			return fmt.Errorf("unexpected argument %q\n\nDid you mean: mox -a %s\n(Attaching to a configured session now requires the -a / --attach flag.)",
-				args[0], args[0])
-		},
+		Version:           version.String(),
+		SilenceUsage:      true,
+		SilenceErrors:     true,
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeSessionNamesOnly,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if ctx == nil {
@@ -86,7 +82,7 @@ and panes.`,
 	}
 
 	rootCmd.Flags().StringVarP(&opts.attach, "attach", "a", "", "attach to the named configured session")
-	rootCmd.Flags().BoolVar(&opts.print, "print", false, "print the tmux commands instead of executing them")
+	rootCmd.PersistentFlags().BoolVar(&opts.print, "print", false, "print the tmux commands instead of executing them")
 	rootCmd.PersistentFlags().StringVarP(&opts.configPath, "config", "c", "", "config file path (default: $XDG_CONFIG_HOME/mox/config.yml)")
 	rootCmd.PersistentFlags().BoolVar(&opts.force, "force", false, "force recreate existing sessions")
 	rootCmd.PersistentFlags().BoolVarP(&opts.verbose, "verbose", "v", false, "verbose (debug) logging to stderr")
@@ -103,6 +99,7 @@ and panes.`,
 		&cobra.Group{ID: groupConfig, Title: "Configuration:"},
 	)
 
+	rootCmd.AddCommand(newAttachCommand())
 	rootCmd.AddCommand(newInitCommand())
 	rootCmd.AddCommand(newListCommand())
 	rootCmd.AddCommand(newRecentCommand())
@@ -118,11 +115,33 @@ and panes.`,
 	return rootCmd
 }
 
+func newAttachCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "attach <session>",
+		Aliases: []string{"a"},
+		GroupID: groupSession,
+		Short:   "Attach to a configured or running session",
+		Long: `Attach to a session by name. If the session is defined in config but stopped,
+mox builds and starts it before attaching.`,
+		Example: `  mox attach work
+  mox a work`,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeSessionNamesOnly,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAttachTarget(cmd, args[0])
+		},
+	}
+}
+
 func runSession(cmd *cobra.Command, args []string) error {
 	opts := optsFromContext(cmd.Context())
-	logger := loggerFromContext(cmd.Context())
 
-	if opts.attach == "" {
+	target := opts.attach
+	if target == "" && len(args) == 1 {
+		target = args[0]
+	}
+
+	if target == "" {
 		// On a terminal, bare `mox` offers a session picker; anywhere else
 		// (pipes, scripts) it prints help like any other CLI.
 		if isTerminal(os.Stdin) && isTerminal(os.Stdout) {
@@ -130,6 +149,13 @@ func runSession(cmd *cobra.Command, args []string) error {
 		}
 		return cmd.Help()
 	}
+
+	return runAttachTarget(cmd, target)
+}
+
+func runAttachTarget(cmd *cobra.Command, target string) error {
+	opts := optsFromContext(cmd.Context())
+	logger := loggerFromContext(cmd.Context())
 
 	// Allow attach-to-unmanaged: a config is optional. If absent or invalid,
 	// the manager will still attach to a running tmux session by that name.
@@ -141,13 +167,13 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if opts.print {
 		mgr := session.NewManagerWith(cfg, tmux.NewDryRun(cmd.OutOrStdout()), logger,
 			session.WithHookRunner(printHookRunner(cmd)))
-		return mgr.CreateOrAttach(cmd.Context(), opts.attach, opts.force)
+		return mgr.CreateOrAttach(cmd.Context(), target, opts.force)
 	}
 	mgr, err := session.NewManager(cfg, logger)
 	if err != nil {
 		return err
 	}
-	return mgr.CreateOrAttach(cmd.Context(), opts.attach, opts.force)
+	return mgr.CreateOrAttach(cmd.Context(), target, opts.force)
 }
 
 // printHookRunner returns a hook runner for --print mode: hooks are shown
