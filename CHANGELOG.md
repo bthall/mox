@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Commands without dry-run support reject `--print` instead of executing
+  actions such as killing a session. Explicit and positional attachment
+  continue to support `--print`.
+- `mox new --name` preserves positional hosts even with `--root` or names
+  matching a local directory or configured session. Explicit `@cluster`
+  expansion still works.
+- `mox new .` and `mox new ..` infer the resolved directory's name instead
+  of rejecting a session name containing dots.
+- The README's named local session example now uses `mox new -n my-project`.
+
 ## [0.7.0] — 2026-10-14
 
 ### Changed

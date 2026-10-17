@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,92 @@ import (
 
 	"github.com/bthall/mox/internal/config"
 )
+
+func TestNewCommand_ExplicitNamePreservesHosts(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Mkdir("directory-host", 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("sessions:\n  configured-host:\n    hosts: [expanded-host]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		host string
+	}{
+		{"root flag", []string{"-r", dir, "root-host"}, "root-host"},
+		{"directory collision", []string{"directory-host"}, "directory-host"},
+		{"config collision", []string{"configured-host"}, "configured-host"},
+		{"explicit cluster", []string{"@configured-host"}, "expanded-host"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"-n", "scratch"}, tc.args...)
+			out := newCommandDryRun(t, cfgPath, args...)
+			if !strings.Contains(out, "new-session -d -s scratch ") || !strings.Contains(out, "ssh "+tc.host+";") {
+				t.Fatalf("expected SSH to %s in session scratch, got:\n%s", tc.host, out)
+			}
+			if tc.host != "expanded-host" && strings.Contains(out, "ssh expanded-host;") {
+				t.Fatalf("literal host was expanded as a cluster:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestNewCommand_LocalNameInference(t *testing.T) {
+	dir := t.TempDir()
+	project := filepath.Join(dir, "my-project")
+	if err := os.Mkdir(project, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+	cfgPath := filepath.Join(dir, "missing.yml")
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"current directory", []string{"."}, "my-project"},
+		{"parent directory", []string{".."}, filepath.Base(dir)},
+		{"absolute directory", []string{project}, "my-project"},
+		{"name with root", []string{"custom-name", "-r", project}, "custom-name"},
+		{"README named local session", []string{"-n", "my-project"}, "my-project"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := newCommandDryRun(t, cfgPath, tc.args...)
+			if !strings.Contains(out, "new-session -d -s "+tc.want+" ") || strings.Contains(out, "ssh ") {
+				t.Fatalf("expected local session %s, got:\n%s", tc.want, out)
+			}
+		})
+	}
+}
+
+func TestNewCommand_LiteralHost(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	out := newCommandDryRun(t, filepath.Join(dir, "missing.yml"), "server.example.test")
+	if !strings.Contains(out, "new-session -d -s tmp-") || !strings.Contains(out, "ssh server.example.test;") {
+		t.Fatalf("expected a literal SSH host with a generated name, got:\n%s", out)
+	}
+}
+
+func newCommandDryRun(t *testing.T, configPath string, args ...string) string {
+	t.Helper()
+	cmd := NewRootCommand()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs(append([]string{"-c", configPath, "new", "--print"}, args...))
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("mox new %v --print: %v; output:\n%s", args, err, buf)
+	}
+	return buf.String()
+}
 
 func TestInferAdHocName_ConfigSession(t *testing.T) {
 	dir := t.TempDir()

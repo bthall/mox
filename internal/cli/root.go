@@ -82,7 +82,7 @@ and panes.`,
 	}
 
 	rootCmd.Flags().StringVarP(&opts.attach, "attach", "a", "", "attach to the named configured session")
-	rootCmd.PersistentFlags().BoolVar(&opts.print, "print", false, "print the tmux commands instead of executing them")
+	rootCmd.Flags().BoolVar(&opts.print, "print", false, "print the tmux commands instead of executing them")
 	rootCmd.PersistentFlags().StringVarP(&opts.configPath, "config", "c", "", "config file path (default: $XDG_CONFIG_HOME/mox/config.yml)")
 	rootCmd.PersistentFlags().BoolVar(&opts.force, "force", false, "force recreate existing sessions")
 	rootCmd.PersistentFlags().BoolVarP(&opts.verbose, "verbose", "v", false, "verbose (debug) logging to stderr")
@@ -99,7 +99,7 @@ and panes.`,
 		&cobra.Group{ID: groupConfig, Title: "Configuration:"},
 	)
 
-	rootCmd.AddCommand(newAttachCommand())
+	rootCmd.AddCommand(newAttachCommand(opts))
 	rootCmd.AddCommand(newInitCommand())
 	rootCmd.AddCommand(newListCommand())
 	rootCmd.AddCommand(newRecentCommand())
@@ -115,8 +115,8 @@ and panes.`,
 	return rootCmd
 }
 
-func newAttachCommand() *cobra.Command {
-	return &cobra.Command{
+func newAttachCommand(opts *globalOpts) *cobra.Command {
+	cmd := &cobra.Command{
 		Use:     "attach <session>",
 		Aliases: []string{"a"},
 		GroupID: groupSession,
@@ -131,6 +131,8 @@ mox builds and starts it before attaching.`,
 			return runAttachTarget(cmd, args[0])
 		},
 	}
+	cmd.Flags().BoolVar(&opts.print, "print", false, "print the tmux commands instead of executing them")
+	return cmd
 }
 
 func runSession(cmd *cobra.Command, args []string) error {

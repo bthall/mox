@@ -117,6 +117,16 @@ returns one step, retaining entered values and command lines. At the name
 step or on `Ctrl+C`, a draft requires an explicit discard decision. YAML
 review keeps its save choices visible and scrolls with `PgUp`/`PgDn`.
 
+## Ad-hoc session names
+
+For a named local session, use `mox new -n my-project`. Without `-n`, a
+single existing directory (including `.` or `..`) opens a local session named
+after that directory; `mox new my-project -r ~/proj` names a local session in
+`~/proj`. Other bare arguments are hosts unless a sole argument matches a
+configured session, in which case its hosts are expanded. Use `-n` to name an
+SSH session explicitly and preserve literal hosts, including with `--root`;
+`@name` still expands a cluster when `-n` is supplied.
+
 ## Cluster expansion (`@name`)
 
 Anywhere `mox new` accepts a host, `@name` expands to a host list.
@@ -161,11 +171,15 @@ to a plain stack with a notice on stderr.
 
 ## Dry-run (`--print`)
 
-`mox new --print` and `mox -a <session> --print` emit shell-quoted tmux
-invocations without executing anything (tmux doesn't even need to be
-installed). A command containing a literal newline spans more than one
+`mox new --print`, `mox <session> --print`, `mox -a <session> --print`, and
+`mox attach <session> --print` emit shell-quoted tmux invocations without
+executing anything (tmux doesn't even need to be installed). A command
+containing a literal newline spans more than one
 display line. Hooks are printed rather than run, and nothing is recorded in
 the recents history.
+
+`mox import --print` previews captured YAML instead of saving it. Commands
+without a dry-run implementation, such as `kill`, reject `--print`.
 
 ## Global flags
 

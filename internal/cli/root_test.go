@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -50,10 +51,31 @@ func TestAttachSubcommand(t *testing.T) {
 			}
 
 			out := buf.String()
-			if out == "" {
-				t.Errorf("expected dry-run output for mox %s work --print, got empty", sub)
+			if !strings.Contains(out, "tmux attach-session -t =work") {
+				t.Errorf("expected dry-run attachment for mox %s work --print, got:\n%s", sub, out)
 			}
 		})
+	}
+}
+
+func TestRootCommand_PrintRejectsKill(t *testing.T) {
+	// If parsing regresses, no real tmux can be invoked by this test.
+	t.Setenv("PATH", t.TempDir())
+	cfgPath := filepath.Join(t.TempDir(), "missing.yml")
+	for _, sub := range []string{"kill", "k", "rm"} {
+		for _, args := range [][]string{{"--print", sub, "work"}, {sub, "work", "--print"}} {
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				cmd := NewRootCommand()
+				buf := new(bytes.Buffer)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs(append([]string{"-c", cfgPath}, args...))
+				err := cmd.Execute()
+				if err == nil || !strings.Contains(err.Error(), "unknown flag: --print") {
+					t.Fatalf("expected --print rejection before kill, got %v; output:\n%s", err, buf)
+				}
+			})
+		}
 	}
 }
 
