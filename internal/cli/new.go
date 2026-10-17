@@ -59,6 +59,11 @@ func newNewCommand() *cobra.Command {
                   synchronize-panes on, 'sudo -i' after connect). Override
                   with --sync=false, --arrange='', --sudo=false.
 
+Without --name, a sole directory argument opens a local session named after
+that directory. A sole argument with --root names a local session in that root.
+Use --name to keep positional arguments as hosts, even if they match a local
+directory or configured session. Use @name for explicit cluster expansion.
+
 Cluster expansion: any positional starting with '@' is expanded — first
 against the mox config (session hosts), then the clusterssh 'clusters'
 file. Nested clusters are flattened.
@@ -128,8 +133,8 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 		name = inferAdHocName(args, o, gopts.configPath)
 	}
 
-	// If a single positional arg matches a configured session name, treat it as a cluster ref (@name).
-	if len(args) == 1 && cfg != nil {
+	// Infer shorthand only when --name has not already made the positional a host.
+	if o.name == "" && len(args) == 1 && cfg != nil {
 		candidate := strings.TrimPrefix(args[0], clusterPrefix)
 		if _, ok := cfg.GetSession(candidate); ok {
 			args[0] = clusterPrefix + candidate
@@ -137,7 +142,7 @@ func runNew(cmd *cobra.Command, args []string, o *newOpts) error {
 	}
 
 	// If a single positional arg is a local directory or used as session name for a local session:
-	if len(args) == 1 && !strings.HasPrefix(args[0], clusterPrefix) && o.from == "" && o.file == "" {
+	if o.name == "" && len(args) == 1 && !strings.HasPrefix(args[0], clusterPrefix) && o.from == "" && o.file == "" {
 		raw := args[0]
 		if fi, err := os.Stat(raw); err == nil && fi.IsDir() {
 			if o.root == "" {
@@ -391,7 +396,9 @@ func inferAdHocName(args []string, o *newOpts, configPath string) string {
 			}
 		}
 		if fi, err := os.Stat(raw); err == nil && fi.IsDir() {
-			return filepath.Base(raw)
+			if absolute, err := filepath.Abs(raw); err == nil {
+				return filepath.Base(absolute)
+			}
 		}
 		if o != nil {
 			if o.root != "" || o.file != "" || o.from != "" {

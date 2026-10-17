@@ -84,7 +84,7 @@ mox edit example                # same, with a session pre-selected
 mox example                     # build + attach directly to "example" (or mox -a example / mox a example)
 mox                             # or open the session hub
 mox new @webfarm                # ad-hoc broadcast session on a cluster
-mox new my-project              # quick ad-hoc session named "my-project"
+mox new -n my-project           # quick local session named "my-project"
 mox kill example                # destroy a running session (or mox k example)
 ```
 
