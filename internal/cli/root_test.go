@@ -31,6 +31,56 @@ func TestRootCommand_PositionalAttach(t *testing.T) {
 	}
 }
 
+func TestRootCommand_AttachRejectsPositionalArguments(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("sessions:\n  deploy:\n    hosts: [web.example.test]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"-a", "deploy", "env=staging"},
+		{"--attach", "deploy", "env=staging"},
+		{"-a", "deploy", "other-session"},
+		{"deploy", "--attach", "other-session"},
+		{"--attach=", "deploy"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			cmd := NewRootCommand()
+			out := new(bytes.Buffer)
+			cmd.SetOut(out)
+			cmd.SetErr(new(bytes.Buffer))
+			cmd.SetArgs(append([]string{"-c", cfgPath, "--print"}, args...))
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), "cannot combine --attach") {
+				t.Fatalf("expected conflicting attachment arguments to be rejected, got %v", err)
+			}
+			if out.Len() != 0 {
+				t.Fatalf("attachment ran before argument validation:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestRootCommand_AttachFlag(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("sessions:\n  work:\n    hosts: [web.example.test]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, flag := range []string{"-a", "--attach"} {
+		t.Run(flag, func(t *testing.T) {
+			cmd := NewRootCommand()
+			out := new(bytes.Buffer)
+			cmd.SetOut(out)
+			cmd.SetArgs([]string{"-c", cfgPath, "--print", flag, "work"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out.String(), "tmux attach-session -t =work") {
+				t.Fatalf("expected dry-run attachment, got:\n%s", out)
+			}
+		})
+	}
+}
+
 func TestAttachSubcommand(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yml")

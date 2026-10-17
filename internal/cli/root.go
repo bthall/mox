@@ -63,10 +63,18 @@ and panes.`,
   mox list                      what's configured + running
   mox import work               capture a hand-rolled tmux session into config
   mox kill scratch              destroy a running session`,
-		Version:           version.String(),
-		SilenceUsage:      true,
-		SilenceErrors:     true,
-		Args:              cobra.MaximumNArgs(1),
+		Version:       version.String(),
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.MaximumNArgs(1)(cmd, args); err != nil {
+				return err
+			}
+			if cmd.Flags().Changed("attach") && len(args) > 0 {
+				return fmt.Errorf("cannot combine --attach with positional argument %q; use either --attach <session> or mox <session>", args[0])
+			}
+			return nil
+		},
 		ValidArgsFunction: completeSessionNamesOnly,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Attachment with `-a` or `--attach` rejects extra positional arguments
+  instead of silently ignoring them, including unsupported variable overrides.
 - Commands without dry-run support reject `--print` instead of executing
   actions such as killing a session. Explicit and positional attachment
   continue to support `--print`.
