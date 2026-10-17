@@ -68,8 +68,18 @@ are separate from the latest application release.
 The dedicated key's public half and fingerprint are checked in under
 `packaging/arch/`. Its private half is kept outside the checkout.
 
-`bash scripts/setup-arch-signing.sh` prepares an isolated key directory at
-`${XDG_DATA_HOME:-$HOME/.local/share}/mox-arch-signing` and prints a command
+On a new machine, restore the existing private-key backup into the isolated
+key directory first:
+
+```sh
+mkdir -p "$HOME/.local/share/mox-arch-signing/gnupg"
+chmod 700 "$HOME/.local/share/mox-arch-signing" "$HOME/.local/share/mox-arch-signing/gnupg"
+gpg --homedir "$HOME/.local/share/mox-arch-signing/gnupg" \
+  --import /path/to/backup/signing-key.asc
+```
+
+`bash scripts/setup-arch-signing.sh` validates that the restored secret key
+matches the checked-in fingerprint, exports it locally, and prints a command
 to set `ARCH_REPO_SIGNING_KEY` as a GitHub Actions repository secret:
 
 ```sh
@@ -79,9 +89,9 @@ gh secret set ARCH_REPO_SIGNING_KEY --repo bthall/mox \
 
 The GitHub settings interface can also set the secret. Its value is the full
 ASCII-armored private key. Keep the private key and revocation certificate
-backed up outside Git. Restore the existing key directory on another machine;
-generating a replacement key requires a deliberate public-key update and
-client key rotation. The workflow requires the checked-in fingerprint.
+backed up outside Git. The setup script refuses to generate a replacement key.
+Key rotation requires a deliberate public-key update and client key rotation.
+The workflow requires the checked-in fingerprint.
 
 The normal Release workflow calls **Arch packages** after archive verification.
 It verifies the existing release checksums, wraps the Linux binaries with

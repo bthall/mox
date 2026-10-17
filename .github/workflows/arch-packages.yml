@@ -46,6 +46,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # Checkout's temporary Git config does not persist in this container.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           version=$INPUT_VERSION
           if [[ -z $version ]]; then
             version=$(python -c 'import json; print(json.load(open(".github/arch-release-request.json"))["version"])')

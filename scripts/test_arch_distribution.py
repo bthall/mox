@@ -156,6 +156,44 @@ class DistributionTest(unittest.TestCase):
                 arch_publish.immutable("fixture/repo", "v0.8.0", path, [{"name": path.name, "digest": "sha256:wrong"}])
             gh.assert_not_called()
 
+    def test_signing_setup_requires_the_committed_key(self):
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            script = root / "scripts" / "setup-arch-signing.sh"
+            script.parent.mkdir()
+            shutil.copyfile(Path(__file__).with_name(script.name), script)
+            fingerprint_file = root / "packaging" / "arch" / "key-fingerprint.txt"
+            fingerprint_file.parent.mkdir(parents=True)
+            fingerprint_file.write_text(self.fingerprint + "\n")
+            state = root / "state"
+
+            def setup():
+                return subprocess.run(["bash", str(script), str(state)], capture_output=True, text=True)
+
+            self.assertNotEqual(setup().returncode, 0)
+            self.assertFalse((state / "signing-key.asc").exists())
+            keys = subprocess.check_output(["gpg", "--homedir", str(state / "gnupg"), "--batch",
+                                            "--with-colons", "--list-secret-keys"], text=True)
+            self.assertNotIn("sec:", keys)
+            backup = subprocess.check_output(["gpg", "--batch", "--export-secret-keys", self.fingerprint])
+            subprocess.run(["gpg", "--homedir", str(state / "gnupg"), "--batch", "--import"],
+                           input=backup, check=True, capture_output=True)
+            try:
+                # A restored but unrelated key must not be exported for Actions.
+                fingerprint_file.write_text("A" * 40 + "\n")
+                result = setup()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Restore signing key", result.stderr)
+                self.assertFalse((state / "signing-key.asc").exists())
+                fingerprint_file.write_text(self.fingerprint + "\n")
+                result = setup()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((state / "fingerprint").read_text().strip(), self.fingerprint)
+                self.assertIn("BEGIN PGP PRIVATE KEY BLOCK", (state / "signing-key.asc").read_text())
+                self.assertEqual((state / "signing-key.asc").stat().st_mode & 0o777, 0o600)
+            finally:
+                subprocess.run(["gpgconf", "--homedir", str(state / "gnupg"), "--kill", "gpg-agent"], check=True)
+
 
 if __name__ == "__main__":
     unittest.main()
