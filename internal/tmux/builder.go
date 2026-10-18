@@ -297,6 +297,9 @@ func (b *Builder) buildHostPanes(ctx context.Context, winID string, hosts []stri
 // for Enter before the pane closes — the pane never drops back to a local
 // shell, which in a sync window would silently receive broadcast keystrokes.
 // host is already validated against the safe-hostname pattern.
+// Note: host is passed as a format argument (%s) to printf rather than
+// interpolated directly in the format string to prevent format string vulnerabilities
+// if host contains '%' (e.g. IPv6 zone ID like fe80::1%eth0).
 func wrapConnect(connectCmd, host string, hold bool, retry int) string {
 	cmd := connectCmd
 	if retry > 0 {
@@ -305,12 +308,12 @@ func wrapConnect(connectCmd, host string, hold bool, retry int) string {
 			attempts = append(attempts, fmt.Sprintf("%d", i))
 		}
 		cmd = fmt.Sprintf(
-			"for _mox_try in %s; do %s && break; printf '[mox] %s: connection failed (attempt %%s)\\n' \"$_mox_try\"; sleep 3; done",
+			"for _mox_try in %s; do %s && break; printf '[mox] %%s: connection failed (attempt %%s)\\n' %s \"$_mox_try\"; sleep 3; done",
 			strings.Join(attempts, " "), connectCmd, host)
 	}
 	if hold {
 		cmd += fmt.Sprintf(
-			"; printf '\\n[mox] %s: connection ended. Press Enter to close this pane.\\n'; read -r _mox_ack; exit",
+			"; printf '\\n[mox] %%s: connection ended. Press Enter to close this pane.\\n' %s; read -r _mox_ack; exit",
 			host)
 	}
 	return cmd
