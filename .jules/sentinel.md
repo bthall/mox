@@ -1,0 +1,4 @@
+## 2026-10-18 - Shell Printf Format String Vulnerability in Host Wrapping
+**Vulnerability:** Shell `printf` commands generated for SSH pane holding/retrying embedded hostnames directly into the format string (`printf '[mox] %s: ...'`), which caused format specifiers (like `%` in IPv6 link-local scope IDs `fe80::1%eth0`) to be evaluated as printf format specifiers rather than literal characters.
+**Learning:** Even when input values like hostnames pass strict validation, direct interpolation into shell `printf` format string templates can trigger format specifier expansion errors or unexpected output formatting.
+**Prevention:** Pass variable parameters as distinct positional arguments (`printf '... %s ...' "$var"`) to shell `printf` instead of interpolating them directly into the format template string.

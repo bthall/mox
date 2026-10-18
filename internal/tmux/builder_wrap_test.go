@@ -37,6 +37,21 @@ func TestWrapConnect_Disabled(t *testing.T) {
 	}
 }
 
+func TestWrapConnect_PercentInHost(t *testing.T) {
+	host := "fe80::1%eth0"
+	gotHold := wrapConnect("ssh "+host, host, true, 0)
+	wantHold := "printf '\\n[mox] %s: connection ended. Press Enter to close this pane.\\n' fe80::1%eth0"
+	if !strings.Contains(gotHold, wantHold) {
+		t.Errorf("expected hold string containing %q, got %q", wantHold, gotHold)
+	}
+
+	gotRetry := wrapConnect("ssh "+host, host, false, 1)
+	wantRetry := "printf '[mox] %s: connection failed (attempt %s)\\n' fe80::1%eth0 \"$_mox_try\""
+	if !strings.Contains(gotRetry, wantRetry) {
+		t.Errorf("expected retry string containing %q, got %q", wantRetry, gotRetry)
+	}
+}
+
 func TestPrependCmds(t *testing.T) {
 	got := prependCmds([]string{"a", "b"}, []string{"c"})
 	if len(got) != 3 || got[0] != "a" || got[2] != "c" {
