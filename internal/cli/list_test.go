@@ -85,6 +85,9 @@ func TestRenderList_Empty(t *testing.T) {
 	if !strings.Contains(out, "No sessions configured or running.") {
 		t.Errorf("missing empty notice:\n%s", out)
 	}
+	if !strings.Contains(out, "Try 'mox init' to create a config, or 'mox new' for an ad-hoc session.") {
+		t.Errorf("missing empty guidance:\n%s", out)
+	}
 	if !strings.Contains(out, "Recent: (none)") {
 		t.Errorf("missing empty recent footer:\n%s", out)
 	}

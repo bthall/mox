@@ -73,6 +73,7 @@ func renderList(out io.Writer, infos []session.SessionInfo, recent []history.Ent
 
 	if len(ordered) == 0 {
 		fmt.Fprintln(out, "No sessions configured or running.")
+		fmt.Fprintln(out, "Try 'mox init' to create a config, or 'mox new' for an ad-hoc session.")
 	} else {
 		rows := [][]string{{"NAME", "ORIGIN", "STATE", "WIN", "ACTIVITY", "HOSTS"}}
 		for _, s := range ordered {
