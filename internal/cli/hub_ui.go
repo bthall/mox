@@ -88,18 +88,24 @@ var sgrRe = regexp.MustCompile("\x1b\\[[0-9;:]*m")
 // control character is dropped.
 func sanitizeCaptureLine(s string) string {
 	var b strings.Builder
+	// Optimization: preallocate builder memory based on string length to minimize reallocations.
+	b.Grow(len(s))
 	col := 0
 	for len(s) > 0 {
-		if loc := sgrRe.FindStringIndex(s); loc != nil && loc[0] == 0 {
-			b.WriteString(s[:loc[1]])
-			s = s[loc[1]:]
-			continue
+		// Optimization: fast-path check for ANSI ESC sequence prefix '\x1b[' before running regex search.
+		if strings.HasPrefix(s, "\x1b[") {
+			if loc := sgrRe.FindStringIndex(s); loc != nil && loc[0] == 0 {
+				b.WriteString(s[:loc[1]])
+				s = s[loc[1]:]
+				continue
+			}
 		}
 		r, size := utf8.DecodeRuneInString(s)
 		switch {
 		case r == '\t':
 			n := 8 - col%8
-			b.WriteString(strings.Repeat(" ", n))
+			// Optimization: avoid strings.Repeat heap allocation by slicing a constant padding string.
+			b.WriteString("        "[:n])
 			col += n
 		case r < 0x20 || r == 0x7f: // stray ESC / CR / BS etc.
 			// dropped
