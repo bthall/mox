@@ -91,6 +91,12 @@ func (s *Session) Validate(name string) error {
 	if err := validateRetry(s.Retry); err != nil {
 		return err
 	}
+	if err := validateHooks(s.OnStart, "on_start"); err != nil {
+		return err
+	}
+	if err := validateHooks(s.OnStop, "on_stop"); err != nil {
+		return err
+	}
 
 	hasHosts := len(s.Hosts) > 0
 	hasWindows := len(s.Windows) > 0
@@ -129,6 +135,17 @@ func (s *Session) Validate(name string) error {
 func validateRetry(n int) error {
 	if n < 0 || n > 10 {
 		return fmt.Errorf("retry must be between 0 and 10, got %d", n)
+	}
+	return nil
+}
+
+// validateHooks ensures hook commands do not contain newlines or null bytes
+// that could lead to command injection when executed via shell.
+func validateHooks(hooks []string, field string) error {
+	for i, hook := range hooks {
+		if strings.ContainsAny(hook, "\r\n\x00") {
+			return fmt.Errorf("%s[%d] contains forbidden control characters or newline", field, i)
+		}
 	}
 	return nil
 }

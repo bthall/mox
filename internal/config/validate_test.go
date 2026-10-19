@@ -86,6 +86,27 @@ func TestSessionValidate(t *testing.T) {
 			key:     "x",
 			session: &Session{Windows: []*Window{{Name: "claude", Hosts: []string{"h"}}, {Name: "claude", Hosts: []string{"h"}}}},
 		},
+		{
+			name:      "on_start hook with newline",
+			key:       "x",
+			session:   &Session{OnStart: []string{"echo 1\necho 2"}},
+			wantErr:   true,
+			errSubstr: "on_start[0] contains forbidden control characters or newline",
+		},
+		{
+			name:      "on_stop hook with carriage return",
+			key:       "x",
+			session:   &Session{OnStop: []string{"echo 1\r"}},
+			wantErr:   true,
+			errSubstr: "on_stop[0] contains forbidden control characters or newline",
+		},
+		{
+			name:      "on_start hook with null byte",
+			key:       "x",
+			session:   &Session{OnStart: []string{"echo \x00 test"}},
+			wantErr:   true,
+			errSubstr: "on_start[0] contains forbidden control characters or newline",
+		},
 	}
 
 	for _, tt := range tests {
