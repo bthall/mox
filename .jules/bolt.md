@@ -1,3 +1,7 @@
 ## 2025-03-09 - Fast-path prefix check & allocation elimination in buffer line sanitizer
 **Learning:** In terminal buffer capture pipelines (e.g. `capture-pane`), lines are repeatedly sanitized every tick/render. Calling `regexp.FindStringIndex` on every rune iteration creates massive overhead (~10µs/line). Checking `strings.HasPrefix(s, "\x1b[")` before regex matching and slicing a constant `"        "[:n]` instead of `strings.Repeat` reduced per-line processing time by ~70% (10µs -> 3µs) and cut allocations significantly (708 B/op -> 362 B/op).
 **Action:** When inspecting string processing in frequent TUI tick/render routines, add fast-path prefix/substring checks before regular expressions and replace repeated string construction with constant string slicing.
+
+## 2025-03-10 - Fast-path ANSI check and cell width caching in CLI table layout
+**Learning:** `renderTable` calculated `visibleWidth` twice for every cell (width calculation + row rendering), executing regex replacements on every string. Checking `!strings.Contains(s, "\x1b")` before regex replacement eliminated regex execution and heap allocations for uncolored strings (35.7ns vs 262.8ns, 0 B vs 80 B). Pre-calculating visible widths into a flat slice and slicing constant spaces for padding reduced `renderTable` execution time by ~62% (14.0µs -> 5.2µs) and allocations by ~74% (132 -> 34 allocs).
+**Action:** Fast-path string operations without ANSI codes with `strings.Contains(s, "\x1b")` and cache cell layout metadata when performing multi-pass text formatting.

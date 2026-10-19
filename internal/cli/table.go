@@ -13,9 +13,26 @@ import (
 // understand these sequences, so we lay out columns ourselves.
 var ansiRE = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
+const spaces = "                                                                                                " // 96 spaces
+
+func writePadding(b *strings.Builder, n int) {
+	for n > len(spaces) {
+		b.WriteString(spaces)
+		n -= len(spaces)
+	}
+	if n > 0 {
+		b.WriteString(spaces[:n])
+	}
+}
+
 // visibleWidth returns the number of visible runes in s, ignoring any ANSI
 // color escape sequences it contains.
 func visibleWidth(s string) int {
+	// Optimization: fast path when string contains no ANSI escape sequences,
+	// avoiding regexp string replacement and heap allocation.
+	if !strings.Contains(s, "\x1b") {
+		return utf8.RuneCountInString(s)
+	}
 	return utf8.RuneCountInString(ansiRE.ReplaceAllString(s, ""))
 }
 
@@ -34,19 +51,29 @@ func renderTable(out io.Writer, rows [][]string) {
 		}
 	}
 	widths := make([]int, cols)
-	for _, r := range rows {
+	// Optimization: precompute visible widths in a single contiguous slice to
+	// avoid redundant visibleWidth calculation, regex executions, and per-row
+	// slice allocations.
+	cellWidths := make([]int, len(rows)*cols)
+	for rIdx, r := range rows {
+		rowOffset := rIdx * cols
 		for i, c := range r {
-			if w := visibleWidth(c); w > widths[i] {
+			w := visibleWidth(c)
+			cellWidths[rowOffset+i] = w
+			if w > widths[i] {
 				widths[i] = w
 			}
 		}
 	}
-	for _, r := range rows {
+	for rIdx, r := range rows {
+		rowOffset := rIdx * cols
 		var b strings.Builder
 		for i, c := range r {
 			b.WriteString(c)
 			if i < len(r)-1 {
-				b.WriteString(strings.Repeat(" ", widths[i]-visibleWidth(c)+2))
+				pad := widths[i] - cellWidths[rowOffset+i] + 2
+				// Optimization: slice a constant spaces string to avoid heap allocations from strings.Repeat.
+				writePadding(&b, pad)
 			}
 		}
 		fmt.Fprintln(out, strings.TrimRight(b.String(), " "))
