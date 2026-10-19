@@ -7,11 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-19
+
 ### Added
 
 - Native Arch Linux packages for x86_64 and aarch64 on GitHub Releases,
   built from the verified release binaries, plus a signed pacman repository
   independent of AUR registration.
+- Confirmation dialogs accept `n` and `N` to cancel killing a session,
+  deleting a session, or discarding an add-wizard draft. Kill and delete
+  confirmations also accept uppercase `Y`.
+
+### Changed
+
+- `mox list` suggests `mox init` and `mox new` when no sessions are
+  configured or running. The editor explains when a filter has no matches
+  and how to clear the search.
+- Session preview sanitization and table rendering avoid redundant ANSI
+  scans and temporary allocations.
+
+### Fixed
+
+- Connection retry and hold messages pass hostnames as `printf` arguments,
+  so percent signs in hosts such as IPv6 zone identifiers are displayed
+  literally instead of interpreted as format specifiers.
+- Arch packaging restores the expected signing key and trusts the
+  container checkout before inspecting release tags.
 
 ## [0.8.0] — 2026-10-17
 
