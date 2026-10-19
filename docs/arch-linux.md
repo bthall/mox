@@ -14,7 +14,7 @@ install it from the download directory:
 
 ```sh
 sha256sum --check --ignore-missing arch-checksums.txt
-sudo pacman -U ./mox-tmux-0.8.0-1-x86_64.pkg.tar.zst
+sudo pacman -U ./mox-tmux-0.9.0-1-x86_64.pkg.tar.zst
 ```
 
 Use the actual downloaded version and architecture in the filename.
@@ -108,7 +108,7 @@ To backfill a published stable release, run **Arch packages** with its version,
 or commit `.github/arch-release-request.json` on main:
 
 ```json
-{"version": "v0.8.0"}
+{"version": "v0.9.0"}
 ```
 
 The workflow never moves the application's release tag or rebuilds its binaries.
