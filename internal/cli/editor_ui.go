@@ -713,11 +713,11 @@ func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m.quit()
 	}
-	if msg.Type == tea.KeyEsc {
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
 		m.mode = modeBrowse
 		return m, nil
 	}
-	if string(msg.Runes) == "y" || msg.Type == tea.KeyEnter {
+	if string(msg.Runes) == "y" || string(msg.Runes) == "Y" || msg.Type == tea.KeyEnter {
 		if m.draft.added {
 			m.draft = nil
 			m.refilter()
@@ -1464,6 +1464,9 @@ func (m editorModel) rightLines(w, h int) []string {
 // formLines renders the field rows plus the focused field's help text.
 func (m editorModel) formLines(w, h int) []string {
 	if m.draft == nil {
+		if len(m.filter) > 0 || m.mode == modeFilter {
+			return []string{pkDim.Render("No session matches the filter."), pkDim.Render("Press Esc to clear the search.")}
+		}
 		return []string{pkDim.Render("no sessions — press a to add one")}
 	}
 	var lines []string

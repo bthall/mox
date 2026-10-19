@@ -282,6 +282,15 @@ func TestHubKillConfirmFlow(t *testing.T) {
 	if m2.mode != hubBrowse || len(mgr.killed) != 0 {
 		t.Fatal("esc did not cancel the kill")
 	}
+	// n or N also cancels
+	m2n, _ := hubRunes(t, m, "n")
+	if m2n.mode != hubBrowse || len(mgr.killed) != 0 {
+		t.Fatal("n did not cancel the kill")
+	}
+	m2N, _ := hubRunes(t, m, "N")
+	if m2N.mode != hubBrowse || len(mgr.killed) != 0 {
+		t.Fatal("N did not cancel the kill")
+	}
 	// y confirms
 	m, cmd := hubRunes(t, m, "y")
 	if m.pending == "" {

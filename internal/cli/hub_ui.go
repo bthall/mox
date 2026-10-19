@@ -530,11 +530,11 @@ func (m hubModel) updateConfirmKill(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m.quit()
 	}
-	if msg.Type == tea.KeyEsc {
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
 		m.mode = hubBrowse
 		return m, nil
 	}
-	if string(msg.Runes) == "y" || msg.Type == tea.KeyEnter {
+	if string(msg.Runes) == "y" || string(msg.Runes) == "Y" || msg.Type == tea.KeyEnter {
 		c, ok := m.selected()
 		m.mode = hubBrowse
 		if !ok {
