@@ -119,7 +119,7 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.cancelConfirm {
-			if msg.Type == tea.KeyEsc {
+			if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
 				m.cancelConfirm = false
 			} else if string(msg.Runes) == "d" {
 				m.done = addResult{action: addActionCancel}

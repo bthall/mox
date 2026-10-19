@@ -166,6 +166,10 @@ func TestEditorEmptyFilterAndNavGuards(t *testing.T) {
 	if len(m.visible) != 0 {
 		t.Fatalf("visible = %v, want none", m.visible)
 	}
+	view := m.View()
+	if !strings.Contains(view, "No session matches the filter") {
+		t.Fatalf("empty filter should state 'No session matches the filter', got:\n%s", view)
+	}
 	m = edType(t, m, tea.KeyEnter) // back to browse with empty filter result
 	m = edRunes(t, m, "j")         // must not panic
 	m = edRunes(t, m, "k")
@@ -532,6 +536,11 @@ func TestEditorDelete(t *testing.T) {
 	m = edRunes(t, m, "D")
 	if m.mode != modeConfirmDelete {
 		t.Fatal("D did not ask for confirmation")
+	}
+	// n or N cancels
+	mn := edRunes(t, m, "n")
+	if mn.mode != modeBrowse || (mn.draft != nil && mn.draft.deleted) {
+		t.Fatal("n did not cancel delete confirmation")
 	}
 	m = edRunes(t, m, "y")
 	if m.mode != modeBrowse || !m.draft.deleted {
