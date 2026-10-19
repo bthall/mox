@@ -1,7 +1,7 @@
 # Maintainer: Brandon Hall <brandon@brandonhall.us>
 pkgname=mox-tmux
 _upstream=mox
-pkgver=0.8.0
+pkgver=0.9.0
 pkgrel=1
 pkgdesc='CLI for creating and managing tmux sessions declaratively from YAML config'
 arch=('x86_64' 'aarch64')
@@ -10,7 +10,7 @@ license=('MIT')
 depends=('tmux')
 makedepends=('go')
 source=("$_upstream-$pkgver.tar.gz::https://github.com/bthall/mox/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('aaac97c1ce998770c1e89875e5f1f13bfc49296d3a78a48defd299b07c5c65b5')
+sha256sums=('2317ebc02e04519d09887799ffec3a0fd2234e783ee62e527a3b191cb96c6a1c')
 
 build() {
     cd "$_upstream-$pkgver"
