@@ -8,9 +8,10 @@ import (
 )
 
 // reservedNameChars are characters that are special in tmux's target syntax
-// (`session:window.pane`) or that produce surprising shell behavior. Names
-// containing any of these are rejected at validation time.
-const reservedNameChars = ":.$ \t\r\n"
+// (`session:window.pane`), serve as tmux command separators (`;`), or produce
+// surprising shell behavior. Names containing any of these are rejected at
+// validation time to prevent command injection or syntax errors in hooks.
+const reservedNameChars = ":.$; \t\r\n"
 
 // hostRe matches strings safe to interpolate into the default `ssh {{host}}`
 // command without shell escaping. Allows letters, digits, dot, underscore,

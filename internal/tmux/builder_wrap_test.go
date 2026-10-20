@@ -40,15 +40,24 @@ func TestWrapConnect_Disabled(t *testing.T) {
 func TestWrapConnect_PercentInHost(t *testing.T) {
 	host := "fe80::1%eth0"
 	gotHold := wrapConnect("ssh "+host, host, true, 0)
-	wantHold := "printf '\\n[mox] %s: connection ended. Press Enter to close this pane.\\n' fe80::1%eth0"
+	wantHold := "printf -- '\\n[mox] %s: connection ended. Press Enter to close this pane.\\n' \"fe80::1%eth0\""
 	if !strings.Contains(gotHold, wantHold) {
 		t.Errorf("expected hold string containing %q, got %q", wantHold, gotHold)
 	}
 
 	gotRetry := wrapConnect("ssh "+host, host, false, 1)
-	wantRetry := "printf '[mox] %s: connection failed (attempt %s)\\n' fe80::1%eth0 \"$_mox_try\""
+	wantRetry := "printf -- '[mox] %s: connection failed (attempt %s)\\n' \"fe80::1%eth0\" \"$_mox_try\""
 	if !strings.Contains(gotRetry, wantRetry) {
 		t.Errorf("expected retry string containing %q, got %q", wantRetry, gotRetry)
+	}
+}
+
+func TestWrapConnect_HyphenHost(t *testing.T) {
+	host := "-host.example.com"
+	gotHold := wrapConnect("ssh "+host, host, true, 0)
+	wantHold := "printf -- '\\n[mox] %s: connection ended. Press Enter to close this pane.\\n' \"-host.example.com\""
+	if !strings.Contains(gotHold, wantHold) {
+		t.Errorf("expected hold string containing %q, got %q", wantHold, gotHold)
 	}
 }
 
