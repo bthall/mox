@@ -52,11 +52,12 @@ func diffLines(a, b []string) []diffLine {
 		nextRow := (i + 1) * stride
 		ai := a[i]
 		for j := m - 1; j >= 0; j-- {
-			if ai == b[j] {
+			switch {
+			case ai == b[j]:
 				lcs[row+j] = lcs[nextRow+j+1] + 1
-			} else if lcs[nextRow+j] >= lcs[row+j+1] {
+			case lcs[nextRow+j] >= lcs[row+j+1]:
 				lcs[row+j] = lcs[nextRow+j]
-			} else {
+			default:
 				lcs[row+j] = lcs[row+j+1]
 			}
 		}
