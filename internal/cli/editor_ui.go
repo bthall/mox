@@ -787,8 +787,7 @@ func (m editorModel) updateStale(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeBrowse
 		return m, nil
 	}
-	switch msg.Type {
-	case tea.KeyCtrlC:
+	if msg.Type == tea.KeyCtrlC {
 		return m.quit()
 	}
 	if string(msg.Runes) == "R" {
