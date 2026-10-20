@@ -106,3 +106,48 @@ func TestDraftDiffShapes(t *testing.T) {
 		t.Fatalf("rename diff missing both sides:\n%s", renderDiffForTest(dls))
 	}
 }
+
+func BenchmarkDiffLines(b *testing.B) {
+	a := []string{
+		"name: webfarm",
+		"hosts:",
+		"  - web1",
+		"  - web2",
+		"  - web3",
+		"  - web4",
+		"connect: ssh {{host}}",
+		"sync: true",
+		"arrange: tiled",
+		"hold: true",
+		"retry: 3",
+		"root: /var/www",
+		"pre:",
+		"  - echo start",
+		"commands:",
+		"  - htop",
+		"  - tail -f /var/log/syslog",
+	}
+	b2 := []string{
+		"name: webfarm",
+		"hosts:",
+		"  - web1",
+		"  - web2",
+		"  - web5",
+		"connect: ssh -p 2222 {{host}}",
+		"sync: false",
+		"arrange: tiled",
+		"hold: true",
+		"retry: 5",
+		"root: /var/www/app",
+		"pre:",
+		"  - echo starting...",
+		"commands:",
+		"  - htop",
+		"  - tail -f /var/log/app.log",
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = diffLines(a, b2)
+	}
+}
