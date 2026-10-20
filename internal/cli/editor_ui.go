@@ -783,12 +783,12 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateStale is the refused-save view: R reloads from disk.
 func (m editorModel) updateStale(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC:
-		return m.quit()
-	case tea.KeyEsc:
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
 		m.mode = modeBrowse
 		return m, nil
+	}
+	if msg.Type == tea.KeyCtrlC {
+		return m.quit()
 	}
 	if string(msg.Runes) == "R" {
 		st, err := loadEditorState(m.st.path)
@@ -871,7 +871,7 @@ func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, nil
 	}
-	if msg.Type == tea.KeyEsc {
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
 		m.mode = m.guardReturn
 		m.pending = pendingAction{}
 		return m, nil

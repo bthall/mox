@@ -121,7 +121,7 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cancelConfirm {
 			if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
 				m.cancelConfirm = false
-			} else if string(msg.Runes) == "d" {
+			} else if string(msg.Runes) == "d" || string(msg.Runes) == "y" || string(msg.Runes) == "Y" {
 				m.done = addResult{action: addActionCancel}
 				m.finished = true
 				return m, tea.Quit
@@ -607,7 +607,7 @@ func (m addModel) actionHints() []keyHint {
 
 func (m addModel) stepHints() []keyHint {
 	if m.cancelConfirm {
-		return []keyHint{{"d", "discard"}, {"Esc", "keep editing"}}
+		return []keyHint{{"d/y", "discard"}, {"Esc", "keep editing"}}
 	}
 	if m.help {
 		return []keyHint{{"Esc", "back"}, {"j/k", "scroll"}}
