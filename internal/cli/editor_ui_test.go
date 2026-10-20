@@ -613,6 +613,11 @@ func TestEditorGuardOnSwitch(t *testing.T) {
 	if m.selectedName() != "solo" {
 		t.Fatal("selection moved before the guard resolved")
 	}
+	// 'n' stays put, draft intact
+	mn := edRunes(t, m, "n")
+	if mn.mode != modeBrowse || mn.selectedName() != "solo" || !mn.isDirty() {
+		t.Fatal("n did not cancel the guard cleanly")
+	}
 	// esc: stay put, draft intact
 	m = edType(t, m, tea.KeyEsc)
 	if m.mode != modeBrowse || m.selectedName() != "solo" || !m.isDirty() {
@@ -806,6 +811,11 @@ func TestEditorSaveStaleThenReload(t *testing.T) {
 	// stale view renders an explanation
 	if !strings.Contains(m.View(), "changed on disk") {
 		t.Fatal("stale view missing explanation")
+	}
+	// 'n' backs out to browse keeping draft
+	mn := edRunes(t, m, "n")
+	if mn.mode != modeBrowse || !mn.isDirty() {
+		t.Fatal("n on stale prompt did not return to browse with dirty draft")
 	}
 	// R reloads from disk, dropping the draft
 	m = edRunes(t, m, "R")
