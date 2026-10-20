@@ -43,31 +43,40 @@ func sessionBlock(name string, sess *config.Session) []string {
 // diffLines computes a line diff of a → b via longest common subsequence.
 func diffLines(a, b []string) []diffLine {
 	n, m := len(a), len(b)
-	lcs := make([][]int, n+1)
-	for i := range lcs {
-		lcs[i] = make([]int, m+1)
-	}
+	stride := m + 1
+	// Optimization: preallocate a single contiguous slice for LCS matrix
+	// and preallocate output slice capacity to minimize heap allocations.
+	lcs := make([]int, (n+1)*stride)
 	for i := n - 1; i >= 0; i-- {
+		row := i * stride
+		nextRow := (i + 1) * stride
+		ai := a[i]
 		for j := m - 1; j >= 0; j-- {
 			switch {
-			case a[i] == b[j]:
-				lcs[i][j] = lcs[i+1][j+1] + 1
-			case lcs[i+1][j] >= lcs[i][j+1]:
-				lcs[i][j] = lcs[i+1][j]
+			case ai == b[j]:
+				lcs[row+j] = lcs[nextRow+j+1] + 1
+			case lcs[nextRow+j] >= lcs[row+j+1]:
+				lcs[row+j] = lcs[nextRow+j]
 			default:
-				lcs[i][j] = lcs[i][j+1]
+				lcs[row+j] = lcs[row+j+1]
 			}
 		}
 	}
-	var out []diffLine
+	capHint := n
+	if m > capHint {
+		capHint = m
+	}
+	out := make([]diffLine, 0, capHint)
 	i, j := 0, 0
 	for i < n && j < m {
+		row := i * stride
+		nextRow := (i + 1) * stride
 		switch {
 		case a[i] == b[j]:
 			out = append(out, diffLine{diffSame, a[i]})
 			i++
 			j++
-		case lcs[i+1][j] >= lcs[i][j+1]:
+		case lcs[nextRow+j] >= lcs[row+j+1]:
 			out = append(out, diffLine{diffDel, a[i]})
 			i++
 		default:

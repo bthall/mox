@@ -5,3 +5,7 @@
 ## 2025-03-10 - Fast-path ANSI check and cell width caching in CLI table layout
 **Learning:** `renderTable` calculated `visibleWidth` twice for every cell (width calculation + row rendering), executing regex replacements on every string. Checking `!strings.Contains(s, "\x1b")` before regex replacement eliminated regex execution and heap allocations for uncolored strings (35.7ns vs 262.8ns, 0 B vs 80 B). Pre-calculating visible widths into a flat slice and slicing constant spaces for padding reduced `renderTable` execution time by ~62% (14.0µs -> 5.2µs) and allocations by ~74% (132 -> 34 allocs).
 **Action:** Fast-path string operations without ANSI codes with `strings.Contains(s, "\x1b")` and cache cell layout metadata when performing multi-pass text formatting.
+
+## 2025-03-11 - Flat slice preallocation for LCS dynamic programming matrix in TUI save diff
+**Learning:** Allocating 2D slices (`make([][]int, n+1)`) in LCS dynamic programming creates `n+2` heap allocations per diff calculation in the TUI save preview. Preallocating a single flat `[]int` slice with stride `m+1` and preallocating result slice capacity reduced allocations by ~88% (25 -> 3 allocs/op) and execution time by ~24% (4.38µs -> 3.32µs).
+**Action:** In dynamic programming algorithms or matrix operations, use a flat 1D slice with index arithmetic (`i*stride + j`) instead of nested slices to eliminate per-row slice allocations.
