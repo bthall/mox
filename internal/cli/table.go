@@ -3,15 +3,9 @@ package cli
 import (
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 )
-
-// ansiRE matches ANSI SGR (color) escape sequences so column widths can be
-// measured by visible width rather than byte length. text/tabwriter does not
-// understand these sequences, so we lay out columns ourselves.
-var ansiRE = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 const spaces = "                                                                                                " // 96 spaces
 
