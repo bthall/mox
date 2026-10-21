@@ -167,7 +167,6 @@ func validateStringNoControlChars(str, field string) error {
 	return nil
 }
 
-
 // Validate validates a window configuration.
 func (w *Window) Validate() error {
 	if w.Name == "" {
