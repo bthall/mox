@@ -308,12 +308,12 @@ func wrapConnect(connectCmd, host string, hold bool, retry int) string {
 			attempts = append(attempts, fmt.Sprintf("%d", i))
 		}
 		cmd = fmt.Sprintf(
-			"for _mox_try in %s; do %s && break; printf '[mox] %%s: connection failed (attempt %%s)\\n' %s \"$_mox_try\"; sleep 3; done",
+			"for _mox_try in %s; do %s && break; printf -- '[mox] %%s: connection failed (attempt %%s)\\n' \"%s\" \"$_mox_try\"; sleep 3; done",
 			strings.Join(attempts, " "), connectCmd, host)
 	}
 	if hold {
 		cmd += fmt.Sprintf(
-			"; printf '\\n[mox] %%s: connection ended. Press Enter to close this pane.\\n' %s; read -r _mox_ack; exit",
+			"; printf -- '\\n[mox] %%s: connection ended. Press Enter to close this pane.\\n' \"%s\"; read -r _mox_ack; exit",
 			host)
 	}
 	return cmd

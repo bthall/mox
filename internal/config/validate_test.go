@@ -59,6 +59,13 @@ func TestSessionValidate(t *testing.T) {
 			errSubstr: "reserved character",
 		},
 		{
+			name:      "name with semicolon",
+			key:       "bad;name",
+			session:   &Session{Hosts: []string{"h"}},
+			wantErr:   true,
+			errSubstr: "reserved character",
+		},
+		{
 			name:      "name with dot",
 			key:       "bad.name",
 			session:   &Session{Hosts: []string{"h"}},
@@ -133,6 +140,7 @@ func TestWindowValidate(t *testing.T) {
 		{name: "valid layout", window: &Window{Name: "w", Layout: "two-pane"}},
 		{name: "missing name", window: &Window{Hosts: []string{"a"}}, wantErr: true},
 		{name: "name with dot", window: &Window{Name: "bad.name", Hosts: []string{"a"}}, wantErr: true},
+		{name: "name with semicolon", window: &Window{Name: "bad;name", Hosts: []string{"a"}}, wantErr: true},
 		{name: "hosts and panes", window: &Window{Name: "w", Hosts: []string{"a"}, Panes: []*Pane{{Split: SplitRoot}}}, wantErr: true},
 		{name: "panes and layout", window: &Window{Name: "w", Panes: []*Pane{{Split: SplitRoot}}, Layout: "x"}, wantErr: true},
 		{name: "first pane not root", window: &Window{Name: "w", Panes: []*Pane{{Split: SplitVertical}}}, wantErr: true},
