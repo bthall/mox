@@ -5,6 +5,33 @@ import (
 	"testing"
 )
 
+func TestTruncate(t *testing.T) {
+	tests := []struct {
+		input    string
+		max      int
+		expected string
+	}{
+		{"hello", 10, "hello"},
+		{"hello", 5, "hello"},
+		{"hello", 4, "hel…"},
+		{"hello", 1, "…"},
+		{"hello", 0, "hello"},
+		{"hello", -1, "hello"},
+		{"café!", 4, "caf…"},
+		{"café!", 5, "café!"},
+		{"", 5, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := truncate(tt.input, tt.max)
+			if got != tt.expected {
+				t.Errorf("truncate(%q, %d) = %q; want %q", tt.input, tt.max, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestVisibleWidth(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -64,6 +91,22 @@ func BenchmarkVisibleWidth_Plain(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = visibleWidth(s)
+	}
+}
+
+func BenchmarkTruncate_NoTrunc(b *testing.B) {
+	s := "backend-prod-api-1.example.com"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = truncate(s, 50)
+	}
+}
+
+func BenchmarkTruncate_Trunc(b *testing.B) {
+	s := "backend-prod-api-1.example.com"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = truncate(s, 10)
 	}
 }
 
