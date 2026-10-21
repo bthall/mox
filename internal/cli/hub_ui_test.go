@@ -291,6 +291,14 @@ func TestHubKillConfirmFlow(t *testing.T) {
 	if m2N.mode != hubBrowse || len(mgr.killed) != 0 {
 		t.Fatal("N did not cancel the kill")
 	}
+	// k or K also confirms (double key press action)
+	m2k, cmdk := hubRunes(t, m, "k")
+	if m2k.pending == "" {
+		t.Fatal("k did not confirm kill")
+	}
+	_ = drain(t, m2k, cmdk)
+	mgr.killed = nil
+
 	// y confirms
 	m, cmd := hubRunes(t, m, "y")
 	if m.pending == "" {
