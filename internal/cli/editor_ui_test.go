@@ -764,6 +764,34 @@ func TestEditorSaveDiffAndWrite(t *testing.T) {
 	}
 }
 
+func TestEditorSaveDiffKeys(t *testing.T) {
+	// 'n' / 'N' cancels back to browse mode
+	m := dirtyModel(t)
+	m = edRunes(t, m, "s")
+	if m.mode != modeDiff {
+		t.Fatalf("s did not open diff: mode=%v", m.mode)
+	}
+	m = edRunes(t, m, "n")
+	if m.mode != modeBrowse || !m.isDirty() {
+		t.Fatalf("n from diff did not return to browse with dirty draft: mode=%v", m.mode)
+	}
+
+	// 's' / 'S' confirms write from diff modal (double-tap save)
+	m = edRunes(t, m, "s") // open diff
+	m = edRunes(t, m, "s") // confirm write via 's'
+	if m.mode != modeBrowse || !strings.Contains(m.status, "saved solo") {
+		t.Fatalf("s from diff did not confirm save: mode=%v status=%q", m.mode, m.status)
+	}
+
+	// 'y' / 'Y' confirms write from diff modal
+	m2 := dirtyModel(t)
+	m2 = edRunes(t, m2, "s") // open diff
+	m2 = edRunes(t, m2, "y") // confirm write via 'y'
+	if m2.mode != modeBrowse || !strings.Contains(m2.status, "saved solo") {
+		t.Fatalf("y from diff did not confirm save: mode=%v status=%q", m2.mode, m2.status)
+	}
+}
+
 func TestEditorSaveValidationJumpsToField(t *testing.T) {
 	m := testEditorModel(t)
 	m = edRunes(t, m, "j") // webfarm (has hosts)
