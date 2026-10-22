@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // reservedNameChars are characters that are special in tmux's target syntax
@@ -148,20 +149,20 @@ func validateRetry(n int) error {
 	return nil
 }
 
-// validateNoControlChars ensures string slice items do not contain newlines or
-// null bytes that could lead to command injection when executed or sent as keys.
+// validateNoControlChars rejects control characters that could alter a command
+// when executed or sent as terminal keys.
 func validateNoControlChars(items []string, field string) error {
 	for i, item := range items {
-		if strings.ContainsAny(item, "\r\n\x00") {
+		if strings.ContainsFunc(item, unicode.IsControl) {
 			return fmt.Errorf("%s[%d] contains forbidden control characters or newline", field, i)
 		}
 	}
 	return nil
 }
 
-// validateStringNoControlChars ensures a string does not contain newlines or null bytes.
+// validateStringNoControlChars rejects terminal control characters in a string.
 func validateStringNoControlChars(str, field string) error {
-	if strings.ContainsAny(str, "\r\n\x00") {
+	if strings.ContainsFunc(str, unicode.IsControl) {
 		return fmt.Errorf("%s contains forbidden control characters or newline", field)
 	}
 	return nil
