@@ -717,7 +717,7 @@ func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeBrowse
 		return m, nil
 	}
-	if string(msg.Runes) == "y" || string(msg.Runes) == "Y" || msg.Type == tea.KeyEnter {
+	if string(msg.Runes) == "y" || string(msg.Runes) == "Y" || string(msg.Runes) == "d" || string(msg.Runes) == "D" || msg.Type == tea.KeyEnter {
 		if m.draft.added {
 			m.draft = nil
 			m.refilter()
@@ -790,7 +790,7 @@ func (m editorModel) updateStale(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m.quit()
 	}
-	if string(msg.Runes) == "R" {
+	if string(msg.Runes) == "R" || string(msg.Runes) == "r" {
 		st, err := loadEditorState(m.st.path)
 		if err != nil {
 			m.mode = modeBrowse
@@ -877,7 +877,7 @@ func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch string(msg.Runes) {
-	case "s":
+	case "s", "S":
 		// A quit from a text input must offer saving the text the user just
 		// typed, not only the last committed draft. Validation keeps focus
 		// in the input when it cannot be committed.
@@ -912,7 +912,7 @@ func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil // finishSave set mode/status
 		}
 		return m.continuePending()
-	case "d":
+	case "d", "D":
 		m.draft = nil // drop an added draft entirely; resetDraft rebuilds others
 		m.refilter()
 		m.resetDraft()

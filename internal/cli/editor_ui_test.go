@@ -542,6 +542,11 @@ func TestEditorDelete(t *testing.T) {
 	if mn.mode != modeBrowse || (mn.draft != nil && mn.draft.deleted) {
 		t.Fatal("n did not cancel delete confirmation")
 	}
+	// d or D or y confirms
+	md := edRunes(t, m, "d")
+	if md.mode != modeBrowse || !md.draft.deleted {
+		t.Fatalf("d did not confirm delete: %+v", md.draft)
+	}
 	m = edRunes(t, m, "y")
 	if m.mode != modeBrowse || !m.draft.deleted {
 		t.Fatalf("delete not marked: %+v", m.draft)
@@ -622,6 +627,22 @@ func TestEditorGuardOnSwitch(t *testing.T) {
 	m = edType(t, m, tea.KeyEsc)
 	if m.mode != modeBrowse || m.selectedName() != "solo" || !m.isDirty() {
 		t.Fatal("esc did not cancel the guard cleanly")
+	}
+	// D (uppercase) discards and moves
+	m2 := dirtyModel(t)
+	m2.pane = paneList
+	m2 = edRunes(t, m2, "j")
+	m2 = edRunes(t, m2, "D")
+	if m2.mode != modeBrowse || m2.selectedName() != "webfarm" || m2.isDirty() {
+		t.Fatalf("guard D discard: mode=%v sel=%q dirty=%v", m2.mode, m2.selectedName(), m2.isDirty())
+	}
+	// S (uppercase) saves and moves
+	m3 := dirtyModel(t)
+	m3.pane = paneList
+	m3 = edRunes(t, m3, "j")
+	m3 = edRunes(t, m3, "S")
+	if m3.mode != modeBrowse || m3.selectedName() != "webfarm" || m3.isDirty() {
+		t.Fatalf("guard S save: mode=%v sel=%q dirty=%v", m3.mode, m3.selectedName(), m3.isDirty())
 	}
 }
 
@@ -817,8 +838,8 @@ func TestEditorSaveStaleThenReload(t *testing.T) {
 	if mn.mode != modeBrowse || !mn.isDirty() {
 		t.Fatal("n on stale prompt did not return to browse with dirty draft")
 	}
-	// R reloads from disk, dropping the draft
-	m = edRunes(t, m, "R")
+	// r or R reloads from disk, dropping the draft
+	m = edRunes(t, m, "r")
 	if m.mode != modeBrowse || m.isDirty() {
 		t.Fatal("reload did not produce a clean editor")
 	}

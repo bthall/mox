@@ -216,6 +216,16 @@ func TestAddWizard_CtrlCProtectsDraft(t *testing.T) {
 	if mn.cancelConfirm || mn.finished {
 		t.Error("n should cancel the discard prompt and keep editing")
 	}
+	// 'D' (uppercase) confirms discarding the draft
+	mD := sendAdd(t, m, runes("D")...)
+	if !mD.finished || mD.done.action != addActionCancel {
+		t.Error("D should confirm discarding the draft")
+	}
+	// ctrl-c on cancelConfirm cancels
+	mc := sendAdd(t, m, keyCtrlC)
+	if !mc.finished || mc.done.action != addActionCancel {
+		t.Error("ctrl-c on cancelConfirm should cancel")
+	}
 	// 'y' confirms discarding the draft
 	my := sendAdd(t, m, runes("y")...)
 	if !my.finished || my.done.action != addActionCancel {
