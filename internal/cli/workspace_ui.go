@@ -44,7 +44,7 @@ func renderWorkspace(v workspaceView) string {
 	l := terminalLayout(v.width, v.height)
 	inner := max(0, l.width-2)
 	header := edgeText(pkTitle.Render("mox / "+v.view), pkDim.Render(v.context), inner)
-	rows := []string{" " + header + " ", pkBorder.Render(strings.Repeat("─", l.width))}
+	rows := []string{" " + header + " ", pkBorder.Render(dashes(l.width))}
 	listTitle, detailTitle := v.listTitle, v.detailTitle
 	if v.focusDetail {
 		detailTitle = pkSelected.Render(detailTitle)
@@ -78,7 +78,7 @@ func renderWorkspace(v workspaceView) string {
 			rows = append(rows, " "+fitCell(left, l.listWidth)+divider+fitCell(right, l.detailWidth)+" ")
 		}
 	}
-	rows = append(rows, pkBorder.Render(strings.Repeat("─", l.width)), " "+fitCell(renderHints(v.actions, inner), inner)+" ", " "+fitCell(v.status, inner)+" ")
+	rows = append(rows, pkBorder.Render(dashes(l.width)), " "+fitCell(renderHints(v.actions, inner), inner)+" ", " "+fitCell(v.status, inner)+" ")
 	if l.height == 1 {
 		rows = rows[:1]
 	} else if len(rows) > l.height {
@@ -112,19 +112,56 @@ func clipText(s string, width int) string {
 	return s
 }
 
+// Optimization: constant padding and dash strings for zero-allocation string slicing
+// during TUI layout rendering.
+const dashesStr = "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────" // 200 dashes (600 bytes)
+
+func padding(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if n <= len(spaces) {
+		return spaces[:n]
+	}
+	return strings.Repeat(" ", n)
+}
+
+func dashes(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if n*3 <= len(dashesStr) {
+		return dashesStr[:n*3]
+	}
+	return strings.Repeat("─", n)
+}
+
 func fitCell(s string, width int) string {
 	s = clipText(s, width)
-	return s + strings.Repeat(" ", max(0, width-ansi.StringWidth(s)))
+	pad := width - ansi.StringWidth(s)
+	if pad <= 0 {
+		return s
+	}
+	// Optimization: slice static spaces string to avoid strings.Repeat heap allocations.
+	return s + padding(pad)
 }
 
 func edgeText(left, right string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	if right == "" || ansi.StringWidth(left)+ansi.StringWidth(right)+3 > width {
+	// Optimization: cache visible widths leftW and rightW to eliminate repeated
+	// ansi.StringWidth calls per line during workspace layout calculation.
+	leftW := ansi.StringWidth(left)
+	if right == "" {
 		return fitCell(left, width)
 	}
-	return left + strings.Repeat(" ", width-ansi.StringWidth(left)-ansi.StringWidth(right)) + right
+	rightW := ansi.StringWidth(right)
+	if leftW+rightW+3 > width {
+		return fitCell(left, width)
+	}
+	pad := width - leftW - rightW
+	return left + padding(pad) + right
 }
 
 // Hints never cut a key/action in half. Help remains available when a narrow
