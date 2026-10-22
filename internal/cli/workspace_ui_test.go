@@ -307,7 +307,7 @@ func TestEmbeddedWizardCancelFromSessionRail(t *testing.T) {
 func BenchmarkRenderWorkspace(b *testing.B) {
 	v := workspaceView{
 		width: 100, height: 30, view: "sessions",
-		context: "2 running · 5 sessions",
+		context:   "2 running · 5 sessions",
 		listTitle: "sessions · 5", detailTitle: "dev · running · 2 windows",
 		list: []string{
 			sessionRow("dev", "running", true, 30),
@@ -324,8 +324,8 @@ func BenchmarkRenderWorkspace(b *testing.B) {
 			"live buffer line 4",
 		},
 		focusDetail: false,
-		actions: []keyHint{{"Enter", "attach"}, {"K", "kill"}, {"q", "quit"}},
-		status: "Ready",
+		actions:     []keyHint{{"Enter", "attach"}, {"K", "kill"}, {"q", "quit"}},
+		status:      "Ready",
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
