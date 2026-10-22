@@ -114,6 +114,27 @@ func TestSessionValidate(t *testing.T) {
 			wantErr:   true,
 			errSubstr: "on_start[0] contains forbidden control characters or newline",
 		},
+		{
+			name:      "session pre command with newline",
+			key:       "x",
+			session:   &Session{Pre: []string{"echo 1\necho 2"}},
+			wantErr:   true,
+			errSubstr: "pre[0] contains forbidden control characters or newline",
+		},
+		{
+			name:      "session commands with newline",
+			key:       "x",
+			session:   &Session{Commands: []string{"echo 1\necho 2"}},
+			wantErr:   true,
+			errSubstr: "commands[0] contains forbidden control characters or newline",
+		},
+		{
+			name:      "session connect template with newline",
+			key:       "x",
+			session:   &Session{Connect: "ssh {{host}}\nrm -rf /"},
+			wantErr:   true,
+			errSubstr: "connect contains forbidden control characters or newline",
+		},
 	}
 
 	for _, tt := range tests {
@@ -145,6 +166,9 @@ func TestWindowValidate(t *testing.T) {
 		{name: "panes and layout", window: &Window{Name: "w", Panes: []*Pane{{Split: SplitRoot}}, Layout: "x"}, wantErr: true},
 		{name: "first pane not root", window: &Window{Name: "w", Panes: []*Pane{{Split: SplitVertical}}}, wantErr: true},
 		{name: "empty", window: &Window{Name: "w"}, wantErr: true},
+		{name: "window pre with newline", window: &Window{Name: "w", Hosts: []string{"a"}, Pre: []string{"echo\nhi"}}, wantErr: true},
+		{name: "window commands with newline", window: &Window{Name: "w", Hosts: []string{"a"}, Commands: []string{"echo\nhi"}}, wantErr: true},
+		{name: "window connect with newline", window: &Window{Name: "w", Hosts: []string{"a"}, Connect: "ssh {{host}}\n"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,6 +196,7 @@ func TestPaneValidate(t *testing.T) {
 		{name: "invalid split", pane: &Pane{Split: "diagonal"}, isFirst: false, wantErr: true},
 		{name: "size 100", pane: &Pane{Split: SplitVertical, Size: 100}, isFirst: false, wantErr: true},
 		{name: "size negative", pane: &Pane{Split: SplitVertical, Size: -1}, isFirst: false, wantErr: true},
+		{name: "pane commands with newline", pane: &Pane{Split: SplitRoot, Commands: []string{"echo\nhi"}}, isFirst: true, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

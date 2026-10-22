@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // reservedNameChars are characters that are special in tmux's target syntax
@@ -92,10 +93,19 @@ func (s *Session) Validate(name string) error {
 	if err := validateRetry(s.Retry); err != nil {
 		return err
 	}
-	if err := validateHooks(s.OnStart, "on_start"); err != nil {
+	if err := validateStringNoControlChars(s.Connect, "connect"); err != nil {
 		return err
 	}
-	if err := validateHooks(s.OnStop, "on_stop"); err != nil {
+	if err := validateNoControlChars(s.OnStart, "on_start"); err != nil {
+		return err
+	}
+	if err := validateNoControlChars(s.OnStop, "on_stop"); err != nil {
+		return err
+	}
+	if err := validateNoControlChars(s.Pre, "pre"); err != nil {
+		return err
+	}
+	if err := validateNoControlChars(s.Commands, "commands"); err != nil {
 		return err
 	}
 
@@ -140,13 +150,21 @@ func validateRetry(n int) error {
 	return nil
 }
 
-// validateHooks ensures hook commands do not contain newlines or null bytes
-// that could lead to command injection when executed via shell.
-func validateHooks(hooks []string, field string) error {
-	for i, hook := range hooks {
-		if strings.ContainsAny(hook, "\r\n\x00") {
+// validateNoControlChars rejects control characters that could alter a command
+// when executed or sent as terminal keys.
+func validateNoControlChars(items []string, field string) error {
+	for i, item := range items {
+		if strings.ContainsFunc(item, unicode.IsControl) {
 			return fmt.Errorf("%s[%d] contains forbidden control characters or newline", field, i)
 		}
+	}
+	return nil
+}
+
+// validateStringNoControlChars rejects terminal control characters in a string.
+func validateStringNoControlChars(str, field string) error {
+	if strings.ContainsFunc(str, unicode.IsControl) {
+		return fmt.Errorf("%s contains forbidden control characters or newline", field)
 	}
 	return nil
 }
@@ -163,6 +181,9 @@ func (w *Window) Validate() error {
 	if err := validateConnectAndUser(w.Connect, w.SSHUser); err != nil {
 		return err
 	}
+	if err := validateStringNoControlChars(w.Connect, "connect"); err != nil {
+		return err
+	}
 	if err := validateArrange(w.Arrange); err != nil {
 		return err
 	}
@@ -170,6 +191,12 @@ func (w *Window) Validate() error {
 		if err := validateRetry(*w.Retry); err != nil {
 			return err
 		}
+	}
+	if err := validateNoControlChars(w.Pre, "pre"); err != nil {
+		return err
+	}
+	if err := validateNoControlChars(w.Commands, "commands"); err != nil {
+		return err
 	}
 
 	hasHosts := len(w.Hosts) > 0
@@ -226,6 +253,10 @@ func (p *Pane) Validate(isFirst bool) error {
 
 	if p.Size < 0 || p.Size > 99 {
 		return fmt.Errorf("size must be between 1 and 99 (percent), got %d", p.Size)
+	}
+
+	if err := validateNoControlChars(p.Commands, "commands"); err != nil {
+		return err
 	}
 
 	return nil
