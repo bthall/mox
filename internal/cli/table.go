@@ -3,15 +3,9 @@ package cli
 import (
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 )
-
-// ansiRE matches ANSI SGR (color) escape sequences so column widths can be
-// measured by visible width rather than byte length. text/tabwriter does not
-// understand these sequences, so we lay out columns ourselves.
-var ansiRE = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 const spaces = "                                                                                                " // 96 spaces
 
@@ -29,11 +23,30 @@ func writePadding(b *strings.Builder, n int) {
 // color escape sequences it contains.
 func visibleWidth(s string) int {
 	// Optimization: fast path when string contains no ANSI escape sequences,
-	// avoiding regexp string replacement and heap allocation.
+	// avoiding scanning and heap allocation.
 	if !strings.Contains(s, "\x1b") {
 		return utf8.RuneCountInString(s)
 	}
-	return utf8.RuneCountInString(ansiRE.ReplaceAllString(s, ""))
+
+	// Optimization: fast single-pass scanner for ANSI SGR sequences (\x1b\[[0-9;]*m)
+	// eliminating regexp execution and string heap allocations.
+	count := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && (s[j] >= '0' && s[j] <= '9' || s[j] == ';') {
+				j++
+			}
+			if j < len(s) && s[j] == 'm' {
+				i = j + 1
+				continue
+			}
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		count++
+		i += size
+	}
+	return count
 }
 
 // renderTable left-aligns rows into columns separated by two spaces. Cells may
@@ -83,9 +96,22 @@ func renderTable(out io.Writer, rows [][]string) {
 // truncate shortens s to at most max runes, replacing the tail with "…" when
 // it would otherwise overflow. max < 1 returns s unchanged.
 func truncate(s string, max int) string {
-	if max < 1 || utf8.RuneCountInString(s) <= max {
+	if max < 1 {
 		return s
 	}
-	runes := []rune(s)
-	return string(runes[:max-1]) + "…"
+
+	// Optimization: single-pass rune index scan to eliminate []rune heap allocation
+	// and avoid redundant full-string utf8.RuneCountInString traversal.
+	count := 0
+	cut := -1
+	for i := range s {
+		if count == max-1 {
+			cut = i
+		}
+		if count == max {
+			return s[:cut] + "…"
+		}
+		count++
+	}
+	return s
 }

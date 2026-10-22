@@ -9,3 +9,7 @@
 ## 2025-03-11 - Flat slice preallocation for LCS dynamic programming matrix in TUI save diff
 **Learning:** Allocating 2D slices (`make([][]int, n+1)`) in LCS dynamic programming creates `n+2` heap allocations per diff calculation in the TUI save preview. Preallocating a single flat `[]int` slice with stride `m+1` and preallocating result slice capacity reduced allocations by ~88% (25 -> 3 allocs/op) and execution time by ~24% (4.38µs -> 3.32µs).
 **Action:** In dynamic programming algorithms or matrix operations, use a flat 1D slice with index arithmetic (`i*stride + j`) instead of nested slices to eliminate per-row slice allocations.
+
+## 2025-03-12 - Zero-allocation ANSI escape scanning and string truncation in table layout
+**Learning:** Replacing `ansiRE.ReplaceAllString` with a zero-allocation single-pass scanner for ANSI SGR sequences in `visibleWidth` reduced execution time by ~85% (663.6ns -> 97.5ns) and eliminated 100% of heap allocations (80 B -> 0 B). Additionally, replacing `[]rune(s)` conversions in `truncate` with `range s` index scanning eliminated intermediate `[]rune` heap allocations.
+**Action:** Avoid `regexp.ReplaceAllString` and `[]rune` slice conversions for string layout/formatting routines; use single-pass string index iteration and inline sequence scanning instead.
