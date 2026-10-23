@@ -754,7 +754,7 @@ func (m editorModel) startSave() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateDiff is the save-preview modal: Enter writes, Esc backs out.
+// updateDiff is the save-preview modal: Enter, y, or s writes, Esc backs out.
 func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
@@ -773,6 +773,9 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch string(msg.Runes) {
+	case "y", "Y", "s", "S":
+		m, _ = m.finishSave()
+		return m, nil
 	case "k":
 		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))
 	case "j":
