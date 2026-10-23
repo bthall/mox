@@ -10,7 +10,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -78,9 +77,6 @@ type hubActionMsg struct {
 // constant.
 var hubTickInterval = time.Second
 
-// sgrRe matches the SGR color/attribute sequences capture-pane -e emits.
-var sgrRe = regexp.MustCompile("\x1b\\[[0-9;:]*m")
-
 // sanitizeCaptureLine makes a captured buffer line safe to lay out: tabs
 // expand to 8-column stops (capture-pane emits them literally, and a tab
 // counted as one cell but rendered as eight wraps the line and pushes the
@@ -88,32 +84,54 @@ var sgrRe = regexp.MustCompile("\x1b\\[[0-9;:]*m")
 // control character is dropped.
 func sanitizeCaptureLine(s string) string {
 	var b strings.Builder
-	// Optimization: preallocate builder memory based on string length to minimize reallocations.
+	// Preallocate builder memory based on string length to minimize reallocations.
 	b.Grow(len(s))
 	col := 0
 	for len(s) > 0 {
-		// Optimization: fast-path check for ANSI ESC sequence prefix '\x1b[' before running regex search.
+		// Optimization: zero-allocation byte scanner for ANSI SGR escape sequences (\x1b[...m).
 		if strings.HasPrefix(s, "\x1b[") {
-			if loc := sgrRe.FindStringIndex(s); loc != nil && loc[0] == 0 {
-				b.WriteString(s[:loc[1]])
-				s = s[loc[1]:]
+			i := 2
+			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == ';' || s[i] == ':') {
+				i++
+			}
+			if i < len(s) && s[i] == 'm' {
+				end := i + 1
+				b.WriteString(s[:end])
+				s = s[end:]
 				continue
 			}
 		}
-		r, size := utf8.DecodeRuneInString(s)
-		switch {
-		case r == '\t':
+
+		c := s[0]
+		// Optimization: fast-path for ASCII printable characters to avoid rune decoding
+		// and ansi.StringWidth string allocation.
+		if c >= 0x20 && c < 0x7f {
+			b.WriteByte(c)
+			col++
+			s = s[1:]
+			continue
+		}
+
+		switch c {
+		case '\t':
 			n := 8 - col%8
-			// Optimization: avoid strings.Repeat heap allocation by slicing a constant padding string.
+			// Optimization: avoid strings.Repeat heap allocation by slicing constant padding string.
 			b.WriteString("        "[:n])
 			col += n
-		case r < 0x20 || r == 0x7f: // stray ESC / CR / BS etc.
-			// dropped
+			s = s[1:]
+		case '\r', '\n', 0x7f: // stray CR / LF / BS / DEL etc.
+			s = s[1:]
 		default:
+			if c < 0x20 { // other stray control characters
+				s = s[1:]
+				continue
+			}
+			// Multi-byte UTF-8 rune (c >= 0x80)
+			r, size := utf8.DecodeRuneInString(s)
 			b.WriteRune(r)
 			col += ansi.StringWidth(string(r))
+			s = s[size:]
 		}
-		s = s[size:]
 	}
 	return b.String()
 }
