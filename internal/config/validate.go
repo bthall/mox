@@ -79,6 +79,9 @@ func (s *Session) Validate(name string) error {
 	if name == "" {
 		return errors.New("session name is required")
 	}
+	if strings.ContainsFunc(name, unicode.IsControl) {
+		return fmt.Errorf("session name %q contains forbidden control characters", name)
+	}
 	if i := strings.IndexAny(name, reservedNameChars); i >= 0 {
 		return fmt.Errorf("session name contains reserved character %q (forbidden: %q)",
 			name[i:i+1], reservedNameChars)
@@ -91,6 +94,9 @@ func (s *Session) Validate(name string) error {
 		return err
 	}
 	if err := validateRetry(s.Retry); err != nil {
+		return err
+	}
+	if err := validateStringNoControlChars(s.Root, "root"); err != nil {
 		return err
 	}
 	if err := validateStringNoControlChars(s.Connect, "connect"); err != nil {
@@ -174,11 +180,17 @@ func (w *Window) Validate() error {
 	if w.Name == "" {
 		return errors.New("window name is required")
 	}
+	if strings.ContainsFunc(w.Name, unicode.IsControl) {
+		return fmt.Errorf("window name %q contains forbidden control characters", w.Name)
+	}
 	if i := strings.IndexAny(w.Name, reservedNameChars); i >= 0 {
 		return fmt.Errorf("window name %q contains reserved character %q (forbidden: %q)",
 			w.Name, w.Name[i:i+1], reservedNameChars)
 	}
 	if err := validateConnectAndUser(w.Connect, w.SSHUser); err != nil {
+		return err
+	}
+	if err := validateStringNoControlChars(w.Root, "root"); err != nil {
 		return err
 	}
 	if err := validateStringNoControlChars(w.Connect, "connect"); err != nil {
@@ -266,6 +278,13 @@ func (p *Pane) Validate(isFirst bool) error {
 func (l *Layout) Validate(name string) error {
 	if name == "" {
 		return errors.New("layout name is required")
+	}
+	if strings.ContainsFunc(name, unicode.IsControl) {
+		return fmt.Errorf("layout name %q contains forbidden control characters", name)
+	}
+	if i := strings.IndexAny(name, reservedNameChars); i >= 0 {
+		return fmt.Errorf("layout name %q contains reserved character %q (forbidden: %q)",
+			name, name[i:i+1], reservedNameChars)
 	}
 	if len(l.Panes) == 0 {
 		return errors.New("layout must define at least one pane")
