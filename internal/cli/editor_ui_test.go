@@ -792,6 +792,26 @@ func TestEditorSaveDiffKeys(t *testing.T) {
 	}
 }
 
+func TestEditorSaveDiffConfirmKeys(t *testing.T) {
+	for _, key := range []string{"y", "Y", "s", "S"} {
+		t.Run("key_"+key, func(t *testing.T) {
+			m := dirtyModel(t)
+			m = edRunes(t, m, "s")
+			if m.mode != modeDiff {
+				t.Fatalf("s did not open the diff: mode=%v status=%q", m.mode, m.status)
+			}
+			m = edRunes(t, m, key)
+			if m.mode != modeBrowse || !strings.Contains(m.status, "saved solo") {
+				t.Fatalf("after key %q: mode=%v status=%q", key, m.mode, m.status)
+			}
+			data, _ := os.ReadFile(m.st.path)
+			if !strings.Contains(string(data), "/tmp/solox") {
+				t.Fatalf("file not written:\n%s", data)
+			}
+		})
+	}
+}
+
 func TestEditorSaveValidationJumpsToField(t *testing.T) {
 	m := testEditorModel(t)
 	m = edRunes(t, m, "j") // webfarm (has hosts)
