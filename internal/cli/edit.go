@@ -107,6 +107,9 @@ func editorCommand() string {
 // been saved.
 func editAndValidate(path, editor string, out io.Writer) error {
 	parts := strings.Fields(editor)
+	if len(parts) == 0 {
+		return fmt.Errorf("invalid editor command %q", editor)
+	}
 	ed := exec.Command(parts[0], append(parts[1:], path)...) //nolint:gosec // the user's own $EDITOR choice
 	ed.Stdin = os.Stdin
 	ed.Stdout = os.Stdout
