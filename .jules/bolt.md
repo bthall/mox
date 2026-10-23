@@ -13,3 +13,7 @@
 ## 2025-03-12 - Zero-allocation ANSI escape scanning and string truncation in table layout
 **Learning:** Replacing `ansiRE.ReplaceAllString` with a zero-allocation single-pass scanner for ANSI SGR sequences in `visibleWidth` reduced execution time by ~85% (663.6ns -> 97.5ns) and eliminated 100% of heap allocations (80 B -> 0 B). Additionally, replacing `[]rune(s)` conversions in `truncate` with `range s` index scanning eliminated intermediate `[]rune` heap allocations.
 **Action:** Avoid `regexp.ReplaceAllString` and `[]rune` slice conversions for string layout/formatting routines; use single-pass string index iteration and inline sequence scanning instead.
+
+## 2025-03-13 - Zero-allocation ANSI byte scanning and fast-path ASCII processing in capture line sanitizer
+**Learning:** In `sanitizeCaptureLine`, replacing `sgrRe.FindStringIndex` regex execution with a zero-allocation single-pass byte scanner for ANSI SGR sequences (`\x1b[...m`) and adding an ASCII printable byte fast-path (`0x20 <= c < 0x7f`) eliminated regex heap allocations and avoided `utf8.DecodeRuneInString` / `ansi.StringWidth` string conversions for ASCII text. This reduced per-line processing time by ~89% (5016ns -> 549ns) and cut heap allocations by ~97% (63 -> 2 allocs/op).
+**Action:** Replace `regexp` matching for known ANSI sequence structures in TUI buffer sanitization with inline byte loops, and fast-path ASCII printable bytes (`0x20 <= c < 0x7f`) before resorting to full UTF-8 decoding and string width calculations.
