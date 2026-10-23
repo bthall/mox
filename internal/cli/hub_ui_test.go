@@ -181,15 +181,6 @@ func TestHubPreviewLifecycle(t *testing.T) {
 	}
 }
 
-func BenchmarkSanitizeCaptureLine(b *testing.B) {
-	line := "\x1b[32mfunc\t\x1b[0m\x1b[1;34mname\x1b[0m\targs\t\x1b[33mreturn\x1b[0m\tvery\tlong\ttabbed\tline with \x1b[31msome colors\x1b[0m"
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		_ = sanitizeCaptureLine(line)
-	}
-}
-
 func TestHubTickLifecycle(t *testing.T) {
 	m := testHubModel(t, nil)
 	// the constructor records the Init-started loop for a running highlight

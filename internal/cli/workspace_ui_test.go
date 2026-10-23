@@ -303,3 +303,40 @@ func TestEmbeddedWizardCancelFromSessionRail(t *testing.T) {
 		t.Fatal("explicit discard did not finish the requested quit")
 	}
 }
+
+func BenchmarkRenderWorkspace(b *testing.B) {
+	v := workspaceView{
+		width: 100, height: 30, view: "sessions",
+		context:   "2 running · 5 sessions",
+		listTitle: "sessions · 5", detailTitle: "dev · running · 2 windows",
+		list: []string{
+			sessionRow("dev", "running", true, 30),
+			sessionRow("prod", "stopped", false, 30),
+			sessionRow("staging", "running", false, 30),
+			sessionRow("test", "stopped", false, 30),
+			sessionRow("demo", "stopped", false, 30),
+		},
+		detail: []string{
+			"win: 0:zsh* 1:vim",
+			"live buffer line 1",
+			"live buffer line 2",
+			"live buffer line 3",
+			"live buffer line 4",
+		},
+		focusDetail: false,
+		actions:     []keyHint{{"Enter", "attach"}, {"K", "kill"}, {"q", "quit"}},
+		status:      "Ready",
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = renderWorkspace(v)
+	}
+}
+
+func BenchmarkFitCell(b *testing.B) {
+	s := "test session name"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = fitCell(s, 50)
+	}
+}

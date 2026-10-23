@@ -463,6 +463,11 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		parts := strings.Fields(editor)
+		if len(parts) == 0 {
+			m.status = "invalid editor command: set $VISUAL or $EDITOR"
+			m.statusErr = true
+			return m, nil
+		}
 		ed := exec.Command(parts[0], append(parts[1:], m.st.path)...) //nolint:gosec // the user's own $EDITOR choice
 		m.leaving = true
 		return m, tea.ExecProcess(ed, func(err error) tea.Msg { return editorReturnMsg{err: err} })
