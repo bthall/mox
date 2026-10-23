@@ -128,7 +128,7 @@ func sanitizeCaptureLine(s string) string {
 			}
 			// Multi-byte UTF-8 rune (c >= 0x80)
 			r, size := utf8.DecodeRuneInString(s)
-			b.WriteString(s[:size])
+			b.WriteRune(r)
 			col += ansi.StringWidth(string(r))
 			s = s[size:]
 		}
