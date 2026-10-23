@@ -112,26 +112,25 @@ func sanitizeCaptureLine(s string) string {
 			continue
 		}
 
-		switch c {
-		case '\t':
+		if c == '\t' {
 			n := 8 - col%8
 			// Optimization: avoid strings.Repeat heap allocation by slicing constant padding string.
 			b.WriteString("        "[:n])
 			col += n
 			s = s[1:]
-		case '\r', '\n', 0x7f: // stray CR / LF / BS / DEL etc.
-			s = s[1:]
-		default:
-			if c < 0x20 { // other stray control characters
-				s = s[1:]
-				continue
-			}
-			// Multi-byte UTF-8 rune (c >= 0x80)
-			r, size := utf8.DecodeRuneInString(s)
-			b.WriteRune(r)
-			col += ansi.StringWidth(string(r))
-			s = s[size:]
+			continue
 		}
+
+		if c < 0x20 || c == 0x7f { // stray control characters (dropped)
+			s = s[1:]
+			continue
+		}
+
+		// Multi-byte UTF-8 rune (c >= 0x80)
+		r, size := utf8.DecodeRuneInString(s)
+		b.WriteString(s[:size])
+		col += ansi.StringWidth(string(r))
+		s = s[size:]
 	}
 	return b.String()
 }

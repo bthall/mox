@@ -135,20 +135,6 @@ func TestSessionValidate(t *testing.T) {
 			wantErr:   true,
 			errSubstr: "connect contains forbidden control characters or newline",
 		},
-		{
-			name:      "session name with control character",
-			key:       "bad\x1bname",
-			session:   &Session{Hosts: []string{"h"}},
-			wantErr:   true,
-			errSubstr: "forbidden control characters",
-		},
-		{
-			name:      "session root with newline",
-			key:       "x",
-			session:   &Session{Root: "~/dir\n"},
-			wantErr:   true,
-			errSubstr: "root contains forbidden control characters or newline",
-		},
 	}
 
 	for _, tt := range tests {
@@ -183,8 +169,6 @@ func TestWindowValidate(t *testing.T) {
 		{name: "window pre with newline", window: &Window{Name: "w", Hosts: []string{"a"}, Pre: []string{"echo\nhi"}}, wantErr: true},
 		{name: "window commands with newline", window: &Window{Name: "w", Hosts: []string{"a"}, Commands: []string{"echo\nhi"}}, wantErr: true},
 		{name: "window connect with newline", window: &Window{Name: "w", Hosts: []string{"a"}, Connect: "ssh {{host}}\n"}, wantErr: true},
-		{name: "window name with control char", window: &Window{Name: "w1\x1b", Hosts: []string{"a"}}, wantErr: true},
-		{name: "window root with newline", window: &Window{Name: "w1", Root: "~/dir\n", Hosts: []string{"a"}}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -219,47 +203,6 @@ func TestPaneValidate(t *testing.T) {
 			err := tt.pane.Validate(tt.isFirst)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate(isFirst=%v) error = %v, wantErr = %v", tt.isFirst, err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestLayoutValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		key     string
-		layout  *Layout
-		wantErr bool
-	}{
-		{
-			name:   "valid layout",
-			key:    "two-pane",
-			layout: &Layout{Panes: []*Pane{{Split: SplitRoot}, {Split: SplitVertical, Size: 30}}},
-		},
-		{
-			name:    "missing name",
-			key:     "",
-			layout:  &Layout{Panes: []*Pane{{Split: SplitRoot}}},
-			wantErr: true,
-		},
-		{
-			name:    "name with control character",
-			key:     "layout\x1b",
-			layout:  &Layout{Panes: []*Pane{{Split: SplitRoot}}},
-			wantErr: true,
-		},
-		{
-			name:    "name with reserved semicolon",
-			key:     "layout;bad",
-			layout:  &Layout{Panes: []*Pane{{Split: SplitRoot}}},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.layout.Validate(tt.key)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
 	}

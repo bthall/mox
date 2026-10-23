@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-const spaces = "                                                                                                                                                                                                        " // 200 spaces
+const spaces = "                                                                                                " // 96 spaces
 
 func writePadding(b *strings.Builder, n int) {
 	for n > len(spaces) {

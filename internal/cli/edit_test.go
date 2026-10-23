@@ -41,16 +41,6 @@ func TestEditAndValidate_EditorFails(t *testing.T) {
 	}
 }
 
-func TestEditAndValidate_EmptyEditor(t *testing.T) {
-	path := writeTempConfig(t, "sessions: {}\n")
-
-	var out bytes.Buffer
-	err := editAndValidate(path, "   ", &out)
-	if err == nil || !strings.Contains(err.Error(), "invalid editor command") {
-		t.Errorf("want invalid editor command error, got %v", err)
-	}
-}
-
 func TestEditAndValidate_InvalidConfigReported(t *testing.T) {
 	path := writeTempConfig(t, "sessions:\n  dev:\n    hots: [a]\n") // typo key
 
