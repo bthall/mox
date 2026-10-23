@@ -7,3 +7,8 @@
 **Vulnerability:** Session and window names containing semicolons (`;`) passed validation because reservedNameChars only checked `:.$ \t\r\n`. Semicolons serve as command separators in tmux command syntax, allowing command injection when session/window names were embedded into tmux hook commands (e.g., `set-option -t <session> ...`).
 **Learning:** Validation for identifier names used in CLI tool command strings must reject command separator characters specific to the underlying subsystem (like tmux's `;`), not just standard target path separators.
 **Prevention:** Include `;` in `reservedNameChars` for session and window validation and always use `--` flag terminators and quoted arguments when generating shell commands like `printf`.
+
+## 2026-10-22 - Terminal Escape Sequence Injection via Config Names and Paths
+**Vulnerability:** Session names, window names, layout names, and root directory paths were not consistently validated for ASCII control characters (`unicode.IsControl`). Layout names also bypassed `reservedNameChars` validation. An attacker or malicious config file could inject ANSI escape codes or control characters (like `\x1b` or `\x00`) to manipulate user terminal displays, titles, or status logs.
+**Learning:** Config identifiers and filesystem paths displayed in terminal UIs or CLI outputs must be sanitized or validated against control characters, and reserved character checks must apply uniformly to all named configuration abstractions (sessions, windows, layouts).
+**Prevention:** Always validate session, window, and layout names as well as root directory paths using `unicode.IsControl` and `reservedNameChars` during config schema validation.

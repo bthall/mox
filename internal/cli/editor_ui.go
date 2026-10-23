@@ -463,6 +463,11 @@ func (m editorModel) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		parts := strings.Fields(editor)
+		if len(parts) == 0 {
+			m.status = "invalid editor command: set $VISUAL or $EDITOR"
+			m.statusErr = true
+			return m, nil
+		}
 		ed := exec.Command(parts[0], append(parts[1:], m.st.path)...) //nolint:gosec // the user's own $EDITOR choice
 		m.leaving = true
 		return m, tea.ExecProcess(ed, func(err error) tea.Msg { return editorReturnMsg{err: err} })
@@ -754,7 +759,7 @@ func (m editorModel) startSave() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateDiff is the save-preview modal: Enter, y, or s writes, Esc backs out.
+// updateDiff is the save-preview modal: Enter/s/y writes, Esc/n backs out.
 func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
@@ -773,8 +778,11 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch string(msg.Runes) {
-	case "y", "Y", "s", "S":
+	case "s", "S", "y", "Y":
 		m, _ = m.finishSave()
+		return m, nil
+	case "n", "N":
+		m.mode = modeBrowse
 		return m, nil
 	case "k":
 		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))

@@ -13,3 +13,7 @@
 ## 2025-03-12 - Zero-allocation ANSI escape scanning and string truncation in table layout
 **Learning:** Replacing `ansiRE.ReplaceAllString` with a zero-allocation single-pass scanner for ANSI SGR sequences in `visibleWidth` reduced execution time by ~85% (663.6ns -> 97.5ns) and eliminated 100% of heap allocations (80 B -> 0 B). Additionally, replacing `[]rune(s)` conversions in `truncate` with `range s` index scanning eliminated intermediate `[]rune` heap allocations.
 **Action:** Avoid `regexp.ReplaceAllString` and `[]rune` slice conversions for string layout/formatting routines; use single-pass string index iteration and inline sequence scanning instead.
+
+## 2025-03-13 - Static padding slicing and width caching in shared workspace TUI layout
+**Learning:** `renderWorkspace` executed `strings.Repeat` for padding and border lines repeatedly across every row rendered during full-screen TUI updates. Slicing static `spaces` and `dashesStr` string constants eliminated `strings.Repeat` heap allocations, and caching `ansi.StringWidth` results in `edgeText` avoided re-parsing ANSI escape sequences up to 3x per row.
+**Action:** In shared TUI layout primitives rendered per-frame, replace `strings.Repeat` with constant string slicing and cache cell width calculations.
