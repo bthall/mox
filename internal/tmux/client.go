@@ -41,7 +41,7 @@ func NewDryRun(out io.Writer) *Client {
 // builder needs to keep going: fresh window/pane ids for the -P prints,
 // "does not exist" for session checks, and empty output otherwise.
 func (c *Client) dryRun(args []string) (string, error) {
-	fmt.Fprintln(c.dryOut, "tmux "+shellJoin(args))
+	fmt.Fprintln(c.dryOut, "tmux "+ShellJoin(args))
 	switch args[0] {
 	case "has-session":
 		return "", &Error{ExitCode: 1, Stderr: "can't find session (dry-run)"}
@@ -74,10 +74,10 @@ func (c *Client) dryRun(args []string) (string, error) {
 	}
 }
 
-// shellJoin renders an argv as a copy-pasteable shell command, quoting any
+// ShellJoin renders an argv as a copy-pasteable shell command, quoting any
 // argument that needs it. A literal newline inside an argument still spans
 // display lines, but stays inside one quoted shell argument.
-func shellJoin(args []string) string {
+func ShellJoin(args []string) string {
 	parts := make([]string, len(args))
 	for i, a := range args {
 		if a == "" || strings.IndexFunc(a, func(r rune) bool {
