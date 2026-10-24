@@ -171,18 +171,10 @@ func edgeTextWithWidths(left string, leftW int, right string, rightW int, width 
 		return ""
 	}
 	if right == "" {
-		pad := width - leftW
-		if pad <= 0 {
-			return clipText(left, width)
-		}
-		return left + padding(pad)
+		return fitCell(left, width)
 	}
 	if leftW+rightW+3 > width {
-		pad := width - leftW
-		if pad <= 0 {
-			return clipText(left, width)
-		}
-		return left + padding(pad)
+		return fitCell(left, width)
 	}
 	pad := width - leftW - rightW
 	return left + padding(pad) + right
@@ -229,18 +221,13 @@ func hintWidth(key, label string) int {
 	return ansi.StringWidth(key) + 1 + ansi.StringWidth(label)
 }
 
-// Optimization: format visible hints directly using strings.Builder to eliminate
-// intermediate pairs slice allocation and varargs copying.
+// Optimization: format visible hints via hints helper.
 func hintsActions(actions []keyHint) string {
-	var b strings.Builder
-	for i, action := range actions {
-		if i > 0 {
-			b.WriteString(pkDim.Render(" · "))
-		}
-		b.WriteString(pkTitle.Render(action.key))
-		b.WriteString(pkDim.Render(" " + action.label))
+	pairs := make([]string, 0, len(actions)*2)
+	for _, action := range actions {
+		pairs = append(pairs, action.key, action.label)
 	}
-	return b.String()
+	return hints(pairs...)
 }
 
 func sessionRow(name, state string, selected bool, width int) string {
@@ -261,7 +248,7 @@ func sessionRow(name, state string, selected bool, width int) string {
 	if width < 20 {
 		state = ""
 	}
-	stateW := len(state)
+	stateW := ansi.StringWidth(state)
 	nameWidth := max(1, width-4-stateW-3)
 	name, nameW := clipTextWidth(name, nameWidth)
 	if selected {
