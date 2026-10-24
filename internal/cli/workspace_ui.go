@@ -253,6 +253,8 @@ func sessionRow(name, state string, selected bool, width int) string {
 	name, nameW := clipTextWidth(name, nameWidth)
 	if selected {
 		name = pkSelected.Render(name)
+		// Underlining inserts escapes between runes and can change grapheme widths.
+		nameW = ansi.StringWidth(name)
 	}
 	renderedState := stateStyle.Render(state)
 	if state == "" {

@@ -340,3 +340,19 @@ func BenchmarkFitCell(b *testing.B) {
 		_ = fitCell(s, 50)
 	}
 }
+
+func TestSessionRowSelectedComplexGraphemeFitsWidth(t *testing.T) {
+	previous := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previous) })
+	for _, name := range []string{"👩‍💻 team", "👨‍👩‍👧‍👦 home", "école"} {
+		for _, state := range []string{"running", "stopped", "tmux only", "draft"} {
+			for _, width := range []int{20, 24, 32} {
+				row := sessionRow(name, state, true, width)
+				if got := ansi.StringWidth(row); got > width {
+					t.Errorf("selected %q (%s) uses %d cells in a %d-cell row: %q", name, state, got, width, row)
+				}
+			}
+		}
+	}
+}
