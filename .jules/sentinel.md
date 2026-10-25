@@ -12,3 +12,8 @@
 **Vulnerability:** Session names, window names, layout names, and root directory paths were not consistently validated for ASCII control characters (`unicode.IsControl`). Layout names also bypassed `reservedNameChars` validation. An attacker or malicious config file could inject ANSI escape codes or control characters (like `\x1b` or `\x00`) to manipulate user terminal displays, titles, or status logs.
 **Learning:** Config identifiers and filesystem paths displayed in terminal UIs or CLI outputs must be sanitized or validated against control characters, and reserved character checks must apply uniformly to all named configuration abstractions (sessions, windows, layouts).
 **Prevention:** Always validate session, window, and layout names as well as root directory paths using `unicode.IsControl` and `reservedNameChars` during config schema validation.
+
+## 2026-10-24 - Tmux Option Injection via Positional Arguments Starting with Hyphen
+**Vulnerability:** Positional arguments passed to tmux commands (`send-keys`, `rename-window`, `select-layout`) without an option terminator (`--`) caused strings starting with hyphens (such as `-t`, `-R`, `--help`, or window names like `-mywin`) to be parsed as tmux command flags rather than literal positional values, causing command failures or unintended option execution.
+**Learning:** CLI wrappers executing external tools like `tmux` must use `--` option terminators before positional arguments that originate from user input or configuration to ensure they are interpreted as positional arguments rather than CLI flags.
+**Prevention:** Always place `--` before positional arguments in `tmux` command invocations (e.g. `send-keys -t target -- cmd C-m` or `rename-window -t target -- name`).
