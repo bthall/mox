@@ -94,22 +94,44 @@ func renderWorkspace(v workspaceView) string {
 	return view
 }
 
-func clipText(s string, width int) string {
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
+func clipTextWithWidth(s string, width int) (string, int) {
 	if width <= 0 {
-		return ""
+		return "", 0
 	}
 	s = strings.ReplaceAll(s, "\n", " ")
-	if ansi.StringWidth(s) > width {
+	hasEscape := strings.Contains(s, "\x1b")
+	w := 0
+	if !hasEscape && isASCII(s) {
+		w = len(s)
+	} else {
+		w = ansi.StringWidth(s)
+	}
+	if w > width {
 		tail := ""
 		if width > 1 {
 			tail = "…"
 		}
 		s = ansi.Truncate(s, width, tail)
+		w = ansi.StringWidth(s)
 	}
-	if strings.Contains(s, "\x1b") {
+	if hasEscape {
 		s += "\x1b[0m"
 	}
-	return s
+	return s, w
+}
+
+func clipText(s string, width int) string {
+	res, _ := clipTextWithWidth(s, width)
+	return res
 }
 
 // Optimization: constant padding and dash strings for zero-allocation string slicing
@@ -136,14 +158,43 @@ func dashes(n int) string {
 	return strings.Repeat("─", n)
 }
 
+func fitCellWithWidth(s string, w int, width int) string {
+	if w > width {
+		return fitCell(s, width)
+	}
+	s = strings.ReplaceAll(s, "\n", " ")
+	if strings.Contains(s, "\x1b") {
+		s += "\x1b[0m"
+	}
+	pad := width - w
+	if pad <= 0 {
+		return s
+	}
+	return s + padding(pad)
+}
+
 func fitCell(s string, width int) string {
-	s = clipText(s, width)
-	pad := width - ansi.StringWidth(s)
+	s, w := clipTextWithWidth(s, width)
+	pad := width - w
 	if pad <= 0 {
 		return s
 	}
 	// Optimization: slice static spaces string to avoid strings.Repeat heap allocations.
 	return s + padding(pad)
+}
+
+func edgeTextWithWidths(left string, leftW int, right string, rightW int, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if right == "" {
+		return fitCellWithWidth(left, leftW, width)
+	}
+	if leftW+rightW+3 > width {
+		return fitCellWithWidth(left, leftW, width)
+	}
+	pad := width - leftW - rightW
+	return left + padding(pad) + right
 }
 
 func edgeText(left, right string, width int) string {
@@ -154,14 +205,10 @@ func edgeText(left, right string, width int) string {
 	// ansi.StringWidth calls per line during workspace layout calculation.
 	leftW := ansi.StringWidth(left)
 	if right == "" {
-		return fitCell(left, width)
+		return fitCellWithWidth(left, leftW, width)
 	}
 	rightW := ansi.StringWidth(right)
-	if leftW+rightW+3 > width {
-		return fitCell(left, width)
-	}
-	pad := width - leftW - rightW
-	return left + padding(pad) + right
+	return edgeTextWithWidths(left, leftW, right, rightW, width)
 }
 
 // Hints never cut a key/action in half. Help remains available when a narrow
@@ -222,12 +269,14 @@ func sessionRow(name, state string, selected bool, width int) string {
 	if width < 20 {
 		state = ""
 	}
-	nameWidth := max(1, width-4-ansi.StringWidth(state)-3)
-	name = clipText(name, nameWidth)
+	stateW := len(state)
+	nameWidth := max(1, width-4-stateW-3)
+	name, nameW := clipTextWithWidth(name, nameWidth)
 	if selected {
 		name = pkSelected.Render(name)
 	}
-	return marker + dot + " " + edgeText(name, stateStyle.Render(state), max(0, width-4))
+	renderedState := stateStyle.Render(state)
+	return marker + dot + " " + edgeTextWithWidths(name, nameW, renderedState, stateW, max(0, width-4))
 }
 
 func helpLines(actions []keyHint, width int) []string {

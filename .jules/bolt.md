@@ -21,3 +21,7 @@
 ## 2025-03-13 - Zero-allocation ANSI byte scanning and fast-path ASCII processing in capture line sanitizer
 **Learning:** In `sanitizeCaptureLine`, replacing `sgrRe.FindStringIndex` regex execution with a zero-allocation single-pass byte scanner for ANSI SGR sequences (`\x1b[...m`) and adding an ASCII printable byte fast-path (`0x20 <= c < 0x7f`) eliminated regex heap allocations and avoided `utf8.DecodeRuneInString` / `ansi.StringWidth` string conversions for ASCII text. This reduced per-line processing time by ~89% (5016ns -> 549ns) and cut heap allocations by ~97% (63 -> 2 allocs/op).
 **Action:** Replace `regexp` matching for known ANSI sequence structures in TUI buffer sanitization with inline byte loops, and fast-path ASCII printable bytes (`0x20 <= c < 0x7f`) before resorting to full UTF-8 decoding and string width calculations.
+
+## 2025-03-14 - Computed width return and ASCII fast-path for TUI cell formatting
+**Learning:** `fitCell` and `sessionRow` repeatedly called `ansi.StringWidth` to determine cell width both before and after clipping text, re-parsing ANSI sequences multiple times per row. Computing and returning string width alongside clipped text in `clipTextWithWidth` and fast-pathing ASCII strings without escape sequences reduced `fitCell` execution time by ~47% (216.5 ns -> 114.7 ns).
+**Action:** When truncating and padding strings for TUI grid cells, return display cell width from the clipping function and fast-path plain ASCII strings (`!strings.Contains(s, "\x1b") && isASCII(s)`) to avoid redundant width scans.
