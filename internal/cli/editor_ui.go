@@ -880,12 +880,28 @@ func (m editorModel) hasPendingInput() bool {
 // the confirmation.
 func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return m, nil
-	}
-	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
+		if m.pending.kind == pendingQuit {
+			m.draft = nil
+			m.refilter()
+			m.resetDraft()
+			m.mode = modeBrowse
+			return m.continuePending()
+		}
 		m.mode = m.guardReturn
 		m.pending = pendingAction{}
 		return m, nil
+	}
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" || string(msg.Runes) == "c" || string(msg.Runes) == "C" {
+		m.mode = m.guardReturn
+		m.pending = pendingAction{}
+		return m, nil
+	}
+	if m.pending.kind == pendingQuit && (string(msg.Runes) == "q" || string(msg.Runes) == "Q") {
+		m.draft = nil
+		m.refilter()
+		m.resetDraft()
+		m.mode = modeBrowse
+		return m.continuePending()
 	}
 	switch string(msg.Runes) {
 	case "s", "S":
