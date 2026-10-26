@@ -44,7 +44,8 @@ func renderWorkspace(v workspaceView) string {
 	l := terminalLayout(v.width, v.height)
 	inner := max(0, l.width-2)
 	header := edgeText(pkTitle.Render("mox / "+v.view), pkDim.Render(v.context), inner)
-	rows := []string{" " + header + " ", pkBorder.Render(dashes(l.width))}
+	rows := make([]string, 0, l.contentHeight+6)
+	rows = append(rows, " "+header+" ", pkBorder.Render(dashes(l.width)))
 	listTitle, detailTitle := v.listTitle, v.detailTitle
 	if v.focusDetail {
 		detailTitle = pkSelected.Render(detailTitle)
@@ -85,7 +86,9 @@ func renderWorkspace(v workspaceView) string {
 		rows = append(rows[:l.height-2], rows[len(rows)-2:]...)
 	}
 	for i, row := range rows {
-		rows[i] = clipText(row, l.width)
+		if len(row) > l.width || strings.IndexByte(row, '\n') >= 0 {
+			rows[i] = clipText(row, l.width)
+		}
 	}
 	view := strings.Join(rows, "\n")
 	if lipgloss.ColorProfile() == termenv.Ascii {
@@ -95,21 +98,32 @@ func renderWorkspace(v workspaceView) string {
 }
 
 func clipText(s string, width int) string {
+	s, _ = clipTextWithWidth(s, width)
+	return s
+}
+
+// clipTextWithWidth returns both the clipped string and its visible width,
+// eliminating double ansi.StringWidth scanning passes when formatting cells.
+func clipTextWithWidth(s string, width int) (string, int) {
 	if width <= 0 {
-		return ""
+		return "", 0
 	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	if ansi.StringWidth(s) > width {
+	if strings.IndexByte(s, '\n') >= 0 {
+		s = strings.ReplaceAll(s, "\n", " ")
+	}
+	sw := ansi.StringWidth(s)
+	if sw > width {
 		tail := ""
 		if width > 1 {
 			tail = "…"
 		}
 		s = ansi.Truncate(s, width, tail)
+		sw = ansi.StringWidth(s)
 	}
-	if strings.Contains(s, "\x1b") {
+	if strings.Contains(s, "\x1b") && !strings.HasSuffix(s, "\x1b[0m") {
 		s += "\x1b[0m"
 	}
-	return s
+	return s, sw
 }
 
 // Optimization: constant padding and dash strings for zero-allocation string slicing
@@ -136,9 +150,26 @@ func dashes(n int) string {
 	return strings.Repeat("─", n)
 }
 
+func fitCellWithWidth(s string, sw, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if sw > width || strings.IndexByte(s, '\n') >= 0 {
+		return fitCell(s, width)
+	}
+	if strings.Contains(s, "\x1b") && !strings.HasSuffix(s, "\x1b[0m") {
+		s += "\x1b[0m"
+	}
+	pad := width - sw
+	if pad <= 0 {
+		return s
+	}
+	return s + padding(pad)
+}
+
 func fitCell(s string, width int) string {
-	s = clipText(s, width)
-	pad := width - ansi.StringWidth(s)
+	s, sw := clipTextWithWidth(s, width)
+	pad := width - sw
 	if pad <= 0 {
 		return s
 	}
@@ -147,18 +178,20 @@ func fitCell(s string, width int) string {
 }
 
 func edgeText(left, right string, width int) string {
+	return edgeTextWithWidths(left, ansi.StringWidth(left), right, ansi.StringWidth(right), width)
+}
+
+// Optimization: edgeTextWithWidths accepts precomputed component visible widths
+// to eliminate redundant ansi.StringWidth sequence scans during session row formatting.
+func edgeTextWithWidths(left string, leftW int, right string, rightW int, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	// Optimization: cache visible widths leftW and rightW to eliminate repeated
-	// ansi.StringWidth calls per line during workspace layout calculation.
-	leftW := ansi.StringWidth(left)
 	if right == "" {
-		return fitCell(left, width)
+		return fitCellWithWidth(left, leftW, width)
 	}
-	rightW := ansi.StringWidth(right)
 	if leftW+rightW+3 > width {
-		return fitCell(left, width)
+		return fitCellWithWidth(left, leftW, width)
 	}
 	pad := width - leftW - rightW
 	return left + padding(pad) + right
@@ -178,13 +211,13 @@ func renderHints(actions []keyHint, width int) string {
 	}
 	used, reserve := 0, 0
 	if help != nil {
-		reserve = ansi.StringWidth(help.key+" "+help.label) + 3
+		reserve = ansi.StringWidth(help.key) + 1 + ansi.StringWidth(help.label) + 3
 	}
 	for _, action := range actions {
 		if action.key == "?" {
 			continue
 		}
-		n := ansi.StringWidth(action.key + " " + action.label)
+		n := ansi.StringWidth(action.key) + 1 + ansi.StringWidth(action.label)
 		if len(visible) > 0 {
 			n += 3
 		}
@@ -222,12 +255,18 @@ func sessionRow(name, state string, selected bool, width int) string {
 	if width < 20 {
 		state = ""
 	}
-	nameWidth := max(1, width-4-ansi.StringWidth(state)-3)
-	name = clipText(name, nameWidth)
+	stateW := ansi.StringWidth(state)
+	nameWidth := max(1, width-4-stateW-3)
+	name, nameW := clipTextWithWidth(name, nameWidth)
+	renderedState := stateStyle.Render(state)
+	if state == "" {
+		renderedState = ""
+	}
 	if selected {
 		name = pkSelected.Render(name)
+		nameW = ansi.StringWidth(name)
 	}
-	return marker + dot + " " + edgeText(name, stateStyle.Render(state), max(0, width-4))
+	return marker + dot + " " + edgeTextWithWidths(name, nameW, renderedState, stateW, max(0, width-4))
 }
 
 func helpLines(actions []keyHint, width int) []string {
