@@ -488,6 +488,18 @@ func (m editorModel) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		m.mode = modeBrowse
 		return m, nil
+	case tea.KeyCtrlU:
+		if len(m.filter) > 0 {
+			m.filter = nil
+			m.refilter()
+			m.resetDraft()
+		}
+		return m, nil
+	case tea.KeySpace:
+		m.filter = append(m.filter, ' ')
+		m.refilter()
+		m.resetDraft()
+		return m, nil
 	case tea.KeyBackspace:
 		if len(m.filter) > 0 {
 			m.filter = m.filter[:len(m.filter)-1]
@@ -695,6 +707,10 @@ func (m editorModel) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyCtrlU:
 		m.input, m.inputErr = nil, ""
+		return m, nil
+	case tea.KeySpace:
+		m.input = append(m.input, ' ')
+		m.inputErr = ""
 		return m, nil
 	case tea.KeyBackspace:
 		if len(m.input) > 0 {

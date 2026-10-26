@@ -126,6 +126,16 @@ func TestEditorFilter(t *testing.T) {
 	if len(m.visible) != 1 || m.visible[0] != "webfarm" {
 		t.Fatalf("filter web → %v, want [webfarm]", m.visible)
 	}
+	// space key in filter mode
+	m = edType(t, m, tea.KeySpace)
+	if string(m.filter) != "web " {
+		t.Fatalf("filter after Space = %q, want %q", m.filter, "web ")
+	}
+	// ctrl+u clears filter
+	m = edType(t, m, tea.KeyCtrlU)
+	if len(m.filter) != 0 || len(m.visible) != 2 {
+		t.Fatalf("filter after Ctrl+U = %q, visible len = %d", m.filter, len(m.visible))
+	}
 	m = edType(t, m, tea.KeyEsc)
 	if m.mode != modeBrowse || len(m.visible) != 2 {
 		t.Fatal("esc did not clear the filter")
@@ -446,6 +456,16 @@ func TestEditorRename(t *testing.T) {
 		t.Fatalf("rename seed = %q", m.input)
 	}
 	m.input = nil
+	m = edRunes(t, m, "lonely")
+	m = edType(t, m, tea.KeySpace)
+	m = edRunes(t, m, "one")
+	if string(m.input) != "lonely one" {
+		t.Fatalf("input after Space = %q", string(m.input))
+	}
+	m = edType(t, m, tea.KeyCtrlU)
+	if len(m.input) != 0 {
+		t.Fatalf("input after Ctrl+U = %q", string(m.input))
+	}
 	m = edRunes(t, m, "lonely")
 	m = edType(t, m, tea.KeyEnter)
 	if m.mode != modeBrowse || m.draft.name != "lonely" || m.draft.orig != "solo" {
