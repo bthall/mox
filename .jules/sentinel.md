@@ -12,3 +12,8 @@
 **Vulnerability:** Session names, window names, layout names, and root directory paths were not consistently validated for ASCII control characters (`unicode.IsControl`). Layout names also bypassed `reservedNameChars` validation. An attacker or malicious config file could inject ANSI escape codes or control characters (like `\x1b` or `\x00`) to manipulate user terminal displays, titles, or status logs.
 **Learning:** Config identifiers and filesystem paths displayed in terminal UIs or CLI outputs must be sanitized or validated against control characters, and reserved character checks must apply uniformly to all named configuration abstractions (sessions, windows, layouts).
 **Prevention:** Always validate session, window, and layout names as well as root directory paths using `unicode.IsControl` and `reservedNameChars` during config schema validation.
+
+## 2026-10-26 - Shell Command Injection via Unquoted Recovered Process Arguments
+**Vulnerability:** Recovering pane process arguments during session import joined `p.argv` slices with spaces (`strings.Join(p.argv, " ")`), leaving spaces, quotes, and shell metacharacters unescaped in generated `commands:` entries.
+**Learning:** When process table argument vectors are converted to shell commands for persistence or re-execution, joining arguments with raw spaces loses shell boundaries and allows command injection.
+**Prevention:** Use shell-quoting primitives (e.g., `tmux.ShellJoin`) when turning process `argv` slices into single-string shell command templates.
