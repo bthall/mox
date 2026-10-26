@@ -776,6 +776,12 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyDown:
 		m.diffOff = clampChoice(m.diffOff+1, len(m.diff))
 		return m, nil
+	case tea.KeyPgUp:
+		m.diffOff = clampChoice(m.diffOff-max(1, m.height-3), len(m.diff))
+		return m, nil
+	case tea.KeyPgDown:
+		m.diffOff = clampChoice(m.diffOff+max(1, m.height-3), len(m.diff))
+		return m, nil
 	}
 	switch string(msg.Runes) {
 	case "s", "S", "y", "Y":

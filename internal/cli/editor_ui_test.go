@@ -1355,3 +1355,30 @@ func TestEditorBatchedKeysStopAtQuit(t *testing.T) {
 		t.Fatalf("sel = %d after batched qj, want 0 (j after quit must be dropped)", m.sel)
 	}
 }
+
+func TestEditorSaveDiffPageScroll(t *testing.T) {
+	m := dirtyModel(t)
+	m.diff = make([]diffLine, 50)
+	for i := range m.diff {
+		m.diff[i] = diffLine{kind: diffAdd, text: fmt.Sprintf("line %d", i)}
+	}
+	m.mode = modeDiff
+	m.height = 20
+
+	if m.diffOff != 0 {
+		t.Fatalf("initial diffOff = %d, want 0", m.diffOff)
+	}
+
+	// Press PgDn
+	m = edType(t, m, tea.KeyPgDown)
+	wantOffset := max(1, m.height-3) // 17
+	if m.diffOff != wantOffset {
+		t.Errorf("diffOff after PgDn = %d, want %d", m.diffOff, wantOffset)
+	}
+
+	// Press PgUp
+	m = edType(t, m, tea.KeyPgUp)
+	if m.diffOff != 0 {
+		t.Errorf("diffOff after PgUp = %d, want 0", m.diffOff)
+	}
+}
