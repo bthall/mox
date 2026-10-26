@@ -356,3 +356,20 @@ func TestSessionRowSelectedComplexGraphemeFitsWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestFitCellControlBytesKeepDisplayWidth(t *testing.T) {
+	for _, input := range []string{"a\tb", "a\rb", "a\bb", "a\x00b", "a\x7fb"} {
+		got := fitCell(input, 8)
+		if width := ansi.StringWidth(got); width != 8 {
+			t.Errorf("fitCell(%q, 8) occupies %d cells: %q", input, width, got)
+		}
+	}
+}
+
+func TestEdgeTextNormalizesNewlinesBeforeCachedPadding(t *testing.T) {
+	for _, right := range []string{"", "too long"} {
+		if got := edgeText("a\nb", right, 6); got != "a b   " {
+			t.Errorf("edgeText with right %q = %q, want normalized six-cell output", right, got)
+		}
+	}
+}

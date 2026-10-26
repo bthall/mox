@@ -96,6 +96,15 @@ func renderWorkspace(v workspaceView) string {
 	return view
 }
 
+func isPrintableASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] >= 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
 func clipText(s string, width int) string {
 	s, _ = clipTextWidth(s, width)
 	return s
@@ -111,7 +120,10 @@ func clipTextWidth(s string, width int) (string, int) {
 	if strings.IndexByte(s, '\n') >= 0 {
 		s = strings.ReplaceAll(s, "\n", " ")
 	}
-	sw := ansi.StringWidth(s)
+	sw := len(s)
+	if !isPrintableASCII(s) {
+		sw = ansi.StringWidth(s)
+	}
 	if sw > width {
 		tail := ""
 		if width > 1 {
@@ -150,6 +162,20 @@ func dashes(n int) string {
 	return strings.Repeat("─", n)
 }
 
+// Reuse a measured width only when formatting does not change the text.
+func fitCellWithWidth(s string, sw, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if sw > width || strings.Contains(s, "\n") {
+		return fitCell(s, width)
+	}
+	if strings.Contains(s, "\x1b") {
+		s += "\x1b[0m"
+	}
+	return s + padding(width-sw)
+}
+
 func fitCell(s string, width int) string {
 	s, sw := clipTextWidth(s, width)
 	pad := width - sw
@@ -171,10 +197,10 @@ func edgeTextWithWidths(left string, leftW int, right string, rightW int, width 
 		return ""
 	}
 	if right == "" {
-		return fitCell(left, width)
+		return fitCellWithWidth(left, leftW, width)
 	}
 	if leftW+rightW+3 > width {
-		return fitCell(left, width)
+		return fitCellWithWidth(left, leftW, width)
 	}
 	pad := width - leftW - rightW
 	return left + padding(pad) + right
