@@ -13,6 +13,10 @@
 **Learning:** Config identifiers and filesystem paths displayed in terminal UIs or CLI outputs must be sanitized or validated against control characters, and reserved character checks must apply uniformly to all named configuration abstractions (sessions, windows, layouts).
 **Prevention:** Always validate session, window, and layout names as well as root directory paths using `unicode.IsControl` and `reservedNameChars` during config schema validation.
 
+## 2026-10-24 - Unquoted Shell Arguments in Session Import Command Recovery
+**Vulnerability:** SSH commands recovered from the OS process table during `mox import` were joined with `strings.Join(p.argv, " ")`, stripping shell quotes and argument boundaries. When the imported session was later launched, shell metacharacters (such as `;` or `&&`) in arguments were executed by the local shell instead of being passed as arguments to SSH.
+**Learning:** Reconstructing executable command strings from argument vectors (`argv`) for subsequent execution by a shell requires full shell-quoting (`ShellJoin`), not simple space concatenation.
+**Prevention:** Always use `tmux.ShellJoin` when converting an argument slice (`[]string`) into a single shell command string to preserve argument boundaries and prevent local command execution.
 ## 2026-10-24 - Tmux Option Injection via Positional Arguments Starting with Hyphen
 **Vulnerability:** Positional arguments passed to tmux commands (`send-keys`, `rename-window`, `select-layout`) without an option terminator (`--`) caused strings starting with hyphens (such as `-t`, `-R`, `--help`, or window names like `-mywin`) to be parsed as tmux command flags rather than literal positional values, causing command failures or unintended option execution.
 **Learning:** CLI wrappers executing external tools like `tmux` must use `--` option terminators before positional arguments that originate from user input or configuration to ensure they are interpreted as positional arguments rather than CLI flags.

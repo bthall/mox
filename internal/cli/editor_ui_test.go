@@ -126,6 +126,16 @@ func TestEditorFilter(t *testing.T) {
 	if len(m.visible) != 1 || m.visible[0] != "webfarm" {
 		t.Fatalf("filter web → %v, want [webfarm]", m.visible)
 	}
+	// space key in filter mode
+	m = edType(t, m, tea.KeySpace)
+	if string(m.filter) != "web " {
+		t.Fatalf("filter after Space = %q, want %q", m.filter, "web ")
+	}
+	// ctrl+u clears filter
+	m = edType(t, m, tea.KeyCtrlU)
+	if len(m.filter) != 0 || len(m.visible) != 2 {
+		t.Fatalf("filter after Ctrl+U = %q, visible len = %d", m.filter, len(m.visible))
+	}
 	m = edType(t, m, tea.KeyEsc)
 	if m.mode != modeBrowse || len(m.visible) != 2 {
 		t.Fatal("esc did not clear the filter")
@@ -447,6 +457,16 @@ func TestEditorRename(t *testing.T) {
 	}
 	m.input = nil
 	m = edRunes(t, m, "lonely")
+	m = edType(t, m, tea.KeySpace)
+	m = edRunes(t, m, "one")
+	if string(m.input) != "lonely one" {
+		t.Fatalf("input after Space = %q", string(m.input))
+	}
+	m = edType(t, m, tea.KeyCtrlU)
+	if len(m.input) != 0 {
+		t.Fatalf("input after Ctrl+U = %q", string(m.input))
+	}
+	m = edRunes(t, m, "lonely")
 	m = edType(t, m, tea.KeyEnter)
 	if m.mode != modeBrowse || m.draft.name != "lonely" || m.draft.orig != "solo" {
 		t.Fatalf("rename draft = %+v", m.draft)
@@ -689,6 +709,59 @@ func TestEditorGuardOnQuit(t *testing.T) {
 		t.Fatal("guard discard on quit did not quit")
 	}
 	_ = nm
+}
+
+func TestEditorGuardOnQuitRepeatKey(t *testing.T) {
+	m := dirtyModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m = nm.(editorModel)
+	if cmd != nil || m.mode != modeGuard {
+		t.Fatal("q with a dirty draft did not guard")
+	}
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if !isQuit(cmd) {
+		t.Fatal("repeat q on quit guard did not quit")
+	}
+	_ = nm
+}
+
+func TestEditorGuardOnQuitDoubleCtrlC(t *testing.T) {
+	m := dirtyModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = nm.(editorModel)
+	if cmd != nil || m.mode != modeGuard {
+		t.Fatal("ctrl-c with a dirty draft did not guard")
+	}
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if !isQuit(cmd) {
+		t.Fatal("second ctrl-c on quit guard did not quit")
+	}
+	_ = nm
+}
+
+func TestEditorGuardCancelKeys(t *testing.T) {
+	m := dirtyModel(t)
+	m.pane = paneList
+	m = edRunes(t, m, "j") // navigate away → modeGuard with pendingSelect
+	if m.mode != modeGuard {
+		t.Fatal("navigating away did not guard")
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	em := nm.(editorModel)
+	if em.mode == modeGuard {
+		t.Fatal("c key should cancel guard and stay")
+	}
+
+	// Ctrl+C on non-quit guard cancels guard and stays
+	m = edRunes(t, m, "j")
+	if m.mode != modeGuard {
+		t.Fatal("navigating away did not guard second time")
+	}
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	em = nm.(editorModel)
+	if em.mode == modeGuard || em.leaving {
+		t.Fatal("ctrl-c on non-quit guard should stay, not quit or freeze")
+	}
 }
 
 func TestEditorFilterBlockedWhenDirty(t *testing.T) {
