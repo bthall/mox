@@ -44,6 +44,7 @@ func renderWorkspace(v workspaceView) string {
 	l := terminalLayout(v.width, v.height)
 	inner := max(0, l.width-2)
 	header := edgeText(pkTitle.Render("mox / "+v.view), pkDim.Render(v.context), inner)
+	// Optimization: preallocate rows slice capacity to avoid repeated slice growth allocations.
 	rows := make([]string, 0, l.contentHeight+6)
 	rows = append(rows, " "+header+" ", pkBorder.Render(dashes(l.width)))
 	listTitle, detailTitle := v.listTitle, v.detailTitle
@@ -97,21 +98,34 @@ func renderWorkspace(v workspaceView) string {
 	return view
 }
 
+func isPrintableASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] >= 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
 func clipText(s string, width int) string {
-	s, _ = clipTextWithWidth(s, width)
+	s, _ = clipTextWidth(s, width)
 	return s
 }
 
-// clipTextWithWidth returns both the clipped string and its visible width,
-// eliminating double ansi.StringWidth scanning passes when formatting cells.
-func clipTextWithWidth(s string, width int) (string, int) {
+// Optimization: single-pass truncation and cell width calculation that returns
+// both the clipped string and its visible width, eliminating double ansi.StringWidth
+// passes when formatting layout cells.
+func clipTextWidth(s string, width int) (string, int) {
 	if width <= 0 {
 		return "", 0
 	}
 	if strings.IndexByte(s, '\n') >= 0 {
 		s = strings.ReplaceAll(s, "\n", " ")
 	}
-	sw := ansi.StringWidth(s)
+	sw := len(s)
+	if !isPrintableASCII(s) {
+		sw = ansi.StringWidth(s)
+	}
 	if sw > width {
 		tail := ""
 		if width > 1 {
@@ -150,25 +164,22 @@ func dashes(n int) string {
 	return strings.Repeat("─", n)
 }
 
+// Reuse a measured width only when formatting does not change the text.
 func fitCellWithWidth(s string, sw, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	if sw > width || strings.IndexByte(s, '\n') >= 0 {
+	if sw > width || strings.Contains(s, "\n") {
 		return fitCell(s, width)
 	}
 	if strings.Contains(s, "\x1b") && !strings.HasSuffix(s, "\x1b[0m") {
 		s += "\x1b[0m"
 	}
-	pad := width - sw
-	if pad <= 0 {
-		return s
-	}
-	return s + padding(pad)
+	return s + padding(width-sw)
 }
 
 func fitCell(s string, width int) string {
-	s, sw := clipTextWithWidth(s, width)
+	s, sw := clipTextWidth(s, width)
 	pad := width - sw
 	if pad <= 0 {
 		return s
@@ -211,13 +222,13 @@ func renderHints(actions []keyHint, width int) string {
 	}
 	used, reserve := 0, 0
 	if help != nil {
-		reserve = ansi.StringWidth(help.key) + 1 + ansi.StringWidth(help.label) + 3
+		reserve = hintWidth(help.key, help.label) + 3
 	}
 	for _, action := range actions {
 		if action.key == "?" {
 			continue
 		}
-		n := ansi.StringWidth(action.key) + 1 + ansi.StringWidth(action.label)
+		n := hintWidth(action.key, action.label)
 		if len(visible) > 0 {
 			n += 3
 		}
@@ -230,8 +241,18 @@ func renderHints(actions []keyHint, width int) string {
 	if help != nil && used+reserve <= width {
 		visible = append(visible, *help)
 	}
-	pairs := make([]string, 0, len(visible)*2)
-	for _, action := range visible {
+	return hintsActions(visible)
+}
+
+// Optimization: calculate hint component width without intermediate string concatenation.
+func hintWidth(key, label string) int {
+	return ansi.StringWidth(key) + 1 + ansi.StringWidth(label)
+}
+
+// Optimization: format visible hints via hints helper.
+func hintsActions(actions []keyHint) string {
+	pairs := make([]string, 0, len(actions)*2)
+	for _, action := range actions {
 		pairs = append(pairs, action.key, action.label)
 	}
 	return hints(pairs...)
@@ -257,14 +278,15 @@ func sessionRow(name, state string, selected bool, width int) string {
 	}
 	stateW := ansi.StringWidth(state)
 	nameWidth := max(1, width-4-stateW-3)
-	name, nameW := clipTextWithWidth(name, nameWidth)
+	name, nameW := clipTextWidth(name, nameWidth)
+	if selected {
+		name = pkSelected.Render(name)
+		// Underlining inserts escapes between runes and can change grapheme widths.
+		nameW = ansi.StringWidth(name)
+	}
 	renderedState := stateStyle.Render(state)
 	if state == "" {
 		renderedState = ""
-	}
-	if selected {
-		name = pkSelected.Render(name)
-		nameW = ansi.StringWidth(name)
 	}
 	return marker + dot + " " + edgeTextWithWidths(name, nameW, renderedState, stateW, max(0, width-4))
 }

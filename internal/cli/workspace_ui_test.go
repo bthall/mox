@@ -244,21 +244,6 @@ func TestEditorDiscardEditsKeepsSavedSession(t *testing.T) {
 	}
 }
 
-func TestClipTextWithWidthAndFitCellWithWidth(t *testing.T) {
-	s := "hello world"
-	clipped, w := clipTextWithWidth(s, 5)
-	if w != 5 || clipped != "hell…" {
-		t.Errorf("clipTextWithWidth(%q, 5) = (%q, %d), want (%q, 5)", s, clipped, w, "hell…")
-	}
-
-	styled := pkTitle.Render("title")
-	styledW := ansi.StringWidth(styled)
-	fitted := fitCellWithWidth(styled, styledW, 10)
-	if ansi.StringWidth(fitted) != 10 {
-		t.Errorf("fitCellWithWidth(%q, %d, 10) visible width = %d, want 10", styled, styledW, ansi.StringWidth(fitted))
-	}
-}
-
 func TestWorkspaceHelpAndTextInputKeys(t *testing.T) {
 	hub := testHubModel(t, nil)
 	name := hub.selectedName()
@@ -353,6 +338,54 @@ func BenchmarkFitCell(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = fitCell(s, 50)
+	}
+}
+
+func TestSessionRowSelectedComplexGraphemeFitsWidth(t *testing.T) {
+	previous := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previous) })
+	for _, name := range []string{"👩‍💻 team", "👨‍👩‍👧‍👦 home", "école"} {
+		for _, state := range []string{"running", "stopped", "tmux only", "draft"} {
+			for _, width := range []int{20, 24, 32} {
+				row := sessionRow(name, state, true, width)
+				if got := ansi.StringWidth(row); got > width {
+					t.Errorf("selected %q (%s) uses %d cells in a %d-cell row: %q", name, state, got, width, row)
+				}
+			}
+		}
+	}
+}
+
+func TestFitCellControlBytesKeepDisplayWidth(t *testing.T) {
+	for _, input := range []string{"a\tb", "a\rb", "a\bb", "a\x00b", "a\x7fb"} {
+		got := fitCell(input, 8)
+		if width := ansi.StringWidth(got); width != 8 {
+			t.Errorf("fitCell(%q, 8) occupies %d cells: %q", input, width, got)
+		}
+	}
+}
+
+func TestEdgeTextNormalizesNewlinesBeforeCachedPadding(t *testing.T) {
+	for _, right := range []string{"", "too long"} {
+		if got := edgeText("a\nb", right, 6); got != "a b   " {
+			t.Errorf("edgeText with right %q = %q, want normalized six-cell output", right, got)
+		}
+	}
+}
+
+func TestClipTextWidthAndFitCellWithWidth(t *testing.T) {
+	s := "hello world"
+	clipped, w := clipTextWidth(s, 5)
+	if w != 5 || clipped != "hell…" {
+		t.Errorf("clipTextWidth(%q, 5) = (%q, %d), want (%q, 5)", s, clipped, w, "hell…")
+	}
+
+	styled := pkTitle.Render("title")
+	styledW := ansi.StringWidth(styled)
+	fitted := fitCellWithWidth(styled, styledW, 10)
+	if ansi.StringWidth(fitted) != 10 {
+		t.Errorf("fitCellWithWidth(%q, %d, 10) visible width = %d, want 10", styled, styledW, ansi.StringWidth(fitted))
 	}
 }
 

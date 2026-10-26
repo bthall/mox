@@ -423,6 +423,14 @@ func TestHubFilterAndBatchedKeys(t *testing.T) {
 	if len(m.visible) != 1 || m.candidates[m.visible[0]].Name != "dbcluster" {
 		t.Fatalf("filter db → %d matches", len(m.visible))
 	}
+	m, _ = hubKey(t, m, tea.KeyMsg{Type: tea.KeySpace})
+	if string(m.filter) != "db " {
+		t.Fatalf("hub filter after Space = %q", string(m.filter))
+	}
+	m, _ = hubKey(t, m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if len(m.filter) != 0 || len(m.visible) != 3 {
+		t.Fatalf("hub filter after Ctrl+U = %q, visible len = %d", m.filter, len(m.visible))
+	}
 	m, _ = hubKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if len(m.visible) != 3 {
 		t.Fatal("esc did not clear the filter")
