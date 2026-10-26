@@ -384,6 +384,23 @@ func TestBuildWindow_PartialSSHRecoversCommand(t *testing.T) {
 	}
 }
 
+func TestBuildWindow_SSHCommandWithMetacharacters(t *testing.T) {
+	// SSH arguments containing spaces, semicolons, or quotes must be safely
+	// shell-quoted by ShellJoin so that unquoted metacharacters aren't
+	// executed as local shell commands.
+	w, _ := buildWindow("main", "", []capturedPane{
+		{path: "/a", argv: []string{"ssh", "target", "echo hello; id"}},
+		{path: "/a", argv: []string{"htop"}},
+	})
+	if w.Hosts != nil {
+		t.Fatalf("should stay complex")
+	}
+	want := []string{"ssh target 'echo hello; id'"}
+	if !reflect.DeepEqual(w.Panes[0].Commands, want) {
+		t.Errorf("pane 0 commands = %v, want %v", w.Panes[0].Commands, want)
+	}
+}
+
 func TestBuildWindow_SSHCommandShellQuoting(t *testing.T) {
 	// SSH commands with spaces, quotes, or metacharacters in arguments must be shell-quoted on import.
 	w, _ := buildWindow("main", "", []capturedPane{

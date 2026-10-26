@@ -13,6 +13,10 @@
 **Learning:** Config identifiers and filesystem paths displayed in terminal UIs or CLI outputs must be sanitized or validated against control characters, and reserved character checks must apply uniformly to all named configuration abstractions (sessions, windows, layouts).
 **Prevention:** Always validate session, window, and layout names as well as root directory paths using `unicode.IsControl` and `reservedNameChars` during config schema validation.
 
+## 2026-10-24 - Unquoted Shell Arguments in Session Import Command Recovery
+**Vulnerability:** SSH commands recovered from the OS process table during `mox import` were joined with `strings.Join(p.argv, " ")`, stripping shell quotes and argument boundaries. When the imported session was later launched, shell metacharacters (such as `;` or `&&`) in arguments were executed by the local shell instead of being passed as arguments to SSH.
+**Learning:** Reconstructing executable command strings from argument vectors (`argv`) for subsequent execution by a shell requires full shell-quoting (`ShellJoin`), not simple space concatenation.
+**Prevention:** Always use `tmux.ShellJoin` when converting an argument slice (`[]string`) into a single shell command string to preserve argument boundaries and prevent local command execution.
 ## 2026-10-26 - Shell Command Injection via Unquoted Recovered Process Arguments
 **Vulnerability:** Recovering pane process arguments during session import joined `p.argv` slices with spaces (`strings.Join(p.argv, " ")`), leaving spaces, quotes, and shell metacharacters unescaped in generated `commands:` entries.
 **Learning:** When process table argument vectors are converted to shell commands for persistence or re-execution, joining arguments with raw spaces loses shell boundaries and allows command injection.

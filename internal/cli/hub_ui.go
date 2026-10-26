@@ -525,6 +525,17 @@ func (m hubModel) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		m.mode = hubBrowse
 		return m, nil
+	case tea.KeyCtrlU:
+		if len(m.filter) > 0 {
+			m.filter = nil
+			m.refilter()
+			return m, m.onHighlightChange()
+		}
+		return m, nil
+	case tea.KeySpace:
+		m.filter = append(m.filter, ' ')
+		m.refilter()
+		return m, m.onHighlightChange()
 	case tea.KeyBackspace:
 		if len(m.filter) > 0 {
 			m.filter = m.filter[:len(m.filter)-1]
