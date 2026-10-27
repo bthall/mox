@@ -21,3 +21,8 @@
 **Vulnerability:** Positional arguments passed to tmux commands (`send-keys`, `rename-window`, `select-layout`) without an option terminator (`--`) caused strings starting with hyphens (such as `-t`, `-R`, `--help`, or window names like `-mywin`) to be parsed as tmux command flags rather than literal positional values, causing command failures or unintended option execution.
 **Learning:** CLI wrappers executing external tools like `tmux` must use `--` option terminators before positional arguments that originate from user input or configuration to ensure they are interpreted as positional arguments rather than CLI flags.
 **Prevention:** Always place `--` before positional arguments in `tmux` command invocations (e.g. `send-keys -t target -- cmd C-m` or `rename-window -t target -- name`).
+
+## 2026-10-26 - Shell Command Injection via Unquoted Recovered Process Arguments
+**Vulnerability:** Recovering pane process arguments during session import joined `p.argv` slices with spaces (`strings.Join(p.argv, " ")`), leaving spaces, quotes, and shell metacharacters unescaped in generated `commands:` entries.
+**Learning:** When process table argument vectors are converted to shell commands for persistence or re-execution, joining arguments with raw spaces loses shell boundaries and allows command injection.
+**Prevention:** Use shell-quoting primitives (e.g., `tmux.ShellJoin`) when turning process `argv` slices into single-string shell command templates.
