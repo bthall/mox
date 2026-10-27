@@ -338,3 +338,77 @@ func TestAddWizard_PrefilledName(t *testing.T) {
 		t.Errorf("name = %q", m.name)
 	}
 }
+
+func TestAddWizard_JKNavigationInArrangeAndConfirm(t *testing.T) {
+	m := newTestAddModel()
+	m = through(t, m, "web")
+	m = through(t, m, "w1 w2")
+	m = sendAdd(t, m, keyEnter) // ssh user: skip
+	m = sendAdd(t, m, keyEnter) // sync: default (on) -> stepArrange
+
+	if m.step != stepArrange {
+		t.Fatalf("step = %v, want stepArrange", m.step)
+	}
+	if m.arrangeIdx != 0 {
+		t.Fatalf("arrangeIdx = %d, want 0", m.arrangeIdx)
+	}
+
+	// 'j' moves choice down on stepArrange
+	m = sendAdd(t, m, runes("j")...)
+	if m.arrangeIdx != 1 {
+		t.Errorf("j: arrangeIdx = %d, want 1", m.arrangeIdx)
+	}
+
+	// 'J' (case-insensitive) moves choice down again
+	m = sendAdd(t, m, runes("J")...)
+	if m.arrangeIdx != 2 {
+		t.Errorf("J: arrangeIdx = %d, want 2", m.arrangeIdx)
+	}
+
+	// 'k' moves choice up
+	m = sendAdd(t, m, runes("k")...)
+	if m.arrangeIdx != 1 {
+		t.Errorf("k: arrangeIdx = %d, want 1", m.arrangeIdx)
+	}
+
+	// 'K' moves choice up to top
+	m = sendAdd(t, m, runes("K")...)
+	if m.arrangeIdx != 0 {
+		t.Errorf("K: arrangeIdx = %d, want 0", m.arrangeIdx)
+	}
+
+	// Verify action hints contain j/k
+	hintsStr := renderHints(m.actionHints(), 100)
+	if !strings.Contains(hintsStr, "j/k") {
+		t.Errorf("stepArrange action hints = %q, want 'j/k'", hintsStr)
+	}
+
+	// Advance to stepConfirm
+	m = sendAdd(t, m, keyEnter) // arrange
+	m = sendAdd(t, m, keyEnter) // root
+	m = sendAdd(t, m, keyEnter) // commands -> stepConfirm
+
+	if m.step != stepConfirm {
+		t.Fatalf("step = %v, want stepConfirm", m.step)
+	}
+	if m.confirmIdx != 0 {
+		t.Fatalf("confirmIdx = %d, want 0", m.confirmIdx)
+	}
+
+	// 'j' moves choice down on stepConfirm
+	m = sendAdd(t, m, runes("j")...)
+	if m.confirmIdx != 1 {
+		t.Errorf("j: confirmIdx = %d, want 1", m.confirmIdx)
+	}
+
+	// 'k' moves choice up on stepConfirm
+	m = sendAdd(t, m, runes("k")...)
+	if m.confirmIdx != 0 {
+		t.Errorf("k: confirmIdx = %d, want 0", m.confirmIdx)
+	}
+
+	hintsStr = renderHints(m.actionHints(), 100)
+	if !strings.Contains(hintsStr, "j/k") {
+		t.Errorf("stepConfirm action hints = %q, want 'j/k'", hintsStr)
+	}
+}

@@ -156,3 +156,55 @@ func TestCreateWindowExactSessionMatch(t *testing.T) {
 		t.Fatalf("stray window landed in %q: %q", longer, out)
 	}
 }
+
+func TestSendKeysWithHyphenCommand(t *testing.T) {
+	client, err := NewClient()
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	const name = "mox-test-sendkeys-hyphen"
+	_ = client.KillSession(name)
+	if err := client.CreateSession(name, "", "main"); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	t.Cleanup(func() { _ = client.KillSession(name) })
+
+	winID, err := client.FirstWindowID(name)
+	if err != nil {
+		t.Fatalf("FirstWindowID() error = %v", err)
+	}
+	paneID, err := client.FirstPaneID(winID)
+	if err != nil {
+		t.Fatalf("FirstPaneID() error = %v", err)
+	}
+
+	// Verify that commands starting with -t, -R, -l, --help are passed safely to tmux send-keys.
+	if err := client.SendKeys(paneID, []string{"-t", "-R", "--help"}); err != nil {
+		t.Fatalf("SendKeys() error = %v", err)
+	}
+}
+
+func TestRenameWindowWithHyphenName(t *testing.T) {
+	client, err := NewClient()
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	const name = "mox-test-rename-hyphen"
+	_ = client.KillSession(name)
+	if err := client.CreateSession(name, "", "main"); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	t.Cleanup(func() { _ = client.KillSession(name) })
+
+	winID, err := client.FirstWindowID(name)
+	if err != nil {
+		t.Fatalf("FirstWindowID() error = %v", err)
+	}
+
+	// Verify that window names starting with - are passed safely to tmux rename-window.
+	if err := client.RenameWindow(winID, "-mywin"); err != nil {
+		t.Fatalf("RenameWindow() error = %v", err)
+	}
+}

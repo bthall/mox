@@ -17,6 +17,11 @@
 **Vulnerability:** SSH commands recovered from the OS process table during `mox import` were joined with `strings.Join(p.argv, " ")`, stripping shell quotes and argument boundaries. When the imported session was later launched, shell metacharacters (such as `;` or `&&`) in arguments were executed by the local shell instead of being passed as arguments to SSH.
 **Learning:** Reconstructing executable command strings from argument vectors (`argv`) for subsequent execution by a shell requires full shell-quoting (`ShellJoin`), not simple space concatenation.
 **Prevention:** Always use `tmux.ShellJoin` when converting an argument slice (`[]string`) into a single shell command string to preserve argument boundaries and prevent local command execution.
+## 2026-10-24 - Tmux Option Injection via Positional Arguments Starting with Hyphen
+**Vulnerability:** Positional arguments passed to tmux commands (`send-keys`, `rename-window`, `select-layout`) without an option terminator (`--`) caused strings starting with hyphens (such as `-t`, `-R`, `--help`, or window names like `-mywin`) to be parsed as tmux command flags rather than literal positional values, causing command failures or unintended option execution.
+**Learning:** CLI wrappers executing external tools like `tmux` must use `--` option terminators before positional arguments that originate from user input or configuration to ensure they are interpreted as positional arguments rather than CLI flags.
+**Prevention:** Always place `--` before positional arguments in `tmux` command invocations (e.g. `send-keys -t target -- cmd C-m` or `rename-window -t target -- name`).
+
 ## 2026-10-26 - Shell Command Injection via Unquoted Recovered Process Arguments
 **Vulnerability:** Recovering pane process arguments during session import joined `p.argv` slices with spaces (`strings.Join(p.argv, " ")`), leaving spaces, quotes, and shell metacharacters unescaped in generated `commands:` entries.
 **Learning:** When process table argument vectors are converted to shell commands for persistence or re-execution, joining arguments with raw spaces loses shell boundaries and allows command injection.
