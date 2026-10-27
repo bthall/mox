@@ -216,6 +216,11 @@ func TestAddWizard_CtrlCProtectsDraft(t *testing.T) {
 	if mn.cancelConfirm || mn.finished {
 		t.Error("n should cancel the discard prompt and keep editing")
 	}
+	// 'c' also cancels the discard prompt and keeps editing
+	mcKey := sendAdd(t, m, runes("c")...)
+	if mcKey.cancelConfirm || mcKey.finished {
+		t.Error("c should cancel the discard prompt and keep editing")
+	}
 	// 'D' (uppercase) confirms discarding the draft
 	mD := sendAdd(t, m, runes("D")...)
 	if !mD.finished || mD.done.action != addActionCancel {
@@ -334,53 +339,76 @@ func TestAddWizard_PrefilledName(t *testing.T) {
 	}
 }
 
-func TestAddWizard_VimKeyNavigation(t *testing.T) {
+func TestAddWizard_JKNavigationInArrangeAndConfirm(t *testing.T) {
 	m := newTestAddModel()
 	m = through(t, m, "web")
 	m = through(t, m, "w1 w2")
 	m = sendAdd(t, m, keyEnter) // ssh user: skip
-	m = sendAdd(t, m, keyEnter) // sync: default -> arrange step
+	m = sendAdd(t, m, keyEnter) // sync: default (on) -> stepArrange
 
 	if m.step != stepArrange {
 		t.Fatalf("step = %v, want stepArrange", m.step)
 	}
 	if m.arrangeIdx != 0 {
-		t.Fatalf("initial arrangeIdx = %d, want 0", m.arrangeIdx)
+		t.Fatalf("arrangeIdx = %d, want 0", m.arrangeIdx)
 	}
 
-	// Press 'j' to move down
-	m = sendAdd(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	// 'j' moves choice down on stepArrange
+	m = sendAdd(t, m, runes("j")...)
 	if m.arrangeIdx != 1 {
-		t.Errorf("arrangeIdx after 'j' = %d, want 1", m.arrangeIdx)
+		t.Errorf("j: arrangeIdx = %d, want 1", m.arrangeIdx)
 	}
 
-	// Press 'k' to move back up
-	m = sendAdd(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	// 'J' (case-insensitive) moves choice down again
+	m = sendAdd(t, m, runes("J")...)
+	if m.arrangeIdx != 2 {
+		t.Errorf("J: arrangeIdx = %d, want 2", m.arrangeIdx)
+	}
+
+	// 'k' moves choice up
+	m = sendAdd(t, m, runes("k")...)
+	if m.arrangeIdx != 1 {
+		t.Errorf("k: arrangeIdx = %d, want 1", m.arrangeIdx)
+	}
+
+	// 'K' moves choice up to top
+	m = sendAdd(t, m, runes("K")...)
 	if m.arrangeIdx != 0 {
-		t.Errorf("arrangeIdx after 'k' = %d, want 0", m.arrangeIdx)
+		t.Errorf("K: arrangeIdx = %d, want 0", m.arrangeIdx)
 	}
 
-	// Advance through root and commands to stepConfirm
+	// Verify action hints contain j/k
+	hintsStr := renderHints(m.actionHints(), 100)
+	if !strings.Contains(hintsStr, "j/k") {
+		t.Errorf("stepArrange action hints = %q, want 'j/k'", hintsStr)
+	}
+
+	// Advance to stepConfirm
 	m = sendAdd(t, m, keyEnter) // arrange
 	m = sendAdd(t, m, keyEnter) // root
-	m = sendAdd(t, m, keyEnter) // commands
+	m = sendAdd(t, m, keyEnter) // commands -> stepConfirm
 
 	if m.step != stepConfirm {
 		t.Fatalf("step = %v, want stepConfirm", m.step)
 	}
 	if m.confirmIdx != 0 {
-		t.Fatalf("initial confirmIdx = %d, want 0", m.confirmIdx)
+		t.Fatalf("confirmIdx = %d, want 0", m.confirmIdx)
 	}
 
-	// Press 'J' to move down on confirm step
-	m = sendAdd(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+	// 'j' moves choice down on stepConfirm
+	m = sendAdd(t, m, runes("j")...)
 	if m.confirmIdx != 1 {
-		t.Errorf("confirmIdx after 'J' = %d, want 1", m.confirmIdx)
+		t.Errorf("j: confirmIdx = %d, want 1", m.confirmIdx)
 	}
 
-	// Press 'K' to move up on confirm step
-	m = sendAdd(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+	// 'k' moves choice up on stepConfirm
+	m = sendAdd(t, m, runes("k")...)
 	if m.confirmIdx != 0 {
-		t.Errorf("confirmIdx after 'K' = %d, want 0", m.confirmIdx)
+		t.Errorf("k: confirmIdx = %d, want 0", m.confirmIdx)
+	}
+
+	hintsStr = renderHints(m.actionHints(), 100)
+	if !strings.Contains(hintsStr, "j/k") {
+		t.Errorf("stepConfirm action hints = %q, want 'j/k'", hintsStr)
 	}
 }

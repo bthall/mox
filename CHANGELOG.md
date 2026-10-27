@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Page Up and Page Down navigate the editor's save diff by the number of
+  visible diff lines, keeping consecutive pages contiguous.
+
+### Fixed
+
+- Scrolling an empty save diff keeps the offset at zero instead of allowing
+  a negative offset.
+
 ## [0.9.0] — 2026-10-19
 
 ### Added

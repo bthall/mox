@@ -488,6 +488,18 @@ func (m editorModel) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		m.mode = modeBrowse
 		return m, nil
+	case tea.KeyCtrlU:
+		if len(m.filter) > 0 {
+			m.filter = nil
+			m.refilter()
+			m.resetDraft()
+		}
+		return m, nil
+	case tea.KeySpace:
+		m.filter = append(m.filter, ' ')
+		m.refilter()
+		m.resetDraft()
+		return m, nil
 	case tea.KeyBackspace:
 		if len(m.filter) > 0 {
 			m.filter = m.filter[:len(m.filter)-1]
@@ -696,6 +708,10 @@ func (m editorModel) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlU:
 		m.input, m.inputErr = nil, ""
 		return m, nil
+	case tea.KeySpace:
+		m.input = append(m.input, ' ')
+		m.inputErr = ""
+		return m, nil
 	case tea.KeyBackspace:
 		if len(m.input) > 0 {
 			m.input = m.input[:len(m.input)-1]
@@ -771,16 +787,16 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m, _ = m.finishSave()
 		return m, nil
 	case tea.KeyUp:
-		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff-1, max(1, len(m.diff)))
 		return m, nil
 	case tea.KeyDown:
-		m.diffOff = clampChoice(m.diffOff+1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff+1, max(1, len(m.diff)))
 		return m, nil
 	case tea.KeyPgUp:
-		m.diffOff = clampChoice(m.diffOff-max(1, m.height-3), len(m.diff))
+		m.diffOff = clampChoice(m.diffOff-diffPageRows(terminalLayout(m.width, m.height).contentHeight), max(1, len(m.diff)))
 		return m, nil
 	case tea.KeyPgDown:
-		m.diffOff = clampChoice(m.diffOff+max(1, m.height-3), len(m.diff))
+		m.diffOff = clampChoice(m.diffOff+diffPageRows(terminalLayout(m.width, m.height).contentHeight), max(1, len(m.diff)))
 		return m, nil
 	}
 	switch string(msg.Runes) {
@@ -791,9 +807,9 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeBrowse
 		return m, nil
 	case "k":
-		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff-1, max(1, len(m.diff)))
 	case "j":
-		m.diffOff = clampChoice(m.diffOff+1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff+1, max(1, len(m.diff)))
 	}
 	return m, nil
 }
@@ -886,12 +902,28 @@ func (m editorModel) hasPendingInput() bool {
 // the confirmation.
 func (m editorModel) updateGuard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return m, nil
-	}
-	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
+		if m.pending.kind == pendingQuit {
+			m.draft = nil
+			m.refilter()
+			m.resetDraft()
+			m.mode = modeBrowse
+			return m.continuePending()
+		}
 		m.mode = m.guardReturn
 		m.pending = pendingAction{}
 		return m, nil
+	}
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" || string(msg.Runes) == "c" || string(msg.Runes) == "C" {
+		m.mode = m.guardReturn
+		m.pending = pendingAction{}
+		return m, nil
+	}
+	if m.pending.kind == pendingQuit && (string(msg.Runes) == "q" || string(msg.Runes) == "Q") {
+		m.draft = nil
+		m.refilter()
+		m.resetDraft()
+		m.mode = modeBrowse
+		return m.continuePending()
 	}
 	switch string(msg.Runes) {
 	case "s", "S":
@@ -1182,6 +1214,12 @@ func (m editorModel) guardLines(w int) []string {
 	}
 }
 
+// diffPageRows reserves the title, blank line, and overflow hint inside the
+// workspace's content area. Paging and rendering must use the same viewport.
+func diffPageRows(contentHeight int) int {
+	return max(1, contentHeight-3)
+}
+
 // diffModalLines renders the save preview. The diff shows both
 // sides in canonical (re-encoded) form — a semantic preview, not a byte
 // diff of the file; unchanged context lines may differ in formatting from
@@ -1192,10 +1230,7 @@ func (m editorModel) diffModalLines(w, h int) []string {
 		title = fmt.Sprintf("delete %q — review the change:", m.draft.name)
 	}
 	lines := []string{pkDim.Render(truncate(title, w)), ""}
-	rows := h - 3
-	if rows < 1 {
-		rows = 1
-	}
+	rows := diffPageRows(h)
 	end := m.diffOff + rows
 	if end > len(m.diff) {
 		end = len(m.diff)
@@ -1343,7 +1378,7 @@ func (m editorModel) actionHints() []keyHint {
 		}
 		return []keyHint{{"y", "delete"}, {"Esc", "cancel"}, {"?", "help"}}
 	case modeDiff:
-		return []keyHint{{"Enter", "write config"}, {"Esc", "back"}, {"j/k", "scroll"}, {"?", "help"}}
+		return []keyHint{{"Enter", "write config"}, {"Esc", "back"}, {"j/k", "scroll"}, {"PgUp/PgDn", "page"}, {"?", "help"}}
 	case modeGuard:
 		return []keyHint{{"s", "save"}, {"d", "discard"}, {"Esc", "stay"}, {"?", "help"}}
 	case modeStale:

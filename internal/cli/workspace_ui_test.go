@@ -26,6 +26,33 @@ func assertTerminalBounds(t *testing.T, view string, width, height int) {
 	}
 }
 
+func TestHintWidthAndResetSuffix(t *testing.T) {
+	t.Run("hintWidth ASCII vs Unicode", func(t *testing.T) {
+		gotASCII := hintWidth("Enter", "attach")
+		wantASCII := ansi.StringWidth("Enter") + 1 + ansi.StringWidth("attach")
+		if gotASCII != wantASCII {
+			t.Errorf("hintWidth(ASCII) = %d, want %d", gotASCII, wantASCII)
+		}
+
+		gotUni := hintWidth("Enter", "attach 🚀")
+		wantUni := ansi.StringWidth("Enter") + 1 + ansi.StringWidth("attach 🚀")
+		if gotUni != wantUni {
+			t.Errorf("hintWidth(Unicode) = %d, want %d", gotUni, wantUni)
+		}
+	})
+
+	t.Run("clipTextWidth reset suffix handling", func(t *testing.T) {
+		input := "\x1b[31mhello\x1b[0m"
+		got, w := clipTextWidth(input, 10)
+		if w != 5 {
+			t.Errorf("clipTextWidth width = %d, want 5", w)
+		}
+		if strings.HasSuffix(got, "\x1b[0m\x1b[0m") {
+			t.Errorf("clipTextWidth produced duplicate reset suffix: %q", got)
+		}
+	})
+}
+
 func TestWorkspaceViewsRespectTerminalBounds(t *testing.T) {
 	for _, size := range [][2]int{{40, 12}, {80, 24}, {120, 35}, {18, 8}, {1, 1}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
@@ -338,5 +365,69 @@ func BenchmarkFitCell(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = fitCell(s, 50)
+	}
+}
+
+func TestSessionRowSelectedComplexGraphemeFitsWidth(t *testing.T) {
+	previous := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previous) })
+	for _, name := range []string{"👩‍💻 team", "👨‍👩‍👧‍👦 home", "école"} {
+		for _, state := range []string{"running", "stopped", "tmux only", "draft"} {
+			for _, width := range []int{20, 24, 32} {
+				row := sessionRow(name, state, true, width)
+				if got := ansi.StringWidth(row); got > width {
+					t.Errorf("selected %q (%s) uses %d cells in a %d-cell row: %q", name, state, got, width, row)
+				}
+			}
+		}
+	}
+}
+
+func TestFitCellControlBytesKeepDisplayWidth(t *testing.T) {
+	for _, input := range []string{"a\tb", "a\rb", "a\bb", "a\x00b", "a\x7fb"} {
+		got := fitCell(input, 8)
+		if width := ansi.StringWidth(got); width != 8 {
+			t.Errorf("fitCell(%q, 8) occupies %d cells: %q", input, width, got)
+		}
+	}
+}
+
+func TestEdgeTextNormalizesNewlinesBeforeCachedPadding(t *testing.T) {
+	for _, right := range []string{"", "too long"} {
+		if got := edgeText("a\nb", right, 6); got != "a b   " {
+			t.Errorf("edgeText with right %q = %q, want normalized six-cell output", right, got)
+		}
+	}
+}
+
+func TestClipTextWidthAndFitCellWithWidth(t *testing.T) {
+	s := "hello world"
+	clipped, w := clipTextWidth(s, 5)
+	if w != 5 || clipped != "hell…" {
+		t.Errorf("clipTextWidth(%q, 5) = (%q, %d), want (%q, 5)", s, clipped, w, "hell…")
+	}
+
+	styled := pkTitle.Render("title")
+	styledW := ansi.StringWidth(styled)
+	fitted := fitCellWithWidth(styled, styledW, 10)
+	if ansi.StringWidth(fitted) != 10 {
+		t.Errorf("fitCellWithWidth(%q, %d, 10) visible width = %d, want 10", styled, styledW, ansi.StringWidth(fitted))
+	}
+}
+
+func BenchmarkSessionRow(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = sessionRow("dev-session-environment", "running", true, 30)
+	}
+}
+
+func BenchmarkEdgeText(b *testing.B) {
+	left := pkTitle.Render("dev-session-environment")
+	right := pkRunning.Render("running")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = edgeText(left, right, 30)
 	}
 }

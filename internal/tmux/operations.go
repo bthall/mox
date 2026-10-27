@@ -179,7 +179,7 @@ func (c *Client) SplitPane(target string, dir SplitDirection, sizePercent int, s
 // — tmux send-keys does not interpret backslash sequences specially.
 func (c *Client) SendKeys(target string, commands []string) error {
 	for _, cmd := range commands {
-		if _, err := c.Run("send-keys", "-t", target, cmd, "C-m"); err != nil {
+		if _, err := c.Run("send-keys", "-t", target, "--", cmd, "C-m"); err != nil {
 			return fmt.Errorf("send-keys to %s: %w", target, err)
 		}
 	}
@@ -188,7 +188,7 @@ func (c *Client) SendKeys(target string, commands []string) error {
 
 // RenameWindow renames a window.
 func (c *Client) RenameWindow(target, newName string) error {
-	_, err := c.Run("rename-window", "-t", target, newName)
+	_, err := c.Run("rename-window", "-t", target, "--", newName)
 	return err
 }
 
@@ -235,7 +235,7 @@ func (c *Client) SetWindowOption(windowTarget, option, value string) error {
 // even-horizontal, even-vertical, main-horizontal, main-vertical) to the
 // target window.
 func (c *Client) SelectLayout(windowTarget, layoutName string) error {
-	_, err := c.Run("select-layout", "-t", windowTarget, layoutName)
+	_, err := c.Run("select-layout", "-t", windowTarget, "--", layoutName)
 	return err
 }
 

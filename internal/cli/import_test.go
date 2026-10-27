@@ -383,3 +383,32 @@ func TestBuildWindow_PartialSSHRecoversCommand(t *testing.T) {
 		t.Errorf("pane 1 (htop) should have no command, got %v", w.Panes[1].Commands)
 	}
 }
+
+func TestBuildWindow_SSHCommandWithMetacharacters(t *testing.T) {
+	// SSH arguments containing spaces, semicolons, or quotes must be safely
+	// shell-quoted by ShellJoin so that unquoted metacharacters aren't
+	// executed as local shell commands.
+	w, _ := buildWindow("main", "", []capturedPane{
+		{path: "/a", argv: []string{"ssh", "target", "echo hello; id"}},
+		{path: "/a", argv: []string{"htop"}},
+	})
+	if w.Hosts != nil {
+		t.Fatalf("should stay complex")
+	}
+	want := []string{"ssh target 'echo hello; id'"}
+	if !reflect.DeepEqual(w.Panes[0].Commands, want) {
+		t.Errorf("pane 0 commands = %v, want %v", w.Panes[0].Commands, want)
+	}
+}
+
+func TestBuildWindow_SSHCommandShellQuoting(t *testing.T) {
+	// SSH commands with spaces, quotes, or metacharacters in arguments must be shell-quoted on import.
+	w, _ := buildWindow("main", "", []capturedPane{
+		{path: "/a", argv: []string{"ssh", "-i", "/path with space/id_rsa", "user@host", "echo hello; id"}},
+		{path: "/a", argv: []string{"htop"}},
+	})
+	wantCmd := "ssh -i '/path with space/id_rsa' user@host 'echo hello; id'"
+	if !reflect.DeepEqual(w.Panes[0].Commands, []string{wantCmd}) {
+		t.Errorf("pane 0 commands = %v, want [%s]", w.Panes[0].Commands, wantCmd)
+	}
+}

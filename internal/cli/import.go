@@ -256,7 +256,7 @@ func buildWindow(name, layout string, panes []capturedPane) (win *config.Window,
 		for i, g := range chain {
 			pane := &config.Pane{Split: g.split, Size: g.size}
 			if p := byID[g.paneID]; isSSHCommand(p.argv) {
-				pane.Commands = []string{strings.Join(p.argv, " ")}
+				pane.Commands = []string{tmux.ShellJoin(p.argv)}
 			}
 			win.Panes[i] = pane
 		}
@@ -273,7 +273,7 @@ func buildWindow(name, layout string, panes []capturedPane) (win *config.Window,
 		}
 		pane := &config.Pane{Split: split}
 		if isSSHCommand(p.argv) {
-			pane.Commands = []string{strings.Join(p.argv, " ")}
+			pane.Commands = []string{tmux.ShellJoin(p.argv)}
 		}
 		win.Panes[i] = pane
 	}

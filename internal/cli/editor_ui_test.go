@@ -126,6 +126,16 @@ func TestEditorFilter(t *testing.T) {
 	if len(m.visible) != 1 || m.visible[0] != "webfarm" {
 		t.Fatalf("filter web → %v, want [webfarm]", m.visible)
 	}
+	// space key in filter mode
+	m = edType(t, m, tea.KeySpace)
+	if string(m.filter) != "web " {
+		t.Fatalf("filter after Space = %q, want %q", m.filter, "web ")
+	}
+	// ctrl+u clears filter
+	m = edType(t, m, tea.KeyCtrlU)
+	if len(m.filter) != 0 || len(m.visible) != 2 {
+		t.Fatalf("filter after Ctrl+U = %q, visible len = %d", m.filter, len(m.visible))
+	}
 	m = edType(t, m, tea.KeyEsc)
 	if m.mode != modeBrowse || len(m.visible) != 2 {
 		t.Fatal("esc did not clear the filter")
@@ -447,6 +457,16 @@ func TestEditorRename(t *testing.T) {
 	}
 	m.input = nil
 	m = edRunes(t, m, "lonely")
+	m = edType(t, m, tea.KeySpace)
+	m = edRunes(t, m, "one")
+	if string(m.input) != "lonely one" {
+		t.Fatalf("input after Space = %q", string(m.input))
+	}
+	m = edType(t, m, tea.KeyCtrlU)
+	if len(m.input) != 0 {
+		t.Fatalf("input after Ctrl+U = %q", string(m.input))
+	}
+	m = edRunes(t, m, "lonely")
 	m = edType(t, m, tea.KeyEnter)
 	if m.mode != modeBrowse || m.draft.name != "lonely" || m.draft.orig != "solo" {
 		t.Fatalf("rename draft = %+v", m.draft)
@@ -689,6 +709,59 @@ func TestEditorGuardOnQuit(t *testing.T) {
 		t.Fatal("guard discard on quit did not quit")
 	}
 	_ = nm
+}
+
+func TestEditorGuardOnQuitRepeatKey(t *testing.T) {
+	m := dirtyModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m = nm.(editorModel)
+	if cmd != nil || m.mode != modeGuard {
+		t.Fatal("q with a dirty draft did not guard")
+	}
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if !isQuit(cmd) {
+		t.Fatal("repeat q on quit guard did not quit")
+	}
+	_ = nm
+}
+
+func TestEditorGuardOnQuitDoubleCtrlC(t *testing.T) {
+	m := dirtyModel(t)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = nm.(editorModel)
+	if cmd != nil || m.mode != modeGuard {
+		t.Fatal("ctrl-c with a dirty draft did not guard")
+	}
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if !isQuit(cmd) {
+		t.Fatal("second ctrl-c on quit guard did not quit")
+	}
+	_ = nm
+}
+
+func TestEditorGuardCancelKeys(t *testing.T) {
+	m := dirtyModel(t)
+	m.pane = paneList
+	m = edRunes(t, m, "j") // navigate away → modeGuard with pendingSelect
+	if m.mode != modeGuard {
+		t.Fatal("navigating away did not guard")
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	em := nm.(editorModel)
+	if em.mode == modeGuard {
+		t.Fatal("c key should cancel guard and stay")
+	}
+
+	// Ctrl+C on non-quit guard cancels guard and stays
+	m = edRunes(t, m, "j")
+	if m.mode != modeGuard {
+		t.Fatal("navigating away did not guard second time")
+	}
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	em = nm.(editorModel)
+	if em.mode == modeGuard || em.leaving {
+		t.Fatal("ctrl-c on non-quit guard should stay, not quit or freeze")
+	}
 }
 
 func TestEditorFilterBlockedWhenDirty(t *testing.T) {
@@ -1357,28 +1430,71 @@ func TestEditorBatchedKeysStopAtQuit(t *testing.T) {
 }
 
 func TestEditorSaveDiffPageScroll(t *testing.T) {
-	m := dirtyModel(t)
-	m.diff = make([]diffLine, 50)
-	for i := range m.diff {
-		m.diff[i] = diffLine{kind: diffAdd, text: fmt.Sprintf("line %d", i)}
-	}
-	m.mode = modeDiff
-	m.height = 20
+	for _, height := range []int{10, 20, 30, 60} {
+		t.Run(fmt.Sprintf("height-%d", height), func(t *testing.T) {
+			m := dirtyModel(t)
+			m.width, m.height = 100, height
+			m.pane, m.mode = paneForm, modeDiff
+			m.diff = make([]diffLine, 50)
+			for i := range m.diff {
+				m.diff[i] = diffLine{kind: diffAdd, text: fmt.Sprintf("diff-line-%03d", i)}
+			}
 
-	if m.diffOff != 0 {
-		t.Fatalf("initial diffOff = %d, want 0", m.diffOff)
+			// Advance from what the real view shows, not from a copy of the
+			// implementation's page-size formula. No diff line may be skipped.
+			next := 0
+			for pages := 0; next < len(m.diff); pages++ {
+				if pages > len(m.diff) {
+					t.Fatal("page scrolling stopped making progress")
+				}
+				if m.diffOff != next {
+					t.Fatalf("next page starts at %d, want first unseen line %d", m.diffOff, next)
+				}
+				view := m.View()
+				first := next
+				for next < len(m.diff) && strings.Contains(view, fmt.Sprintf("diff-line-%03d", next)) {
+					next++
+				}
+				if next == first {
+					t.Fatalf("page at offset %d displays no diff lines", first)
+				}
+				if first == 0 && height == 20 && next != 11 {
+					t.Fatalf("20-row terminal displays %d diff lines, want 11", next)
+				}
+				if next == len(m.diff) {
+					break
+				}
+				m = edType(t, m, tea.KeyPgDown)
+				// PgUp must return to the same page PgDn just left.
+				back := edType(t, m, tea.KeyPgUp)
+				if back.diffOff != first {
+					t.Fatalf("PgUp returns to %d, want %d", back.diffOff, first)
+				}
+			}
+		})
 	}
+}
 
-	// Press PgDn
-	m = edType(t, m, tea.KeyPgDown)
-	wantOffset := max(1, m.height-3) // 17
-	if m.diffOff != wantOffset {
-		t.Errorf("diffOff after PgDn = %d, want %d", m.diffOff, wantOffset)
-	}
-
-	// Press PgUp
-	m = edType(t, m, tea.KeyPgUp)
-	if m.diffOff != 0 {
-		t.Errorf("diffOff after PgUp = %d, want 0", m.diffOff)
+func TestEditorSaveDiffPageScrollBounds(t *testing.T) {
+	for _, length := range []int{0, 1, 3, 50} {
+		t.Run(fmt.Sprintf("lines-%d", length), func(t *testing.T) {
+			m := dirtyModel(t)
+			m.mode, m.height = modeDiff, 20
+			m.diff = make([]diffLine, length)
+			for i := 0; i < 60; i++ {
+				m = edType(t, m, tea.KeyPgDown)
+			}
+			if want := max(0, length-1); m.diffOff != want {
+				t.Fatalf("PgDn stops at %d, want %d", m.diffOff, want)
+			}
+			_ = m.View()
+			for i := 0; i < 60; i++ {
+				m = edType(t, m, tea.KeyPgUp)
+			}
+			if m.diffOff != 0 {
+				t.Fatalf("PgUp stops at %d, want 0", m.diffOff)
+			}
+			_ = m.View()
+		})
 	}
 }
