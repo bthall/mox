@@ -203,6 +203,14 @@ func (m addModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.syncKey(msg.Runes)
 			}
 			if m.step == stepArrange || m.step == stepConfirm {
+				for _, r := range msg.Runes {
+					switch r {
+					case 'j', 'J':
+						m.moveChoice(1)
+					case 'k', 'K':
+						m.moveChoice(-1)
+					}
+				}
 				return m, nil
 			}
 			buf := m.input
@@ -629,7 +637,7 @@ func (m addModel) stepHints() []keyHint {
 	case stepSync:
 		return []keyHint{{"Enter", "next"}, {"y/n", "toggle"}, {"Esc", "back"}, {"?", "help"}}
 	case stepArrange, stepConfirm:
-		return []keyHint{{"Enter", "confirm"}, {"↑/↓", "choose"}, {"Esc", "back"}, {"?", "help"}}
+		return []keyHint{{"Enter", "confirm"}, {"j/k, ↑/↓", "choose"}, {"Esc", "back"}, {"?", "help"}}
 	case stepCommands:
 		actions := []keyHint{{"Enter", "add line / finish"}, {"Esc", "back"}}
 		if len(m.commands) > 0 && len(m.input) == 0 {
