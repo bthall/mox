@@ -13,3 +13,7 @@
 ## 2025-03-08 - TUI Wizard Choice Navigation
 **Learning:** In multi-step wizards or prompts that feature option menus (e.g. layout choices or confirm actions), ignoring character key inputs drops 'j'/'k' navigation. Users expecting standard vim-style navigation feel the controls are unresponsive when only arrow keys are handled.
 **Action:** Always handle 'j'/'k' (and case variations 'J'/'K') alongside 'Down'/'Up' in choice-selection steps, and update key hint footers to accurately advertise 'j/k'.
+
+## 2026-10-27 - Save diff paging follows the rendered viewport
+**Learning:** The editor detail pane is shorter than the terminal, and its diff title and overflow hint reduce the visible diff rows further. Terminal-height page steps can skip unseen changes; empty diffs must keep a nonnegative scroll offset.
+**Action:** Use the same content-row calculation for rendering and page movement, and verify consecutive rendered pages at several terminal sizes.

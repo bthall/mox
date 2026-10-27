@@ -787,10 +787,16 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m, _ = m.finishSave()
 		return m, nil
 	case tea.KeyUp:
-		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff-1, max(1, len(m.diff)))
 		return m, nil
 	case tea.KeyDown:
-		m.diffOff = clampChoice(m.diffOff+1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff+1, max(1, len(m.diff)))
+		return m, nil
+	case tea.KeyPgUp:
+		m.diffOff = clampChoice(m.diffOff-diffPageRows(terminalLayout(m.width, m.height).contentHeight), max(1, len(m.diff)))
+		return m, nil
+	case tea.KeyPgDown:
+		m.diffOff = clampChoice(m.diffOff+diffPageRows(terminalLayout(m.width, m.height).contentHeight), max(1, len(m.diff)))
 		return m, nil
 	}
 	switch string(msg.Runes) {
@@ -801,9 +807,9 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeBrowse
 		return m, nil
 	case "k":
-		m.diffOff = clampChoice(m.diffOff-1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff-1, max(1, len(m.diff)))
 	case "j":
-		m.diffOff = clampChoice(m.diffOff+1, len(m.diff))
+		m.diffOff = clampChoice(m.diffOff+1, max(1, len(m.diff)))
 	}
 	return m, nil
 }
@@ -1208,6 +1214,12 @@ func (m editorModel) guardLines(w int) []string {
 	}
 }
 
+// diffPageRows reserves the title, blank line, and overflow hint inside the
+// workspace's content area. Paging and rendering must use the same viewport.
+func diffPageRows(contentHeight int) int {
+	return max(1, contentHeight-3)
+}
+
 // diffModalLines renders the save preview. The diff shows both
 // sides in canonical (re-encoded) form — a semantic preview, not a byte
 // diff of the file; unchanged context lines may differ in formatting from
@@ -1218,10 +1230,7 @@ func (m editorModel) diffModalLines(w, h int) []string {
 		title = fmt.Sprintf("delete %q — review the change:", m.draft.name)
 	}
 	lines := []string{pkDim.Render(truncate(title, w)), ""}
-	rows := h - 3
-	if rows < 1 {
-		rows = 1
-	}
+	rows := diffPageRows(h)
 	end := m.diffOff + rows
 	if end > len(m.diff) {
 		end = len(m.diff)
@@ -1369,7 +1378,7 @@ func (m editorModel) actionHints() []keyHint {
 		}
 		return []keyHint{{"y", "delete"}, {"Esc", "cancel"}, {"?", "help"}}
 	case modeDiff:
-		return []keyHint{{"Enter", "write config"}, {"Esc", "back"}, {"j/k", "scroll"}, {"?", "help"}}
+		return []keyHint{{"Enter", "write config"}, {"Esc", "back"}, {"j/k", "scroll"}, {"PgUp/PgDn", "page"}, {"?", "help"}}
 	case modeGuard:
 		return []keyHint{{"s", "save"}, {"d", "discard"}, {"Esc", "stay"}, {"?", "help"}}
 	case modeStale:

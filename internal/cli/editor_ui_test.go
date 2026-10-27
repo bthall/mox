@@ -1428,3 +1428,73 @@ func TestEditorBatchedKeysStopAtQuit(t *testing.T) {
 		t.Fatalf("sel = %d after batched qj, want 0 (j after quit must be dropped)", m.sel)
 	}
 }
+
+func TestEditorSaveDiffPageScroll(t *testing.T) {
+	for _, height := range []int{10, 20, 30, 60} {
+		t.Run(fmt.Sprintf("height-%d", height), func(t *testing.T) {
+			m := dirtyModel(t)
+			m.width, m.height = 100, height
+			m.pane, m.mode = paneForm, modeDiff
+			m.diff = make([]diffLine, 50)
+			for i := range m.diff {
+				m.diff[i] = diffLine{kind: diffAdd, text: fmt.Sprintf("diff-line-%03d", i)}
+			}
+
+			// Advance from what the real view shows, not from a copy of the
+			// implementation's page-size formula. No diff line may be skipped.
+			next := 0
+			for pages := 0; next < len(m.diff); pages++ {
+				if pages > len(m.diff) {
+					t.Fatal("page scrolling stopped making progress")
+				}
+				if m.diffOff != next {
+					t.Fatalf("next page starts at %d, want first unseen line %d", m.diffOff, next)
+				}
+				view := m.View()
+				first := next
+				for next < len(m.diff) && strings.Contains(view, fmt.Sprintf("diff-line-%03d", next)) {
+					next++
+				}
+				if next == first {
+					t.Fatalf("page at offset %d displays no diff lines", first)
+				}
+				if first == 0 && height == 20 && next != 11 {
+					t.Fatalf("20-row terminal displays %d diff lines, want 11", next)
+				}
+				if next == len(m.diff) {
+					break
+				}
+				m = edType(t, m, tea.KeyPgDown)
+				// PgUp must return to the same page PgDn just left.
+				back := edType(t, m, tea.KeyPgUp)
+				if back.diffOff != first {
+					t.Fatalf("PgUp returns to %d, want %d", back.diffOff, first)
+				}
+			}
+		})
+	}
+}
+
+func TestEditorSaveDiffPageScrollBounds(t *testing.T) {
+	for _, length := range []int{0, 1, 3, 50} {
+		t.Run(fmt.Sprintf("lines-%d", length), func(t *testing.T) {
+			m := dirtyModel(t)
+			m.mode, m.height = modeDiff, 20
+			m.diff = make([]diffLine, length)
+			for i := 0; i < 60; i++ {
+				m = edType(t, m, tea.KeyPgDown)
+			}
+			if want := max(0, length-1); m.diffOff != want {
+				t.Fatalf("PgDn stops at %d, want %d", m.diffOff, want)
+			}
+			_ = m.View()
+			for i := 0; i < 60; i++ {
+				m = edType(t, m, tea.KeyPgUp)
+			}
+			if m.diffOff != 0 {
+				t.Fatalf("PgUp stops at %d, want 0", m.diffOff)
+			}
+			_ = m.View()
+		})
+	}
+}
