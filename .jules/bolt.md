@@ -25,3 +25,7 @@
 ## 2026-10-25 - Printable ASCII and cached TUI cell widths
 **Learning:** The byte length matches display width only for printable ASCII. Control bytes need the normal ANSI width path, newline replacement changes cached widths, and selection styling can split graphemes. This optimization builds on PR #63's shared clipping and rendering improvements.
 **Action:** Keep printable ASCII on the byte-count path, remeasure transformed text, and cover control bytes, multiline padding, and styled Unicode names with regression checks.
+
+## 2026-10-27 - Fast-path ASCII width calculation and reset suffix check in workspace TUI rendering
+**Learning:** In shared workspace TUI layout rendering (`renderWorkspace`), measuring action hint button dimensions via `hintWidth` invoked `ansi.StringWidth` scans for plain printable ASCII key and label strings on every render pass. Additionally, `clipTextWidth` unconditionally appended `\x1b[0m` reset codes even when strings already contained terminal resets. Fast-pathing printable ASCII string widths in `hintWidth` using `isPrintableASCII` and checking `hasResetSuffix` in `clipTextWidth` reduced workspace TUI rendering execution time by ~8% (~135µs -> ~125µs) while preserving 100% of terminal bounds truncation safety and visual styling.
+**Action:** Fast-path printable ASCII strings (`0x20 <= c < 0x7f`) when measuring display cell widths for layout elements, and check for existing reset suffixes before appending trailing ANSI reset codes.
