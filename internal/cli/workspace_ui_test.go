@@ -26,6 +26,33 @@ func assertTerminalBounds(t *testing.T, view string, width, height int) {
 	}
 }
 
+func TestHintWidthAndResetSuffix(t *testing.T) {
+	t.Run("hintWidth ASCII vs Unicode", func(t *testing.T) {
+		gotASCII := hintWidth("Enter", "attach")
+		wantASCII := ansi.StringWidth("Enter") + 1 + ansi.StringWidth("attach")
+		if gotASCII != wantASCII {
+			t.Errorf("hintWidth(ASCII) = %d, want %d", gotASCII, wantASCII)
+		}
+
+		gotUni := hintWidth("Enter", "attach 🚀")
+		wantUni := ansi.StringWidth("Enter") + 1 + ansi.StringWidth("attach 🚀")
+		if gotUni != wantUni {
+			t.Errorf("hintWidth(Unicode) = %d, want %d", gotUni, wantUni)
+		}
+	})
+
+	t.Run("clipTextWidth reset suffix handling", func(t *testing.T) {
+		input := "\x1b[31mhello\x1b[0m"
+		got, w := clipTextWidth(input, 10)
+		if w != 5 {
+			t.Errorf("clipTextWidth width = %d, want 5", w)
+		}
+		if strings.HasSuffix(got, "\x1b[0m\x1b[0m") {
+			t.Errorf("clipTextWidth produced duplicate reset suffix: %q", got)
+		}
+	})
+}
+
 func TestWorkspaceViewsRespectTerminalBounds(t *testing.T) {
 	for _, size := range [][2]int{{40, 12}, {80, 24}, {120, 35}, {18, 8}, {1, 1}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {

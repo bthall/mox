@@ -134,10 +134,14 @@ func clipTextWidth(s string, width int) (string, int) {
 		s = ansi.Truncate(s, width, tail)
 		sw = ansi.StringWidth(s)
 	}
-	if strings.Contains(s, "\x1b") && !strings.HasSuffix(s, "\x1b[0m") {
+	if strings.Contains(s, "\x1b") && !hasResetSuffix(s) {
 		s += "\x1b[0m"
 	}
 	return s, sw
+}
+
+func hasResetSuffix(s string) bool {
+	return strings.HasSuffix(s, "\x1b[0m") || strings.HasSuffix(s, "\x1b[m")
 }
 
 // Optimization: constant padding and dash strings for zero-allocation string slicing
@@ -244,9 +248,18 @@ func renderHints(actions []keyHint, width int) string {
 	return hintsActions(visible)
 }
 
-// Optimization: calculate hint component width without intermediate string concatenation.
+// Optimization: calculate hint component width without intermediate string concatenation
+// and fast-path printable ASCII strings to avoid ansi.StringWidth scanning.
 func hintWidth(key, label string) int {
-	return ansi.StringWidth(key) + 1 + ansi.StringWidth(label)
+	kw := len(key)
+	if !isPrintableASCII(key) {
+		kw = ansi.StringWidth(key)
+	}
+	lw := len(label)
+	if !isPrintableASCII(label) {
+		lw = ansi.StringWidth(label)
+	}
+	return kw + 1 + lw
 }
 
 // Optimization: format visible hints via hints helper.
