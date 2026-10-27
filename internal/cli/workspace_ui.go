@@ -87,7 +87,9 @@ func renderWorkspace(v workspaceView) string {
 		rows = append(rows[:l.height-2], rows[len(rows)-2:]...)
 	}
 	for i, row := range rows {
-		rows[i] = clipText(row, l.width)
+		if len(row) > l.width || strings.IndexByte(row, '\n') >= 0 {
+			rows[i] = clipText(row, l.width)
+		}
 	}
 	view := strings.Join(rows, "\n")
 	if lipgloss.ColorProfile() == termenv.Ascii {
@@ -132,7 +134,7 @@ func clipTextWidth(s string, width int) (string, int) {
 		s = ansi.Truncate(s, width, tail)
 		sw = ansi.StringWidth(s)
 	}
-	if strings.Contains(s, "\x1b") {
+	if strings.Contains(s, "\x1b") && !strings.HasSuffix(s, "\x1b[0m") {
 		s += "\x1b[0m"
 	}
 	return s, sw
@@ -170,7 +172,7 @@ func fitCellWithWidth(s string, sw, width int) string {
 	if sw > width || strings.Contains(s, "\n") {
 		return fitCell(s, width)
 	}
-	if strings.Contains(s, "\x1b") {
+	if strings.Contains(s, "\x1b") && !strings.HasSuffix(s, "\x1b[0m") {
 		s += "\x1b[0m"
 	}
 	return s + padding(width-sw)
