@@ -400,3 +400,34 @@ func TestEdgeTextNormalizesNewlinesBeforeCachedPadding(t *testing.T) {
 		}
 	}
 }
+
+func TestClipTextWidthAndFitCellWithWidth(t *testing.T) {
+	s := "hello world"
+	clipped, w := clipTextWidth(s, 5)
+	if w != 5 || clipped != "hell…" {
+		t.Errorf("clipTextWidth(%q, 5) = (%q, %d), want (%q, 5)", s, clipped, w, "hell…")
+	}
+
+	styled := pkTitle.Render("title")
+	styledW := ansi.StringWidth(styled)
+	fitted := fitCellWithWidth(styled, styledW, 10)
+	if ansi.StringWidth(fitted) != 10 {
+		t.Errorf("fitCellWithWidth(%q, %d, 10) visible width = %d, want 10", styled, styledW, ansi.StringWidth(fitted))
+	}
+}
+
+func BenchmarkSessionRow(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = sessionRow("dev-session-environment", "running", true, 30)
+	}
+}
+
+func BenchmarkEdgeText(b *testing.B) {
+	left := pkTitle.Render("dev-session-environment")
+	right := pkRunning.Render("running")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = edgeText(left, right, 30)
+	}
+}
