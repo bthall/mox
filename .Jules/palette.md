@@ -9,3 +9,7 @@
 ## 2025-03-08 - TUI Guard Modal Double-Ctrl+C and Trigger Keys
 **Learning:** When a dirty-draft exit guard prompt appears after pressing 'q' or 'Ctrl+C', users frequently press 'Ctrl+C' or 'q' a second time to confirm quitting. Ignoring 'Ctrl+C' in guard prompts makes the key feel dead and unresponsive. Additionally, users press 'c'/'C' intuitively for "Cancel" or "Continue editing".
 **Action:** In guard prompts with a pending quit action, handle double 'Ctrl+C' and repeat 'q'/'Q' to complete the quit, handle 'Ctrl+C' on non-quit guards to stay/cancel, and accept 'c'/'C' alongside 'n'/'N'/'Esc'.
+
+## 2025-03-08 - TUI Wizard Choice Navigation
+**Learning:** In multi-step wizards or prompts that feature option menus (e.g. layout choices or confirm actions), ignoring character key inputs drops 'j'/'k' navigation. Users expecting standard vim-style navigation feel the controls are unresponsive when only arrow keys are handled.
+**Action:** Always handle 'j'/'k' (and case variations 'J'/'K') alongside 'Down'/'Up' in choice-selection steps, and update key hint footers to accurately advertise 'j/k'.
