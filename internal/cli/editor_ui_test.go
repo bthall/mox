@@ -557,10 +557,18 @@ func TestEditorDelete(t *testing.T) {
 	if m.mode != modeConfirmDelete {
 		t.Fatal("D did not ask for confirmation")
 	}
-	// n or N cancels
+	// n or N or c or C cancels
 	mn := edRunes(t, m, "n")
 	if mn.mode != modeBrowse || (mn.draft != nil && mn.draft.deleted) {
 		t.Fatal("n did not cancel delete confirmation")
+	}
+	mc := edRunes(t, m, "c")
+	if mc.mode != modeBrowse || (mc.draft != nil && mc.draft.deleted) {
+		t.Fatal("c did not cancel delete confirmation")
+	}
+	mC := edRunes(t, m, "C")
+	if mC.mode != modeBrowse || (mC.draft != nil && mC.draft.deleted) {
+		t.Fatal("C did not cancel delete confirmation")
 	}
 	// d or D or y confirms
 	md := edRunes(t, m, "d")
@@ -838,7 +846,7 @@ func TestEditorSaveDiffAndWrite(t *testing.T) {
 }
 
 func TestEditorSaveDiffKeys(t *testing.T) {
-	// 'n' / 'N' cancels back to browse mode
+	// 'n' / 'N' / 'c' / 'C' cancels back to browse mode
 	m := dirtyModel(t)
 	m = edRunes(t, m, "s")
 	if m.mode != modeDiff {
@@ -847,6 +855,16 @@ func TestEditorSaveDiffKeys(t *testing.T) {
 	m = edRunes(t, m, "n")
 	if m.mode != modeBrowse || !m.isDirty() {
 		t.Fatalf("n from diff did not return to browse with dirty draft: mode=%v", m.mode)
+	}
+	m = edRunes(t, m, "s")
+	m = edRunes(t, m, "c")
+	if m.mode != modeBrowse || !m.isDirty() {
+		t.Fatalf("c from diff did not return to browse with dirty draft: mode=%v", m.mode)
+	}
+	m = edRunes(t, m, "s")
+	m = edRunes(t, m, "C")
+	if m.mode != modeBrowse || !m.isDirty() {
+		t.Fatalf("C from diff did not return to browse with dirty draft: mode=%v", m.mode)
 	}
 
 	// 's' / 'S' confirms write from diff modal (double-tap save)
@@ -949,6 +967,15 @@ func TestEditorSaveStaleThenReload(t *testing.T) {
 	m = edType(t, m, tea.KeyEnter) // confirm diff → hits staleness
 	if m.mode != modeStale {
 		t.Fatalf("mode=%v, want modeStale", m.mode)
+	}
+	// 'c' or 'C' cancels back to browse mode
+	mc := edRunes(t, m, "c")
+	if mc.mode != modeBrowse {
+		t.Fatalf("c from stale did not return to browse mode: mode=%v", mc.mode)
+	}
+	mC := edRunes(t, m, "C")
+	if mC.mode != modeBrowse {
+		t.Fatalf("C from stale did not return to browse mode: mode=%v", mC.mode)
 	}
 	// stale view renders an explanation
 	if !strings.Contains(m.View(), "changed on disk") {

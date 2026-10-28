@@ -17,3 +17,7 @@
 ## 2026-10-27 - Save diff paging follows the rendered viewport
 **Learning:** The editor detail pane is shorter than the terminal, and its diff title and overflow hint reduce the visible diff rows further. Terminal-height page steps can skip unseen changes; empty diffs must keep a nonnegative scroll offset.
 **Action:** Use the same content-row calculation for rendering and page movement, and verify consecutive rendered pages at several terminal sizes.
+
+## 2026-10-28 - TUI Confirmation Modal 'c'/'C' Cancel Key Consistency
+**Learning:** Users in terminal interfaces intuitively press 'c' or 'C' to cancel active confirmation prompts (e.g. delete confirmation, save diff modal, stale config modal, or kill confirmation). If a modal prompt only checks for 'n'/'N'/'Esc', pressing 'c' or 'C' feels dead and unresponsive.
+**Action:** Consistently accept 'c'/'C' alongside 'n'/'N' and 'Esc' in all TUI confirmation modal update functions.
