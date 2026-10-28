@@ -161,6 +161,29 @@ func TestManager_List(t *testing.T) {
 	}
 }
 
+func TestManager_CreateAdHoc_Temporary_ShellQuotedName(t *testing.T) {
+	cfg := &config.Config{Sessions: map[string]*config.Session{}}
+	tx := tmuxtest.NewFake()
+	m := session.NewManagerWith(cfg, tx, nil)
+
+	sess := &config.Session{Hosts: []string{"a"}}
+	// Session name with single quote requires shell quoting in hook command.
+	err := m.CreateAdHoc(context.Background(), "tmp'test", sess, session.AdHocOptions{Temporary: true})
+	if err != nil {
+		t.Fatalf("CreateAdHoc(temporary) error = %v", err)
+	}
+	want := `SetHook tmp'test client-attached = "set-option -t 'tmp'\''test' destroy-unattached on"`
+	found := false
+	for _, c := range tx.Calls {
+		if c == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected hook %q, got calls: %v", want, tx.Calls)
+	}
+}
+
 func TestManager_List_IncludesUnmanagedSessions(t *testing.T) {
 	cfg := &config.Config{
 		Sessions: map[string]*config.Session{
