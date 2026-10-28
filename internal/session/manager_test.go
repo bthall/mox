@@ -172,7 +172,7 @@ func TestManager_CreateAdHoc_Temporary_ShellQuotedName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAdHoc(temporary) error = %v", err)
 	}
-	want := `SetHook tmp'test client-attached = "set-option -t 'tmp'\''test' destroy-unattached on"`
+	want := `SetHook tmp'test client-attached = "set-option -t 'tmp'\\''test' destroy-unattached on"`
 	found := false
 	for _, c := range tx.Calls {
 		if c == want {
