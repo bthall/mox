@@ -411,4 +411,3 @@ func inputTail(input string, width int) string {
 	}
 	return "…" + string(runes[start:]) + pkTitle.Render("█")
 }
-

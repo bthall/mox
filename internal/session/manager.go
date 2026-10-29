@@ -325,7 +325,7 @@ func (m *Manager) CreateAdHoc(ctx context.Context, name string, session *config.
 		// Defer destroy-unattached until after the first attach. If we set
 		// it now, tmux reaps the freshly-built (still client-less) session
 		// before we can attach to it, and AttachSession fails.
-		hookCmd := fmt.Sprintf("set-option -t %s destroy-unattached on", name)
+		hookCmd := tmux.ShellJoin([]string{"set-option", "-t", name, "destroy-unattached", "on"})
 		if err := m.tx.SetHook(name, "client-attached", hookCmd); err != nil {
 			m.log.Warn("set destroy-unattached hook failed", "session", name, "error", err)
 		}
