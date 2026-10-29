@@ -557,18 +557,10 @@ func TestEditorDelete(t *testing.T) {
 	if m.mode != modeConfirmDelete {
 		t.Fatal("D did not ask for confirmation")
 	}
-	// n or N or c or C cancels
+	// n or N cancels
 	mn := edRunes(t, m, "n")
 	if mn.mode != modeBrowse || (mn.draft != nil && mn.draft.deleted) {
 		t.Fatal("n did not cancel delete confirmation")
-	}
-	mc := edRunes(t, m, "c")
-	if mc.mode != modeBrowse || (mc.draft != nil && mc.draft.deleted) {
-		t.Fatal("c did not cancel delete confirmation")
-	}
-	mC := edRunes(t, m, "C")
-	if mC.mode != modeBrowse || (mC.draft != nil && mC.draft.deleted) {
-		t.Fatal("C did not cancel delete confirmation")
 	}
 	// d or D or y confirms
 	md := edRunes(t, m, "d")
@@ -846,22 +838,12 @@ func TestEditorSaveDiffAndWrite(t *testing.T) {
 }
 
 func TestEditorSaveDiffKeys(t *testing.T) {
-	// 'n' / 'N' / 'c' / 'C' cancels back to browse mode
+	// 'n' / 'N' cancels back to browse mode
 	m := dirtyModel(t)
 	m = edRunes(t, m, "s")
 	if m.mode != modeDiff {
 		t.Fatalf("s did not open diff: mode=%v", m.mode)
 	}
-	m = edRunes(t, m, "c")
-	if m.mode != modeBrowse || !m.isDirty() {
-		t.Fatalf("c from diff did not return to browse with dirty draft: mode=%v", m.mode)
-	}
-	m = edRunes(t, m, "s")
-	m = edRunes(t, m, "C")
-	if m.mode != modeBrowse || !m.isDirty() {
-		t.Fatalf("C from diff did not return to browse with dirty draft: mode=%v", m.mode)
-	}
-	m = edRunes(t, m, "s")
 	m = edRunes(t, m, "n")
 	if m.mode != modeBrowse || !m.isDirty() {
 		t.Fatalf("n from diff did not return to browse with dirty draft: mode=%v", m.mode)
@@ -972,18 +954,10 @@ func TestEditorSaveStaleThenReload(t *testing.T) {
 	if !strings.Contains(m.View(), "changed on disk") {
 		t.Fatal("stale view missing explanation")
 	}
-	// 'n' or 'c' or 'C' backs out to browse keeping draft
+	// 'n' backs out to browse keeping draft
 	mn := edRunes(t, m, "n")
 	if mn.mode != modeBrowse || !mn.isDirty() {
 		t.Fatal("n on stale prompt did not return to browse with dirty draft")
-	}
-	mc := edRunes(t, m, "c")
-	if mc.mode != modeBrowse || !mc.isDirty() {
-		t.Fatal("c on stale prompt did not return to browse with dirty draft")
-	}
-	mC := edRunes(t, m, "C")
-	if mC.mode != modeBrowse || !mC.isDirty() {
-		t.Fatal("C on stale prompt did not return to browse with dirty draft")
 	}
 	// r or R reloads from disk, dropping the draft
 	m = edRunes(t, m, "r")

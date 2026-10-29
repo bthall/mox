@@ -325,6 +325,9 @@ func getRowStyles() sessionRowStyleCache {
 
 func sessionRow(name, state string, selected bool, width int) string {
 	styles := getRowStyles()
+	if width < 20 {
+		state = ""
+	}
 	var dot, renderedState string
 	switch state {
 	case "running":
@@ -342,9 +345,6 @@ func sessionRow(name, state string, selected bool, width int) string {
 	default:
 		dot = styles.dotStopped
 		renderedState = pkDim.Render(state)
-	}
-	if width < 20 {
-		state, renderedState = "", ""
 	}
 	marker := "  "
 	if selected {
