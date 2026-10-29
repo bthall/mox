@@ -559,7 +559,7 @@ func (m hubModel) updateConfirmKill(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m.quit()
 	}
-	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" || string(msg.Runes) == "c" || string(msg.Runes) == "C" {
 		m.mode = hubBrowse
 		return m, nil
 	}
