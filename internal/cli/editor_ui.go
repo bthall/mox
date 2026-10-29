@@ -734,7 +734,7 @@ func (m editorModel) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m.quit()
 	}
-	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" || string(msg.Runes) == "c" || string(msg.Runes) == "C" {
 		m.mode = modeBrowse
 		return m, nil
 	}
@@ -803,7 +803,7 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s", "S", "y", "Y":
 		m, _ = m.finishSave()
 		return m, nil
-	case "n", "N":
+	case "n", "N", "c", "C":
 		m.mode = modeBrowse
 		return m, nil
 	case "k":
@@ -816,7 +816,7 @@ func (m editorModel) updateDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateStale is the refused-save view: R reloads from disk.
 func (m editorModel) updateStale(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" {
+	if msg.Type == tea.KeyEsc || string(msg.Runes) == "n" || string(msg.Runes) == "N" || string(msg.Runes) == "c" || string(msg.Runes) == "C" {
 		m.mode = modeBrowse
 		return m, nil
 	}
