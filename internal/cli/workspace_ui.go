@@ -2,6 +2,7 @@ package cli
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -271,25 +272,88 @@ func hintsActions(actions []keyHint) string {
 	return hints(pairs...)
 }
 
+type sessionRowStyleCache struct {
+	profile      termenv.Profile
+	marker       string
+	dotRunning   string
+	stateRunning string
+	dotForeign   string
+	stateForeign string
+	dotDraft     string
+	stateDraft   string
+	stateDelete  string
+	dotStopped   string
+	stateStopped string
+}
+
+var (
+	rowStyleCacheMu sync.RWMutex
+	rowStyleCache   sessionRowStyleCache
+)
+
+func getRowStyles() sessionRowStyleCache {
+	p := lipgloss.ColorProfile()
+	rowStyleCacheMu.RLock()
+	if rowStyleCache.profile == p && rowStyleCache.marker != "" {
+		c := rowStyleCache
+		rowStyleCacheMu.RUnlock()
+		return c
+	}
+	rowStyleCacheMu.RUnlock()
+
+	rowStyleCacheMu.Lock()
+	defer rowStyleCacheMu.Unlock()
+	if rowStyleCache.profile == p && rowStyleCache.marker != "" {
+		return rowStyleCache
+	}
+	c := sessionRowStyleCache{
+		profile:      p,
+		marker:       pkAccent.Render("▌ "),
+		dotRunning:   pkStateRunning.Render("●"),
+		stateRunning: pkRunning.Render("running"),
+		dotForeign:   pkStateForeign.Render("◆"),
+		stateForeign: pkForeign.Render("tmux only"),
+		dotDraft:     pkForeign.Render("*"),
+		stateDraft:   pkForeign.Render("draft"),
+		stateDelete:  pkForeign.Render("delete"),
+		dotStopped:   pkStopped.Render("○"),
+		stateStopped: pkDim.Render("stopped"),
+	}
+	rowStyleCache = c
+	return c
+}
+
 func sessionRow(name, state string, selected bool, width int) string {
-	dot := pkStopped.Render("○")
-	stateStyle := pkDim
+	styles := getRowStyles()
+	var dot, renderedState string
 	switch state {
 	case "running":
-		dot, stateStyle = pkStateRunning.Render("●"), pkRunning
+		dot, renderedState = styles.dotRunning, styles.stateRunning
 	case "tmux only":
-		dot, stateStyle = pkStateForeign.Render("◆"), pkForeign
-	case "draft", "delete":
-		dot, stateStyle = pkForeign.Render("*"), pkForeign
+		dot, renderedState = styles.dotForeign, styles.stateForeign
+	case "draft":
+		dot, renderedState = styles.dotDraft, styles.stateDraft
+	case "delete":
+		dot, renderedState = styles.dotDraft, styles.stateDelete
+	case "stopped":
+		dot, renderedState = styles.dotStopped, styles.stateStopped
+	case "":
+		dot, renderedState = styles.dotStopped, ""
+	default:
+		dot = styles.dotStopped
+		renderedState = pkDim.Render(state)
+	}
+	if width < 20 {
+		state, renderedState = "", ""
 	}
 	marker := "  "
 	if selected {
-		marker = pkAccent.Render("▌ ")
+		marker = styles.marker
 	}
-	if width < 20 {
-		state = ""
+	stateW := len(state)
+	if !isPrintableASCII(state) {
+		stateW = ansi.StringWidth(state)
 	}
-	stateW := ansi.StringWidth(state)
 	nameWidth := max(1, width-4-stateW-3)
 	name, nameW := clipTextWidth(name, nameWidth)
 	if selected {
@@ -297,11 +361,15 @@ func sessionRow(name, state string, selected bool, width int) string {
 		// Underlining inserts escapes between runes and can change grapheme widths.
 		nameW = ansi.StringWidth(name)
 	}
-	renderedState := stateStyle.Render(state)
-	if state == "" {
-		renderedState = ""
+	edgeW := max(0, width-4)
+	if edgeW <= 0 {
+		return marker + dot + " "
 	}
-	return marker + dot + " " + edgeTextWithWidths(name, nameW, renderedState, stateW, max(0, width-4))
+	if renderedState == "" || nameW+stateW+3 > edgeW {
+		return marker + dot + " " + fitCellWithWidth(name, nameW, edgeW)
+	}
+	pad := edgeW - nameW - stateW
+	return marker + dot + " " + name + padding(pad) + renderedState
 }
 
 func helpLines(actions []keyHint, width int) []string {
