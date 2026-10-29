@@ -273,17 +273,17 @@ func hintsActions(actions []keyHint) string {
 }
 
 type sessionRowStyleCache struct {
-	profile       termenv.Profile
-	marker        string
-	dotRunning    string
-	stateRunning  string
-	dotForeign    string
-	stateForeign  string
-	dotDraft      string
-	stateDraft    string
-	stateDelete   string
-	dotStopped    string
-	stateStopped  string
+	profile      termenv.Profile
+	marker       string
+	dotRunning   string
+	stateRunning string
+	dotForeign   string
+	stateForeign string
+	dotDraft     string
+	stateDraft   string
+	stateDelete  string
+	dotStopped   string
+	stateStopped string
 }
 
 var (
