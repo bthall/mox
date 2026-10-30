@@ -125,7 +125,11 @@ func clipTextWidth(s string, width int) (string, int) {
 		if len(s) <= width {
 			return s, len(s)
 		}
-		s = ansi.Truncate(s, width, "…")
+		tail := ""
+		if width > 1 {
+			tail = "…"
+		}
+		s = ansi.Truncate(s, width, tail)
 		return s, ansi.StringWidth(s)
 	}
 	if strings.IndexByte(s, '\n') >= 0 {
