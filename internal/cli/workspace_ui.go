@@ -45,9 +45,10 @@ func renderWorkspace(v workspaceView) string {
 	l := terminalLayout(v.width, v.height)
 	inner := max(0, l.width-2)
 	header := edgeText(pkTitle.Render("mox / "+v.view), pkDim.Render(v.context), inner)
+	borderDash := pkBorder.Render(dashes(l.width))
 	// Optimization: preallocate rows slice capacity to avoid repeated slice growth allocations.
 	rows := make([]string, 0, l.contentHeight+6)
-	rows = append(rows, " "+header+" ", pkBorder.Render(dashes(l.width)))
+	rows = append(rows, " "+header+" ", borderDash)
 	listTitle, detailTitle := v.listTitle, v.detailTitle
 	if v.focusDetail {
 		detailTitle = pkSelected.Render(detailTitle)
@@ -68,7 +69,7 @@ func renderWorkspace(v workspaceView) string {
 			rows = append(rows, " "+fitCell(line, inner)+" ")
 		}
 	} else {
-		divider := " " + pkBorder.Render("│") + " "
+		divider := getRowStyles().divider
 		rows = append(rows, " "+fitCell(pkTitle.Render(listTitle), l.listWidth)+divider+fitCell(pkTitle.Render(detailTitle), l.detailWidth)+" ")
 		for i := 0; i < l.contentHeight; i++ {
 			left, right := "", ""
@@ -81,7 +82,7 @@ func renderWorkspace(v workspaceView) string {
 			rows = append(rows, " "+fitCell(left, l.listWidth)+divider+fitCell(right, l.detailWidth)+" ")
 		}
 	}
-	rows = append(rows, pkBorder.Render(dashes(l.width)), " "+fitCell(renderHints(v.actions, inner), inner)+" ", " "+fitCell(v.status, inner)+" ")
+	rows = append(rows, borderDash, " "+fitCell(renderHints(v.actions, inner), inner)+" ", " "+fitCell(v.status, inner)+" ")
 	if l.height == 1 {
 		rows = rows[:1]
 	} else if len(rows) > l.height {
@@ -93,7 +94,7 @@ func renderWorkspace(v workspaceView) string {
 		}
 	}
 	view := strings.Join(rows, "\n")
-	if lipgloss.ColorProfile() == termenv.Ascii {
+	if lipgloss.ColorProfile() == termenv.Ascii && strings.Contains(view, "\x1b") {
 		view = ansi.Strip(view)
 	}
 	return view
@@ -115,18 +116,26 @@ func clipText(s string, width int) string {
 
 // Optimization: single-pass truncation and cell width calculation that returns
 // both the clipped string and its visible width, eliminating double ansi.StringWidth
-// passes when formatting layout cells.
+// passes when formatting layout cells. Fast-path printable ASCII strings.
 func clipTextWidth(s string, width int) (string, int) {
 	if width <= 0 {
 		return "", 0
 	}
+	if isPrintableASCII(s) {
+		if len(s) <= width {
+			return s, len(s)
+		}
+		tail := ""
+		if width > 1 {
+			tail = "…"
+		}
+		s = ansi.Truncate(s, width, tail)
+		return s, ansi.StringWidth(s)
+	}
 	if strings.IndexByte(s, '\n') >= 0 {
 		s = strings.ReplaceAll(s, "\n", " ")
 	}
-	sw := len(s)
-	if !isPrintableASCII(s) {
-		sw = ansi.StringWidth(s)
-	}
+	sw := ansi.StringWidth(s)
 	if sw > width {
 		tail := ""
 		if width > 1 {
@@ -284,6 +293,7 @@ type sessionRowStyleCache struct {
 	stateDelete  string
 	dotStopped   string
 	stateStopped string
+	divider      string
 }
 
 var (
@@ -318,6 +328,7 @@ func getRowStyles() sessionRowStyleCache {
 		stateDelete:  pkForeign.Render("delete"),
 		dotStopped:   pkStopped.Render("○"),
 		stateStopped: pkDim.Render("stopped"),
+		divider:      " " + pkBorder.Render("│") + " ",
 	}
 	rowStyleCache = c
 	return c
