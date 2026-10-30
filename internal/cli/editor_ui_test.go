@@ -557,6 +557,10 @@ func TestEditorDelete(t *testing.T) {
 	if m.mode != modeConfirmDelete {
 		t.Fatal("D did not ask for confirmation")
 	}
+	hintsStr := renderHints(m.actionHints(), 100)
+	if !strings.Contains(hintsStr, "d/y") {
+		t.Errorf("modeConfirmDelete action hints = %q, want 'd/y'", hintsStr)
+	}
 	// n or N or c or C cancels
 	mn := edRunes(t, m, "n")
 	if mn.mode != modeBrowse || (mn.draft != nil && mn.draft.deleted) {
