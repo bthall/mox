@@ -1374,9 +1374,9 @@ func (m editorModel) actionHints() []keyHint {
 		return []keyHint{{"Enter", "confirm"}, {"Esc", "cancel"}}
 	case modeConfirmDelete:
 		if m.draft.added {
-			return []keyHint{{"y", "discard"}, {"Esc", "stay"}, {"?", "help"}}
+			return []keyHint{{"d/y", "discard"}, {"Esc", "stay"}, {"?", "help"}}
 		}
-		return []keyHint{{"y", "delete"}, {"Esc", "cancel"}, {"?", "help"}}
+		return []keyHint{{"d/y", "delete"}, {"Esc", "cancel"}, {"?", "help"}}
 	case modeDiff:
 		return []keyHint{{"Enter", "write config"}, {"Esc", "back"}, {"j/k", "scroll"}, {"PgUp/PgDn", "page"}, {"?", "help"}}
 	case modeGuard:

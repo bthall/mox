@@ -206,6 +206,10 @@ func TestEditorNewDraftRequiresDiscardConfirmation(t *testing.T) {
 	if m.mode != modeConfirmDelete || m.draft == nil || !strings.Contains(m.View(), "discard unsaved session") {
 		t.Fatal("D discarded a new draft without confirmation")
 	}
+	hintsStr := renderHints(m.actionHints(), 100)
+	if !strings.Contains(hintsStr, "d/y") {
+		t.Errorf("modeConfirmDelete for added draft action hints = %q, want 'd/y'", hintsStr)
+	}
 	m = edType(t, m, tea.KeyEsc)
 	if m.mode != modeBrowse || m.draft.name != "new-draft" || !m.isDirty() {
 		t.Fatal("Esc did not preserve the new draft")
