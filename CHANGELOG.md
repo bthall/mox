@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Reject leading hyphens in SSH hostnames and usernames, and malformed
-  `user@host` destinations, before treating them as SSH hosts.
+- Hostnames and SSH usernames starting with a hyphen, as well as malformed
+  `user@host` destinations, are now rejected during configuration validation
+  and session import to prevent OpenSSH command-line option injection.
 - Scrolling an empty save diff keeps the offset at zero instead of allowing
   a negative offset.
 
