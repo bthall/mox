@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Page Up and Page Down navigate the editor's save diff by the number of
   visible diff lines, keeping consecutive pages contiguous.
 
+### Changed
+
+- In the session hub kill confirmation prompt, action hints, status line, and
+  preview text now advertise `k/y` rather than `Enter/y` to highlight the
+  trigger key for confirming kills, and the modal help view is tailored to the
+  kill prompt without misleading session navigation hints.
+
 ### Fixed
 
 - Scrolling an empty save diff keeps the offset at zero instead of allowing
