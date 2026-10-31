@@ -308,6 +308,16 @@ func validateHosts(hosts []string) error {
 		if !hostRe.MatchString(h) {
 			return fmt.Errorf("hosts[%d] = %q: hostname contains characters that are unsafe to pass to the default ssh command (override 'connect:' if you need them)", i, h)
 		}
+		if strings.HasPrefix(h, "-") {
+			return fmt.Errorf("hosts[%d] = %q: hostname cannot start with '-'", i, h)
+		}
+		if at := strings.Index(h, "@"); at >= 0 {
+			u := h[:at]
+			rest := h[at+1:]
+			if u == "" || rest == "" || strings.HasPrefix(u, "-") || strings.HasPrefix(rest, "-") || strings.Contains(rest, "@") {
+				return fmt.Errorf("hosts[%d] = %q: invalid user@host syntax", i, h)
+			}
+		}
 	}
 	return nil
 }
@@ -321,6 +331,9 @@ func validateConnectAndUser(connect, user string) error {
 	}
 	if !sshUserRe.MatchString(user) {
 		return fmt.Errorf("ssh_user %q contains characters that are unsafe to pass to the default ssh command", user)
+	}
+	if strings.HasPrefix(user, "-") {
+		return fmt.Errorf("ssh_user %q cannot start with '-'", user)
 	}
 	return nil
 }

@@ -26,3 +26,8 @@
 **Vulnerability:** Recovering pane process arguments during session import joined `p.argv` slices with spaces (`strings.Join(p.argv, " ")`), leaving spaces, quotes, and shell metacharacters unescaped in generated `commands:` entries.
 **Learning:** When process table argument vectors are converted to shell commands for persistence or re-execution, joining arguments with raw spaces loses shell boundaries and allows command injection.
 **Prevention:** Use shell-quoting primitives (e.g., `tmux.ShellJoin`) when turning process `argv` slices into single-string shell command templates.
+
+## 2026-10-31 - SSH Option Injection via Hyphen-Prefixed Hostnames and Usernames
+**Vulnerability:** Hostnames and SSH usernames containing a leading hyphen (`-`) bypassed schema validation because `hostRe` and `sshUserRe` allowed hyphens in any character position. OpenSSH does not accept `--` option terminators before destination arguments, so passing hyphen-prefixed hostnames (e.g., `-Fconfigfile`) causes OpenSSH to interpret the destination as command-line flags, allowing configuration overriding and arbitrary command execution via `ProxyCommand` or `LocalCommand`.
+**Learning:** External tools like `ssh` do not universally support `--` option terminators. Inputs destined for command lines must be validated not only for forbidden characters but specifically for forbidden prefixes (like leading `-`).
+**Prevention:** Reject hostnames and usernames that begin with `-`, and validate both `user` and `host` components when accepting `user@host` formatted destinations.
