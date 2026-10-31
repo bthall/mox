@@ -277,6 +277,37 @@ func TestHubKillConfirmFlow(t *testing.T) {
 	if !strings.Contains(m.statusLine(), "kill webfarm?") {
 		t.Fatalf("confirm prompt missing: %q", m.statusLine())
 	}
+	if !strings.Contains(m.statusLine(), "k/y / Esc") {
+		t.Fatalf("confirm prompt status line missing k/y: %q", m.statusLine())
+	}
+	hints := m.actionHints()
+	if len(hints) == 0 || hints[0].key != "k/y" || hints[0].label != "kill" {
+		t.Fatalf("confirm action hints = %v, want k/y kill", hints)
+	}
+	if view := m.View(); !strings.Contains(view, "k/y kills it") {
+		t.Fatalf("preview pane missing k/y prompt text: %s", view)
+	}
+
+	// ? opens help tailored to kill confirmation
+	mHelp, _ := hubRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help in kill confirm")
+	}
+	helpActions := mHelp.helpActions()
+	for _, a := range helpActions {
+		if strings.Contains(a.label, "select a session") {
+			t.Fatalf("kill confirm help includes session selection navigation: %v", helpActions)
+		}
+	}
+	if view := mHelp.View(); !strings.Contains(view, "kill running session") || strings.Contains(view, "select a session") {
+		t.Fatalf("kill confirm help view unexpected content:\n%s", view)
+	}
+	// esc dismisses help back to confirm mode
+	mBack, _ := hubKey(t, mHelp, tea.KeyMsg{Type: tea.KeyEsc})
+	if mBack.help || mBack.mode != hubConfirmKill {
+		t.Fatalf("esc from help did not return to confirm mode: help=%v mode=%v", mBack.help, mBack.mode)
+	}
+
 	// esc cancels
 	m2, _ := hubKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if m2.mode != hubBrowse || len(mgr.killed) != 0 {
