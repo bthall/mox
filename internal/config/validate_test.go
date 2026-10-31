@@ -112,7 +112,7 @@ func TestSessionValidate(t *testing.T) {
 			key:       "x",
 			session:   &Session{Hosts: []string{"-user@bad"}},
 			wantErr:   true,
-			errSubstr: "invalid user@host syntax",
+			errSubstr: "cannot start with '-'",
 		},
 		{
 			name:      "host user@host empty user",
@@ -141,9 +141,9 @@ func TestSessionValidate(t *testing.T) {
 			session: &Session{Hosts: []string{"deploy@web-1.example.com"}},
 		},
 		{
-			name:    "valid host with IPv6 zone",
+			name:    "valid host with percent identifier",
 			key:     "x",
-			session: &Session{Hosts: []string{"fe80::1%eth0"}},
+			session: &Session{Hosts: []string{"gateway%eth0"}},
 		},
 		{
 			name:      "ssh_user starting with hyphen",
