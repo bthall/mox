@@ -17,3 +17,7 @@
 ## 2026-10-27 - Save diff paging follows the rendered viewport
 **Learning:** The editor detail pane is shorter than the terminal, and its diff title and overflow hint reduce the visible diff rows further. Terminal-height page steps can skip unseen changes; empty diffs must keep a nonnegative scroll offset.
 **Action:** Use the same content-row calculation for rendering and page movement, and verify consecutive rendered pages at several terminal sizes.
+
+## 2026-10-31 - TUI Confirmation Modal Hints and Help Accuracy
+**Learning:** In terminal modal confirmation prompts triggered by single-letter hotkeys (such as 'K' to kill), footer action hints and status lines that advertise 'Enter/y' omit the primary repeat trigger key ('k/y'). Additionally, generic help overlays that unconditionally include list navigation ('j/k, ↑/↓') mislead users into believing 'k' navigates safely when it actually triggers the destructive confirm action.
+**Action:** Advertise trigger confirmation keys ('k/y') consistently across action hints, preview text, and status lines, and tailor modal help overlays to the active prompt so list navigation is not advertised during confirmation.
