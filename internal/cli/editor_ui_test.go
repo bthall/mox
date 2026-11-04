@@ -594,7 +594,7 @@ func TestEditorDelete(t *testing.T) {
 	if view := mHelp.View(); !strings.Contains(view, "confirm delete session") || strings.Contains(view, "navigate the focused area") {
 		t.Fatalf("confirm delete help view unexpected content:\n%s", view)
 	}
-	// Escape closes help without cancelling the underlying confirmation.
+	// Escape closes help without canceling the underlying confirmation.
 	mBack := edType(t, mHelp, tea.KeyEsc)
 	if mBack.help || mBack.mode != modeConfirmDelete {
 		t.Fatalf("esc from help did not return to confirm mode: help=%v mode=%v", mBack.help, mBack.mode)
