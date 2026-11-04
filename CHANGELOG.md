@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- In the session hub kill confirmation prompt, action hints, status line, and
+  preview text now advertise `k/y` rather than `Enter/y` to highlight the
+  trigger key for confirming kills, and the modal help view is tailored to the
+  kill prompt without misleading session navigation hints.
+
 - In the config editor modal confirmation modes (delete confirmation, unsaved
   changes guard, diff preview, and stale file alert), the modal help overlay
   is tailored to the active prompt without misleading list navigation hints.
@@ -23,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Hostnames and SSH usernames starting with a hyphen, as well as malformed
+  `user@host` destinations, are now rejected during configuration validation
+  and session import to prevent OpenSSH command-line option injection.
 - Scrolling an empty save diff keeps the offset at zero instead of allowing
   a negative offset.
 

@@ -340,7 +340,12 @@ func parseSSHDest(argv []string) (user, host string, plain bool) {
 		return "", "", false
 	}
 	if at := strings.Index(dest, "@"); at >= 0 {
-		return dest[:at], dest[at+1:], true
+		u := dest[:at]
+		h := dest[at+1:]
+		if u == "" || h == "" || strings.HasPrefix(u, "-") || strings.HasPrefix(h, "-") || strings.Contains(h, "@") {
+			return "", "", false
+		}
+		return u, h, true
 	}
 	return "", dest, true
 }

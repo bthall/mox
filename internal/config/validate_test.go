@@ -87,6 +87,72 @@ func TestSessionValidate(t *testing.T) {
 			errSubstr: "unsafe to pass",
 		},
 		{
+			name:      "host starting with hyphen",
+			key:       "x",
+			session:   &Session{Hosts: []string{"-v"}},
+			wantErr:   true,
+			errSubstr: "cannot start with '-'",
+		},
+		{
+			name:      "host option injection",
+			key:       "x",
+			session:   &Session{Hosts: []string{"-Ffoo.conf"}},
+			wantErr:   true,
+			errSubstr: "cannot start with '-'",
+		},
+		{
+			name:      "host user@host with hyphen host",
+			key:       "x",
+			session:   &Session{Hosts: []string{"user@-bad"}},
+			wantErr:   true,
+			errSubstr: "invalid user@host syntax",
+		},
+		{
+			name:      "host user@host with hyphen user",
+			key:       "x",
+			session:   &Session{Hosts: []string{"-user@bad"}},
+			wantErr:   true,
+			errSubstr: "cannot start with '-'",
+		},
+		{
+			name:      "host user@host empty user",
+			key:       "x",
+			session:   &Session{Hosts: []string{"@bad"}},
+			wantErr:   true,
+			errSubstr: "invalid user@host syntax",
+		},
+		{
+			name:      "host user@host empty host",
+			key:       "x",
+			session:   &Session{Hosts: []string{"user@"}},
+			wantErr:   true,
+			errSubstr: "invalid user@host syntax",
+		},
+		{
+			name:      "host user@host multiple at",
+			key:       "x",
+			session:   &Session{Hosts: []string{"user@host@extra"}},
+			wantErr:   true,
+			errSubstr: "invalid user@host syntax",
+		},
+		{
+			name:    "valid host with user@host",
+			key:     "x",
+			session: &Session{Hosts: []string{"deploy@web-1.example.com"}},
+		},
+		{
+			name:    "valid host with percent identifier",
+			key:     "x",
+			session: &Session{Hosts: []string{"gateway%eth0"}},
+		},
+		{
+			name:      "ssh_user starting with hyphen",
+			key:       "x",
+			session:   &Session{SSHUser: "-Ffoo.conf", Hosts: []string{"host1"}},
+			wantErr:   true,
+			errSubstr: "cannot start with '-'",
+		},
+		{
 			// Duplicates are allowed — tmux addresses windows by id, and
 			// users commonly have several windows with the same name.
 			name:    "duplicate window names allowed",

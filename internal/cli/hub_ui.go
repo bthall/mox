@@ -694,7 +694,7 @@ func (m hubModel) actionHints() []keyHint {
 	case hubFilter:
 		return []keyHint{{"Enter", "keep filter"}, {"Esc", "clear"}}
 	case hubConfirmKill:
-		return []keyHint{{"Enter/y", "kill"}, {"Esc", "cancel"}, {"?", "help"}}
+		return []keyHint{{"k/y", "kill"}, {"Esc", "cancel"}, {"?", "help"}}
 	}
 	var actions []keyHint
 	if _, ok := m.selected(); ok && m.pending == "" {
@@ -725,8 +725,14 @@ func (m hubModel) actionHints() []keyHint {
 }
 
 func (m hubModel) helpActions() []keyHint {
-	actions := []keyHint{{"j/k, ↑/↓", "select a session"}}
 	m.help = false
+	if m.mode == hubConfirmKill {
+		return []keyHint{
+			{"k/y, Enter", "kill running session"},
+			{"Esc, n, c", "cancel and keep running"},
+		}
+	}
+	actions := []keyHint{{"j/k, ↑/↓", "select a session"}}
 	actions = append(actions, m.actionHints()...)
 	return actions
 }
@@ -770,7 +776,7 @@ func (m hubModel) previewPane(w, h int) []string {
 		return []string{"No session matches the filter.", "Esc clears it; / changes the search."}
 	}
 	if m.mode == hubConfirmKill {
-		return []string{pkErr.Render("Kill " + c.Name + "?"), "", "The running session and its panes will close.", "Enter/y kills it. Esc keeps it running."}
+		return []string{pkErr.Render("Kill " + c.Name + "?"), "", "The running session and its panes will close.", "k/y kills it. Esc keeps it running."}
 	}
 	if m.pending != "" {
 		return []string{"", pkForeign.Render("  " + m.pending)}
@@ -878,7 +884,7 @@ func (m hubModel) summaryLines(c session.SessionInfo, w int) []string {
 func (m hubModel) statusLine() string {
 	if m.mode == hubConfirmKill {
 		if c, ok := m.selected(); ok {
-			return pkErr.Render("kill "+c.Name+"? ") + pkDim.Render("Enter/y / Esc")
+			return pkErr.Render("kill "+c.Name+"? ") + pkDim.Render("k/y / Esc")
 		}
 	}
 	var parts []string

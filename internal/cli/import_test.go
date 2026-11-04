@@ -27,6 +27,11 @@ func TestParseSSHDest(t *testing.T) {
 		{"not ssh", []string{"vim", "file"}, "", "", false},
 		{"no destination", []string{"ssh"}, "", "", false},
 		{"flag-only dest rejected", []string{"ssh", "-v"}, "", "", false},
+		{"user@flag host rejected", []string{"ssh", "user@-v"}, "", "", false},
+		{"user@-F option rejected", []string{"ssh", "user@-Ffoo.conf"}, "", "", false},
+		{"empty user rejected", []string{"ssh", "@host"}, "", "", false},
+		{"empty host rejected", []string{"ssh", "user@"}, "", "", false},
+		{"multiple at rejected", []string{"ssh", "user@host@extra"}, "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

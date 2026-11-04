@@ -18,6 +18,10 @@
 **Learning:** The editor detail pane is shorter than the terminal, and its diff title and overflow hint reduce the visible diff rows further. Terminal-height page steps can skip unseen changes; empty diffs must keep a nonnegative scroll offset.
 **Action:** Use the same content-row calculation for rendering and page movement, and verify consecutive rendered pages at several terminal sizes.
 
+## 2026-10-31 - TUI Confirmation Modal Hints and Help Accuracy
+**Learning:** In terminal modal confirmation prompts triggered by single-letter hotkeys (such as 'K' to kill), footer action hints and status lines that advertise 'Enter/y' omit the primary repeat trigger key ('k/y'). Additionally, generic help overlays that unconditionally include list navigation ('j/k, ↑/↓') mislead users into believing 'k' navigates safely when it actually triggers the destructive confirm action.
+**Action:** Advertise trigger confirmation keys ('k/y') consistently across action hints, preview text, and status lines, and tailor modal help overlays to the active prompt so list navigation is not advertised during confirmation.
+
 ## 2026-10-31 - Editor Modal Help Accuracy and Confirmation Prompt Guidance
 **Learning:** In terminal editor modal prompts (such as delete confirmation or guard prompts), unconditionally advertising general list navigation (`j/k, ↑/↓`) in the help overlay misleads users into attempting list navigation that is inactive during modal prompts. Furthermore, confirmation panes without explicit in-pane action guidance leave users guessing which keys take effect.
 **Action:** Tailor modal help overlays to the active modal mode so inactive navigation shortcuts are omitted and prompt-specific keys are clearly explained. Also ensure confirmation panes display explicit key guidance matching supported actions.
