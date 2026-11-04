@@ -561,6 +561,30 @@ func TestEditorDelete(t *testing.T) {
 	if !strings.Contains(hintsStr, "d/y") {
 		t.Errorf("modeConfirmDelete action hints = %q, want 'd/y'", hintsStr)
 	}
+	if view := m.View(); !strings.Contains(view, "d/y confirms deletion") {
+		t.Fatalf("confirm delete view missing d/y guidance: %s", view)
+	}
+
+	// ? opens help tailored to delete confirmation
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help in confirm delete mode")
+	}
+	helpActions := mHelp.helpActions()
+	for _, a := range helpActions {
+		if strings.Contains(a.label, "navigate the focused area") {
+			t.Fatalf("delete confirm help includes list navigation: %v", helpActions)
+		}
+	}
+	if view := mHelp.View(); !strings.Contains(view, "confirm delete session") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("delete confirm help view unexpected content:\n%s", view)
+	}
+	// esc dismisses help back to confirm mode
+	mBack := edType(t, mHelp, tea.KeyEsc)
+	if mBack.help || mBack.mode != modeConfirmDelete {
+		t.Fatalf("esc from help did not return to confirm mode: help=%v mode=%v", mBack.help, mBack.mode)
+	}
+
 	// n or N or c or C cancels
 	mn := edRunes(t, m, "n")
 	if mn.mode != modeBrowse || (mn.draft != nil && mn.draft.deleted) {

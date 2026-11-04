@@ -210,6 +210,29 @@ func TestEditorNewDraftRequiresDiscardConfirmation(t *testing.T) {
 	if !strings.Contains(hintsStr, "d/y") {
 		t.Errorf("modeConfirmDelete for added draft action hints = %q, want 'd/y'", hintsStr)
 	}
+	if view := m.View(); !strings.Contains(view, "d/y discards it") {
+		t.Fatalf("discard confirm view missing d/y guidance: %s", view)
+	}
+
+	// ? opens help tailored to discard confirmation
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help in discard confirm mode")
+	}
+	helpActions := mHelp.helpActions()
+	for _, a := range helpActions {
+		if strings.Contains(a.label, "navigate the focused area") {
+			t.Fatalf("discard confirm help includes list navigation: %v", helpActions)
+		}
+	}
+	if view := mHelp.View(); !strings.Contains(view, "discard unsaved draft") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("discard confirm help view unexpected content:\n%s", view)
+	}
+	// esc returns from help to confirm mode
+	mBack := edType(t, mHelp, tea.KeyEsc)
+	if mBack.help || mBack.mode != modeConfirmDelete {
+		t.Fatalf("esc from help did not return to confirm mode: help=%v mode=%v", mBack.help, mBack.mode)
+	}
 	m = edType(t, m, tea.KeyEsc)
 	if m.mode != modeBrowse || m.draft.name != "new-draft" || !m.isDirty() {
 		t.Fatal("Esc did not preserve the new draft")

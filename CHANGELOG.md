@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preview text now advertise `k/y` rather than `Enter/y` to highlight the
   trigger key for confirming kills, and the modal help view is tailored to the
   kill prompt without misleading session navigation hints.
+- In the editor delete and discard confirmation prompt, detail pane text and
+  the modal help view now explicitly guide users on `d/y` confirmation and
+  `Esc` cancellation, omitting misleading list navigation hints.
 
 ### Fixed
 

@@ -1194,12 +1194,14 @@ func (m editorModel) confirmDeleteLines(w int) []string {
 			pkErr.Render(truncate(fmt.Sprintf("discard unsaved session %q?", m.draft.name), w)),
 			"",
 			"This draft has not been saved to the config.",
+			"d/y discards it. Esc keeps editing.",
 		}
 	}
 	return []string{
 		pkErr.Render(truncate(fmt.Sprintf("delete session %q from the config?", m.draft.name), w)),
 		"",
 		pkDim.Render("The change is buffered — the file is only touched on save (s)."),
+		"d/y confirms deletion. Esc cancels.",
 	}
 }
 
@@ -1424,6 +1426,18 @@ func (m editorModel) actionHints() []keyHint {
 
 func (m editorModel) helpActions() []keyHint {
 	m.help = false
+	if m.mode == modeConfirmDelete {
+		if m.draft != nil && m.draft.added {
+			return []keyHint{
+				{"d/y, Enter", "discard unsaved draft"},
+				{"Esc, n, c", "keep editing draft"},
+			}
+		}
+		return []keyHint{
+			{"d/y, Enter", "confirm delete session"},
+			{"Esc, n, c", "cancel and keep session"},
+		}
+	}
 	actions := append([]keyHint{{"j/k, ↑/↓", "navigate the focused area"}}, m.actionHints()...)
 	if m.mode == modeBrowse {
 		if !m.isDirty() {
