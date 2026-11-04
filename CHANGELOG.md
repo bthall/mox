@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Page Up and Page Down navigate the editor's save diff by the number of
   visible diff lines, keeping consecutive pages contiguous.
 
+### Changed
+
+- In the config editor modal confirmation modes (delete confirmation, unsaved
+  changes guard, diff preview, and stale file alert), the modal help overlay
+  is tailored to the active prompt without misleading list navigation hints.
+- The editor delete and discard confirmation panes display explicit key
+  guidance for confirming and cancelling, and the Add Wizard cancel confirmation
+  prompt advertises `d/y` matching supported keys.
+
 ### Fixed
 
 - Scrolling an empty save diff keeps the offset at zero instead of allowing

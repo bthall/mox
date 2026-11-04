@@ -525,6 +525,22 @@ func TestEditorDuplicate(t *testing.T) {
 	if m.st.cfg.Sessions["webfarm"].Hosts[0] != "web1" {
 		t.Fatal("duplicate shares memory with the source session")
 	}
+
+	// Discarding the added duplicate via 'D' prompts with discard guidance and tailored help
+	m = edRunes(t, m, "D")
+	if m.mode != modeConfirmDelete {
+		t.Fatalf("D on added draft did not enter modeConfirmDelete: %v", m.mode)
+	}
+	if view := m.View(); !strings.Contains(view, "d/y discards the draft") {
+		t.Errorf("confirm delete added draft missing discard prompt text: %s", view)
+	}
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help on added draft discard")
+	}
+	if view := mHelp.View(); !strings.Contains(view, "discard unsaved session draft") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("discard help view unexpected content:\n%s", view)
+	}
 }
 
 func TestEditorDuplicateRejectsExistingNames(t *testing.T) {
@@ -560,6 +576,23 @@ func TestEditorDelete(t *testing.T) {
 	hintsStr := renderHints(m.actionHints(), 100)
 	if !strings.Contains(hintsStr, "d/y") {
 		t.Errorf("modeConfirmDelete action hints = %q, want 'd/y'", hintsStr)
+	}
+	if view := m.View(); !strings.Contains(view, "d/y marks for deletion") {
+		t.Errorf("confirm delete view missing in-pane prompt guidance: %s", view)
+	}
+
+	// ? opens help tailored to confirm delete
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help in modeConfirmDelete")
+	}
+	for _, a := range mHelp.helpActions() {
+		if strings.Contains(a.label, "navigate the focused area") {
+			t.Fatalf("helpActions in modeConfirmDelete contains navigation hint: %v", a)
+		}
+	}
+	if view := mHelp.View(); !strings.Contains(view, "confirm delete session") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("confirm delete help view unexpected content:\n%s", view)
 	}
 	// n or N or c or C cancels
 	mn := edRunes(t, m, "n")
@@ -757,6 +790,19 @@ func TestEditorGuardCancelKeys(t *testing.T) {
 	m = edRunes(t, m, "j") // navigate away → modeGuard with pendingSelect
 	if m.mode != modeGuard {
 		t.Fatal("navigating away did not guard")
+	}
+	// ? opens tailored help in modeGuard without navigation
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help in modeGuard")
+	}
+	for _, a := range mHelp.helpActions() {
+		if strings.Contains(a.label, "navigate the focused area") {
+			t.Fatalf("helpActions in modeGuard contains navigation hint: %v", a)
+		}
+	}
+	if view := mHelp.View(); !strings.Contains(view, "save changes, then continue") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("guard help view unexpected content:\n%s", view)
 	}
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 	em := nm.(editorModel)

@@ -17,3 +17,7 @@
 ## 2026-10-27 - Save diff paging follows the rendered viewport
 **Learning:** The editor detail pane is shorter than the terminal, and its diff title and overflow hint reduce the visible diff rows further. Terminal-height page steps can skip unseen changes; empty diffs must keep a nonnegative scroll offset.
 **Action:** Use the same content-row calculation for rendering and page movement, and verify consecutive rendered pages at several terminal sizes.
+
+## 2026-10-31 - Editor Modal Help Accuracy and Confirmation Prompt Guidance
+**Learning:** In terminal editor modal prompts (such as delete confirmation or guard prompts), unconditionally advertising general list navigation (`j/k, ↑/↓`) in the help overlay misleads users into attempting list navigation that is inactive during modal prompts. Furthermore, confirmation panes without explicit in-pane action guidance leave users guessing which keys take effect.
+**Action:** Tailor modal help overlays to the active modal mode so inactive navigation shortcuts are omitted and prompt-specific keys are clearly explained. Also ensure confirmation panes display explicit key guidance matching supported actions.
