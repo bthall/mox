@@ -525,6 +525,22 @@ func TestEditorDuplicate(t *testing.T) {
 	if m.st.cfg.Sessions["webfarm"].Hosts[0] != "web1" {
 		t.Fatal("duplicate shares memory with the source session")
 	}
+
+	// Discarding the added duplicate via 'D' prompts with discard guidance and tailored help
+	m = edRunes(t, m, "D")
+	if m.mode != modeConfirmDelete {
+		t.Fatalf("D on added draft did not enter modeConfirmDelete: %v", m.mode)
+	}
+	if view := m.View(); !strings.Contains(view, "d/y discards the draft") {
+		t.Errorf("confirm delete added draft missing discard prompt text: %s", view)
+	}
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help on added draft discard")
+	}
+	if view := mHelp.View(); !strings.Contains(view, "discard unsaved session draft") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("discard help view unexpected content:\n%s", view)
+	}
 }
 
 func TestEditorDuplicateRejectsExistingNames(t *testing.T) {
@@ -560,6 +576,28 @@ func TestEditorDelete(t *testing.T) {
 	hintsStr := renderHints(m.actionHints(), 100)
 	if !strings.Contains(hintsStr, "d/y") {
 		t.Errorf("modeConfirmDelete action hints = %q, want 'd/y'", hintsStr)
+	}
+	if view := m.View(); !strings.Contains(view, "d/y marks for deletion") {
+		t.Errorf("confirm delete view missing in-pane prompt guidance: %s", view)
+	}
+
+	// ? opens help tailored to confirm delete
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help in modeConfirmDelete")
+	}
+	for _, a := range mHelp.helpActions() {
+		if strings.Contains(a.label, "navigate the focused area") {
+			t.Fatalf("helpActions in modeConfirmDelete contains navigation hint: %v", a)
+		}
+	}
+	if view := mHelp.View(); !strings.Contains(view, "confirm delete session") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("confirm delete help view unexpected content:\n%s", view)
+	}
+	// Escape closes help without canceling the underlying confirmation.
+	mBack := edType(t, mHelp, tea.KeyEsc)
+	if mBack.help || mBack.mode != modeConfirmDelete {
+		t.Fatalf("esc from help did not return to confirm mode: help=%v mode=%v", mBack.help, mBack.mode)
 	}
 	// n or N or c or C cancels
 	mn := edRunes(t, m, "n")
@@ -758,6 +796,19 @@ func TestEditorGuardCancelKeys(t *testing.T) {
 	if m.mode != modeGuard {
 		t.Fatal("navigating away did not guard")
 	}
+	// ? opens tailored help in modeGuard without navigation
+	mHelp := edRunes(t, m, "?")
+	if !mHelp.help {
+		t.Fatal("? did not open help in modeGuard")
+	}
+	for _, a := range mHelp.helpActions() {
+		if strings.Contains(a.label, "navigate the focused area") {
+			t.Fatalf("helpActions in modeGuard contains navigation hint: %v", a)
+		}
+	}
+	if view := mHelp.View(); !strings.Contains(view, "save changes, then continue") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("guard help view unexpected content:\n%s", view)
+	}
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 	em := nm.(editorModel)
 	if em.mode == modeGuard {
@@ -855,6 +906,18 @@ func TestEditorSaveDiffKeys(t *testing.T) {
 	m = edRunes(t, m, "s")
 	if m.mode != modeDiff {
 		t.Fatalf("s did not open diff: mode=%v", m.mode)
+	}
+	mHelp := edRunes(t, m, "?")
+	if view := mHelp.View(); !mHelp.help || !strings.Contains(view, "write changes to config") || !strings.Contains(view, "scroll diff line by line") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("diff help has incorrect actions:\n%s", view)
+	}
+	mHelp = edType(t, mHelp, tea.KeyEnter)
+	if !mHelp.help || mHelp.mode != modeDiff || !mHelp.isDirty() {
+		t.Fatal("Enter in help wrote changes or left the diff")
+	}
+	mBack := edType(t, mHelp, tea.KeyEsc)
+	if mBack.help || mBack.mode != modeDiff || !mBack.isDirty() {
+		t.Fatal("Escape from help did not preserve the save preview")
 	}
 	m = edRunes(t, m, "c")
 	if m.mode != modeBrowse || !m.isDirty() {
@@ -975,6 +1038,18 @@ func TestEditorSaveStaleThenReload(t *testing.T) {
 	// stale view renders an explanation
 	if !strings.Contains(m.View(), "changed on disk") {
 		t.Fatal("stale view missing explanation")
+	}
+	mHelp := edRunes(t, m, "?")
+	if view := mHelp.View(); !mHelp.help || !strings.Contains(view, "reload from disk") || !strings.Contains(view, "saving stays blocked") || strings.Contains(view, "navigate the focused area") {
+		t.Fatalf("stale help has incorrect actions:\n%s", view)
+	}
+	mHelp = edRunes(t, mHelp, "r")
+	if !mHelp.help || mHelp.mode != modeStale || !mHelp.isDirty() {
+		t.Fatal("reload key in help discarded the stale draft")
+	}
+	mBack := edType(t, mHelp, tea.KeyEsc)
+	if mBack.help || mBack.mode != modeStale || !mBack.isDirty() {
+		t.Fatal("Escape from help did not preserve the stale draft")
 	}
 	// 'n' or 'c' or 'C' backs out to browse keeping draft
 	mn := edRunes(t, m, "n")

@@ -211,6 +211,9 @@ func TestAddWizard_CtrlCProtectsDraft(t *testing.T) {
 	if !m.cancelConfirm || m.finished {
 		t.Fatal("ctrl-c should ask before discarding a draft")
 	}
+	if view := m.View(); !strings.Contains(view, "Press d/y to discard and leave.") {
+		t.Errorf("cancelConfirm view missing d/y prompt guidance: %s", view)
+	}
 	// 'n' cancels the discard prompt and keeps editing
 	mn := sendAdd(t, m, runes("n")...)
 	if mn.cancelConfirm || mn.finished {
