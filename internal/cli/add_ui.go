@@ -528,7 +528,7 @@ func (m addModel) title() string {
 
 func (m addModel) detailLines(w, h int) []string {
 	if m.cancelConfirm {
-		return []string{pkForeign.Render("Discard this session draft?"), "", "Your input is still here. Esc keeps editing.", "Press d to discard and leave."}
+		return []string{pkForeign.Render("Discard this session draft?"), "", "Your input is still here. Esc keeps editing.", "Press d/y to discard and leave."}
 	}
 	if m.help {
 		lines := helpLines(m.helpActions(), w)

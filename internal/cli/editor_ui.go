@@ -1194,12 +1194,14 @@ func (m editorModel) confirmDeleteLines(w int) []string {
 			pkErr.Render(truncate(fmt.Sprintf("discard unsaved session %q?", m.draft.name), w)),
 			"",
 			"This draft has not been saved to the config.",
+			"d/y discards the draft. Esc keeps editing.",
 		}
 	}
 	return []string{
 		pkErr.Render(truncate(fmt.Sprintf("delete session %q from the config?", m.draft.name), w)),
 		"",
 		pkDim.Render("The change is buffered — the file is only touched on save (s)."),
+		"d/y marks for deletion. Esc keeps the session.",
 	}
 }
 
@@ -1424,6 +1426,37 @@ func (m editorModel) actionHints() []keyHint {
 
 func (m editorModel) helpActions() []keyHint {
 	m.help = false
+	switch m.mode {
+	case modeConfirmDelete:
+		if m.draft != nil && m.draft.added {
+			return []keyHint{
+				{"d/y, Enter", "discard unsaved session draft"},
+				{"Esc, n, c", "stay and keep editing"},
+			}
+		}
+		return []keyHint{
+			{"d/y, Enter", "confirm delete session"},
+			{"Esc, n, c", "cancel and keep session"},
+		}
+	case modeGuard:
+		return []keyHint{
+			{"s", "save changes, then continue"},
+			{"d", "discard changes, then continue"},
+			{"Esc, n, c", "stay and keep editing"},
+		}
+	case modeDiff:
+		return []keyHint{
+			{"Enter, s, y", "write changes to config"},
+			{"Esc, n, c", "back to editing"},
+			{"j/k, ↑/↓", "scroll diff line by line"},
+			{"PgUp/PgDn", "scroll diff page by page"},
+		}
+	case modeStale:
+		return []keyHint{
+			{"R", "reload from disk (discard changes)"},
+			{"Esc", "keep draft (saving stays blocked)"},
+		}
+	}
 	actions := append([]keyHint{{"j/k, ↑/↓", "navigate the focused area"}}, m.actionHints()...)
 	if m.mode == modeBrowse {
 		if !m.isDirty() {

@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   trigger key for confirming kills, and the modal help view is tailored to the
   kill prompt without misleading session navigation hints.
 
+- In the config editor modal confirmation modes (delete confirmation, unsaved
+  changes guard, diff preview, and stale file alert), the modal help overlay
+  is tailored to the active prompt without misleading list navigation hints.
+- The editor delete and discard confirmation panes display explicit key
+  guidance for confirming and cancelling, and the Add Wizard cancel confirmation
+  prompt advertises `d/y` matching supported keys.
+
 ### Fixed
 
 - Hostnames and SSH usernames starting with a hyphen, as well as malformed
